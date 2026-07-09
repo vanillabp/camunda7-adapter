@@ -1,9 +1,13 @@
 package io.vanillabp.camunda7.processservice;
 
+import org.camunda.bpm.engine.RuntimeService;
+import org.camunda.bpm.engine.runtime.ProcessInstance;
+
 import io.vanillabp.integration.adapter.spi.MigratableProcessService;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.spi.AggregatePersistenceAware;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Camunda 7 implementation of the VanillaBP {@link MigratableProcessService}. One
@@ -15,15 +19,22 @@ import lombok.RequiredArgsConstructor;
  * workflow happens completely in phase one within the local transaction; phase two is a
  * no-op and no outbox is involved.
  * <p>
- * This is the Version-2 skeleton: only the identity method and the two-phase-commit flag
- * are implemented. The runtime methods deliberately throw
- * {@link UnsupportedOperationException} - they are implemented in later stories and must
- * never silently do nothing.
+ * The workflow-aggregate ID maps naturally onto the Camunda 7 <b>business key</b> and the
+ * workflow module ID onto the Camunda <b>tenant ID</b> - see
+ * {@link #startProcessInstance(String, String, Object)}.
  */
+@Slf4j
 @RequiredArgsConstructor
 public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   private final String adapterId;
+
+  /**
+   * The embedded engine's runtime service used to start process instances. Provided by
+   * the platform module (Spring Boot) which wires the embedded engine sharing the
+   * application's data source and transaction manager.
+   */
+  private final RuntimeService runtimeService;
 
   @Override
   public String getAdapterId() {
@@ -38,6 +49,55 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // Camunda 7 is embedded and joins the local transaction - everything happens in
     // phase one, so no two-phase commit / outbox is required.
     return false;
+
+  }
+
+  /**
+   * Starts a Camunda 7 process instance inside the caller's transaction. The
+   * <b>business key</b> is the workflow-aggregate ID as a string, the <b>tenant ID</b> is
+   * the workflow module ID (matching how {@link Camunda7DeploymentService} deployed the
+   * process). Because the embedded engine shares the application's data source and
+   * transaction, the created instance is committed or rolled back together with the
+   * business data.
+   * <p>
+   * The service task following the (asynchronous) start event is not executed
+   * synchronously: the async-before continuation parks the instance in the job executor,
+   * so no {@code @WorkflowTask} wiring is required for the start to succeed.
+   *
+   * @param workflowModuleId The workflow module ID (used as the Camunda tenant ID)
+   * @param bpmnProcessId The BPMN process ID to start
+   * @param workflowAggregateId The workflow-aggregate ID (used as the business key)
+   * @return The started process instance
+   */
+  public ProcessInstance startProcessInstance(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final Object workflowAggregateId) {
+
+    if (runtimeService == null) {
+      throw new IllegalStateException(
+          ("Camunda7[%s]: cannot start workflow '%s' - no embedded engine is available! A Camunda 7 "
+              + "adapter requires a data source and a transaction manager so the embedded engine can "
+              + "be wired.").formatted(adapterId, bpmnProcessId));
+    }
+
+    final var businessKey = String.valueOf(workflowAggregateId);
+
+    final var processInstance = runtimeService
+        .createProcessInstanceByKey(bpmnProcessId)
+        .processDefinitionTenantId(workflowModuleId)
+        .businessKey(businessKey)
+        .execute();
+
+    log.info(
+        "Camunda7[{}]: started workflow '{}' (tenant '{}', business key '{}') as process instance '{}'",
+        adapterId,
+        bpmnProcessId,
+        workflowModuleId,
+        businessKey,
+        processInstance.getId());
+
+    return processInstance;
 
   }
 
@@ -63,7 +123,23 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final AggregatePersistenceAware<A> aggregatePersistence,
       final A workflowAggregate) {
 
-    throw new UnsupportedOperationException("startWorkflowPhaseOne is implemented in a later story");
+    // The aggregate ID is available and maps onto the Camunda business key...
+    final var aggregateId = aggregatePersistence.getAggregateId(workflowAggregate);
+
+    // ...but the actual start (see startProcessInstance) additionally needs the BPMN
+    // process ID and the workflow module ID (Camunda tenant ID). These are NOT passed to
+    // this SPI method, so the C7 adapter cannot select which process to start.
+    //
+    // BLOCKED by a platform-integration gap (reported, to be fixed centrally):
+    //   MigratableProcessService#startWorkflowPhaseOne(AggregatePersistenceAware, A) and
+    //   MigrationProcessService#startWorkflow(A) do not thread workflowModuleId /
+    //   bpmnProcessId to the adapter. Once the SPI provides them, this method delegates
+    //   to startProcessInstance(workflowModuleId, bpmnProcessId, aggregateId).
+    throw new UnsupportedOperationException(
+        ("Camunda7[%s]: cannot start workflow for aggregate '%s' - the adapter SPI method "
+            + "MigratableProcessService#startWorkflowPhaseOne does not provide the workflow module ID "
+            + "and BPMN process ID required to select the process to start (platform-integration gap).")
+            .formatted(adapterId, aggregateId));
 
   }
 
@@ -71,7 +147,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   public void startWorkflowPhaseTwo(
       final Object workflowAggregateId) {
 
-    throw new UnsupportedOperationException("startWorkflowPhaseTwo is implemented in a later story");
+    // Camunda 7 starts the workflow entirely in phase one (needsTwoPhaseCommit... == false),
+    // so the core never schedules phase two. A call here indicates a wiring problem.
+    log.warn(
+        "Camunda7[{}]: startWorkflowPhaseTwo was called for aggregate '{}' although Camunda 7 starts "
+            + "workflows in phase one - ignoring (this should never happen).",
+        adapterId,
+        workflowAggregateId);
 
   }
 

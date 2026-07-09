@@ -8,9 +8,9 @@
     <version>2.0.0-SNAPSHOT</version>
   </parent>
 
-  <artifactId>camunda7-adapter-spring-boot</artifactId>
-  <name>VanillaBP Camunda 7 adapter - Spring Boot</name>
-  <description>Spring Boot auto-configuration registering the VanillaBP Camunda 7 adapter.</description>
+  <artifactId>camunda7-adapter-integration-tests</artifactId>
+  <name>VanillaBP Camunda 7 adapter - Integration tests</name>
+  <description>End-to-end tests booting a real embedded Camunda 7 engine on H2 through the VanillaBP Camunda 7 adapter.</description>
 
   <licenses>
     <license>
@@ -28,36 +28,17 @@
     </developer>
   </developers>
 
+  <properties>
+    <!-- test-only module: no artifact to publish -->
+    <maven.install.skip>true</maven.install.skip>
+    <maven.deploy.skip>true</maven.deploy.skip>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.camunda.community.vanillabp</groupId>
-      <artifactId>camunda7-adapter</artifactId>
+      <artifactId>camunda7-adapter-spring-boot</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>io.vanillabp</groupId>
-      <artifactId>vanillabp-spring-boot-integration</artifactId>
-    </dependency>
-    <!-- Spring 6 flavour of the embedded engine's Spring integration
-         (SpringProcessEngineConfiguration). The spring-* dependencies it declares are
-         'provided', so the Spring Boot 4.1 (Spring Framework 7) baseline is used at
-         runtime. The camunda-bpm-spring-boot-starter is deliberately NOT used - it
-         targets Spring Boot 3.5.x. -->
-    <dependency>
-      <groupId>org.camunda.bpm</groupId>
-      <artifactId>camunda-engine-spring-6</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-autoconfigure</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-tx</artifactId>
     </dependency>
 
     <dependency>
@@ -65,5 +46,28 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <!-- this module has only tests; do not build an (empty) main jar -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <skipIfEmpty>true</skipIfEmpty>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>

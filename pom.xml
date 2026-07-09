@@ -28,6 +28,7 @@
   <modules>
     <module>core</module>
     <module>spring-boot</module>
+    <module>integration-tests</module>
   </modules>
 
   <properties>
@@ -69,6 +70,11 @@
       <dependency>
         <groupId>org.camunda.bpm</groupId>
         <artifactId>camunda-engine</artifactId>
+        <version>${camunda.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.camunda.bpm</groupId>
+        <artifactId>camunda-engine-spring-6</artifactId>
         <version>${camunda.version}</version>
       </dependency>
       <dependency>

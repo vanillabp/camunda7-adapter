@@ -1,3 +1,4 @@
 io.vanillabp.camunda7.springboot.Camunda7AdapterConfiguration
+io.vanillabp.camunda7.springboot.engine.Camunda7EngineConfiguration
 io.vanillabp.camunda7.springboot.deployment.Camunda7DeploymentConfiguration
 io.vanillabp.camunda7.springboot.processservice.Camunda7ProcessServiceConfiguration

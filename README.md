@@ -3,11 +3,12 @@
 This is the [VanillaBP](https://www.vanillabp.io) Version 2 adapter for
 [Camunda 7](https://camunda.com/), the embedded workflow engine.
 
-> **Status: Version 2 skeleton.** This repository currently contains only the
-> structural skeleton of the adapter (Maven modules, SPI implementation stubs, Spring
-> Boot registration and a boot smoke test). No BPMS feature behaviour is implemented
-> yet — BPMN deployment, starting workflows and task wiring arrive story by story. The
-> SPI pipeline methods throw `UnsupportedOperationException` until then.
+> **Status: Version 2, in development.** BPMN deployment and starting workflows are
+> implemented (embedded engine, in the caller's transaction). Task wiring
+> (`@WorkflowTask`), message correlation and BPMS-election awareness are not implemented
+> yet and their SPI methods throw `UnsupportedOperationException`. See
+> [Known issues](#known-issues) for the one platform-integration gap that currently
+> blocks the `ProcessService.startWorkflow` end-to-end path.
 
 ## Coordinates
 
@@ -44,6 +45,45 @@ vanillabp:
 The same type may be configured under several ids (e.g. two Camunda 7 engines side by
 side during a migration).
 
+BPMN files are read from each workflow module's configured `resources-location` and
+deployed to the embedded engine.
+
+### Behaviour
+
+- **BPMN deployment.** On boot the adapter reads every executable BPMN process
+  (`<bpmn:process isExecutable="true">`; a file may contain several) of each workflow
+  module and deploys them as a single Camunda deployment. The **workflow module ID is
+  used as the Camunda tenant ID** (Version-1 behaviour) so BPMN process ids are isolated
+  between modules. Duplicate filtering is enabled, so unchanged models are not
+  redeployed on every boot.
+- **Starting a workflow (in the local transaction).** The embedded engine shares the
+  application's data source and transaction manager, so a started process instance is
+  committed or rolled back **together with the workflow aggregate**. The
+  workflow-aggregate ID becomes the Camunda **business key**, the workflow module ID the
+  **tenant ID**. There is no two-phase commit and no transaction outbox
+  (`needsTwoPhaseCommitForStartingWorkflows()` is `false`).
+
+### Embedded-engine wiring
+
+The `spring-boot` module builds the engine itself from
+`org.camunda.bpm.engine.spring.SpringProcessEngineConfiguration` (shipped by
+`org.camunda.bpm:camunda-engine-spring-6`, whose Spring dependencies are `provided`, so
+the application's Spring Boot 4.1 / Spring Framework 7 is used). The
+`camunda-bpm-spring-boot-starter` is deliberately **not** used (see
+[Known issues](#known-issues)). The engine is configured to:
+
+- use the application's `DataSource` (engine tables `ACT_*` live next to the aggregates),
+- use the application's `PlatformTransactionManager` (engine commands join the caller's
+  transaction — this in-transaction guarantee is the whole point of the C7 adapter),
+- create/upgrade its schema on boot (`databaseSchemaUpdate = true`),
+- run asynchronous continuations on the job executor (`jobExecutorActivate = true`), and
+- apply a default history time-to-live of `P180D` (Camunda 7.24 rejects deployments of
+  processes without one; a process may still override it via
+  `camunda:historyTimeToLive`).
+
+A `DataSource` and a `PlatformTransactionManager` must be present (a Camunda 7
+application always needs a database).
+
 ## Supported Camunda version
 
 Camunda **7.24** is the final feature release of Camunda 7 (October 2025, LTS). The
@@ -65,22 +105,26 @@ worthwhile. VanillaBP applications on Quarkus should target a maintained BPMS ad
 
 ## Known issues
 
+- **`ProcessService.startWorkflow` is blocked by a platform-integration gap.** The
+  adapter SPI method
+  `io.vanillabp.integration.adapter.spi.MigratableProcessService#startWorkflowPhaseOne(AggregatePersistenceAware, A)`
+  receives only the workflow aggregate — not the workflow module ID nor the BPMN process
+  ID — and `MigrationProcessService#startWorkflow(A)` does not thread them to the adapter
+  either. An embedded engine needs the BPMN process ID (to select the process) and the
+  module ID (as the Camunda tenant) to call
+  `RuntimeService.startProcessInstanceByKey(...)`. The adapter's real start logic
+  therefore lives in the directly-testable
+  `Camunda7ProcessService#startProcessInstance(workflowModuleId, bpmnProcessId, aggregateId)`;
+  `startWorkflowPhaseOne` throws until the SPI provides those two values. The integration
+  test proves the start and the in-transaction rollback through that method; the
+  end-to-end `processService.startWorkflow(...)` path is covered by a `@Disabled` test
+  that turns green once the SPI is fixed centrally.
 - **`camunda-bpm-spring-boot-starter:7.24.0` is incompatible with the Spring Boot 4.1
   baseline.** VanillaBP Version 2 builds on Spring Boot 4.1.0, whereas the Camunda 7.24
   Spring Boot starter targets Spring Boot **3.5.5** (`version.spring-boot` in
   `org.camunda.bpm:camunda-parent:7.24.0`). Its auto-configuration is compiled against
   Spring Boot 3.x APIs that moved or were removed in Spring Boot 4. Therefore the
-  `spring-boot` module depends on `org.camunda.bpm:camunda-engine` directly and does
-  **not** use the starter. Embedded-engine auto-wiring (data source, job executor,
-  process-engine configuration) is deferred to a later story.
-- **The core deployment pipeline calls `deployResources` even for modules without BPMN
-  files.** `DeploymentService.deployResourcesOfAdapter` invokes the adapter's
-  `deployResources` (and, on application-ready, `startWorkflowProcessing`) once per
-  (workflow module × prioritized adapter), regardless of whether the module contains any
-  BPMN file. With the current throwing skeleton stubs this means a full application boot
-  (with `DeploymentAutoConfiguration` active) fails even when no BPMN is present. The
-  boot smoke test therefore proves adapter discovery via `ApplicationContextRunner`
-  without running the deployment lifecycle. This is a pre-existing property of
-  `adapter-platform-integration`, not of this adapter, and disappears once the pipeline
-  methods are implemented.
+  `spring-boot` module wires the embedded engine itself (see
+  [Embedded-engine wiring](#embedded-engine-wiring)) using
+  `org.camunda.bpm:camunda-engine-spring-6` and does **not** use the starter.
 

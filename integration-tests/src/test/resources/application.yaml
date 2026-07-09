@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:c7-it;DB_CLOSE_DELAY=-1
+  jpa:
+    hibernate:
+      ddl-auto: create
+vanillabp:
+  adapters:
+    c7:
+      type: camunda7
+  prioritized-adapters:
+    - c7
+  workflow-modules:
+    c7-it:
+      adapters:
+        c7:
+          resources-location: classpath*:c7-it/processes
