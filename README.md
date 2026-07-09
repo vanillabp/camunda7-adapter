@@ -4,11 +4,10 @@ This is the [VanillaBP](https://www.vanillabp.io) Version 2 adapter for
 [Camunda 7](https://camunda.com/), the embedded workflow engine.
 
 > **Status: Version 2, in development.** BPMN deployment and starting workflows are
-> implemented (embedded engine, in the caller's transaction). Task wiring
-> (`@WorkflowTask`), message correlation and BPMS-election awareness are not implemented
-> yet and their SPI methods throw `UnsupportedOperationException`. See
-> [Known issues](#known-issues) for the one platform-integration gap that currently
-> blocks the `ProcessService.startWorkflow` end-to-end path.
+> implemented (embedded engine, in the caller's transaction) and work end-to-end through
+> `ProcessService.startWorkflow`. Task wiring (`@WorkflowTask`), message correlation and
+> BPMS-election awareness are not implemented yet and their SPI methods throw
+> `UnsupportedOperationException`.
 
 ## Coordinates
 
@@ -105,20 +104,6 @@ worthwhile. VanillaBP applications on Quarkus should target a maintained BPMS ad
 
 ## Known issues
 
-- **`ProcessService.startWorkflow` is blocked by a platform-integration gap.** The
-  adapter SPI method
-  `io.vanillabp.integration.adapter.spi.MigratableProcessService#startWorkflowPhaseOne(AggregatePersistenceAware, A)`
-  receives only the workflow aggregate — not the workflow module ID nor the BPMN process
-  ID — and `MigrationProcessService#startWorkflow(A)` does not thread them to the adapter
-  either. An embedded engine needs the BPMN process ID (to select the process) and the
-  module ID (as the Camunda tenant) to call
-  `RuntimeService.startProcessInstanceByKey(...)`. The adapter's real start logic
-  therefore lives in the directly-testable
-  `Camunda7ProcessService#startProcessInstance(workflowModuleId, bpmnProcessId, aggregateId)`;
-  `startWorkflowPhaseOne` throws until the SPI provides those two values. The integration
-  test proves the start and the in-transaction rollback through that method; the
-  end-to-end `processService.startWorkflow(...)` path is covered by a `@Disabled` test
-  that turns green once the SPI is fixed centrally.
 - **`camunda-bpm-spring-boot-starter:7.24.0` is incompatible with the Spring Boot 4.1
   baseline.** VanillaBP Version 2 builds on Spring Boot 4.1.0, whereas the Camunda 7.24
   Spring Boot starter targets Spring Boot **3.5.5** (`version.spring-boot` in

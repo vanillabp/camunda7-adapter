@@ -9,7 +9,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.engine.RuntimeService;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,13 +30,9 @@ import io.vanillabp.spi.process.ProcessService;
  *   <li>rolling back the surrounding transaction removes BOTH the aggregate and the process
  *       instance (the embedded-engine guarantee).</li>
  * </ol>
- * <b>Note on the start path:</b> the adapter's real start logic
- * ({@link Camunda7ProcessService#startProcessInstance(String, String, Object)}) is exercised
- * directly because the adapter SPI method
- * {@link Camunda7ProcessService#startWorkflowPhaseOne} does not receive the workflow module
- * ID and BPMN process ID it needs (a platform-integration gap, see the adapter README). The
- * canonical path through {@link ProcessService#startWorkflow(Object)} is covered by the
- * {@link Disabled} test below and turns green once the SPI threads those parameters.
+ * The start is exercised both directly via the adapter's
+ * {@link Camunda7ProcessService#startProcessInstance(String, String, Object)} and
+ * end-to-end via the VanillaBP user API {@link ProcessService#startWorkflow(Object)}.
  */
 @SpringBootTest(classes = TestApplication.class)
 public class Camunda7StartWorkflowTest {
@@ -158,34 +153,58 @@ public class Camunda7StartWorkflowTest {
   }
 
   /**
-   * Canonical end state exercised through the VanillaBP user API. Disabled until the
-   * adapter SPI threads the workflow module ID and BPMN process ID to
-   * {@link Camunda7ProcessService#startWorkflowPhaseOne} (platform-integration gap
-   * reported separately). At that point the body below should assert the same properties
-   * as {@link #startInsideTransactionCreatesInstanceWithBusinessKey()} but via
-   * {@code processService.startWorkflow(...)}.
+   * The canonical end-to-end path through the VanillaBP user API: starting a workflow via
+   * {@link ProcessService#startWorkflow(Object)} inside a transaction creates the process
+   * instance (business key = aggregate id), and rolling the transaction back removes both
+   * the aggregate and the process instance.
    */
   @Test
-  @Disabled("Blocked by platform-integration gap: MigratableProcessService#startWorkflowPhaseOne "
-      + "does not provide workflowModuleId + bpmnProcessId (see adapter README).")
-  @DisplayName("processService.startWorkflow joins the local transaction (blocked by SPI gap)")
+  @DisplayName("processService.startWorkflow joins the local transaction (created on commit, gone on rollback)")
   public void startWorkflowViaProcessServiceJoinsTransaction() {
 
+    // committed start creates the instance with the aggregate id as business key
     final var aggregateId = transactionTemplate.execute(status -> {
       final var aggregate = new TestAggregate();
       aggregate.setContent("via-process-service");
       final var saved = processService.startWorkflow(aggregate);
+      assertEquals(
+          1,
+          runtimeService
+              .createProcessInstanceQuery()
+              .processInstanceBusinessKey(String.valueOf(saved.getId()))
+              .tenantIdIn(MODULE_ID)
+              .count(),
+          "process instance exists within the starting transaction");
       return saved.getId();
     });
 
     assertNotNull(aggregateId);
+
+    // rolled-back start removes both the aggregate and the process instance
+    final var rollbackIdHolder = new AtomicReference<Long>();
+    final var exception = assertThrows(
+        RuntimeException.class,
+        () -> transactionTemplate.execute(status -> {
+          final var aggregate = new TestAggregate();
+          aggregate.setContent("via-process-service-rollback");
+          final var saved = processService.startWorkflow(aggregate);
+          rollbackIdHolder.set(saved.getId());
+          throw new RuntimeException("trigger rollback");
+        }));
+    assertEquals("trigger rollback", exception.getMessage());
+
+    final var rolledBackId = rollbackIdHolder.get();
+    assertNotNull(rolledBackId);
+    assertFalse(
+        aggregateRepository.findById(rolledBackId).isPresent(),
+        "aggregate rolled back with the transaction");
     assertEquals(
-        1,
+        0,
         runtimeService
             .createProcessInstanceQuery()
-            .processInstanceBusinessKey(String.valueOf(aggregateId))
-            .tenantIdIn(MODULE_ID)
-            .count());
+            .processInstanceBusinessKey(String.valueOf(rolledBackId))
+            .count(),
+        "process instance rolled back with the transaction");
 
   }
 

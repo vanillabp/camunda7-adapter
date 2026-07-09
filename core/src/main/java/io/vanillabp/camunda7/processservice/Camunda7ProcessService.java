@@ -120,39 +120,35 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   @Override
   public void startWorkflowPhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
       final AggregatePersistenceAware<A> aggregatePersistence,
       final A workflowAggregate) {
 
-    // The aggregate ID is available and maps onto the Camunda business key...
+    // Camunda 7 is embedded and joins the local transaction, so the workflow is started
+    // completely here: the aggregate ID maps onto the Camunda business key, the workflow
+    // module ID onto the Camunda tenant ID.
     final var aggregateId = aggregatePersistence.getAggregateId(workflowAggregate);
 
-    // ...but the actual start (see startProcessInstance) additionally needs the BPMN
-    // process ID and the workflow module ID (Camunda tenant ID). These are NOT passed to
-    // this SPI method, so the C7 adapter cannot select which process to start.
-    //
-    // BLOCKED by a platform-integration gap (reported, to be fixed centrally):
-    //   MigratableProcessService#startWorkflowPhaseOne(AggregatePersistenceAware, A) and
-    //   MigrationProcessService#startWorkflow(A) do not thread workflowModuleId /
-    //   bpmnProcessId to the adapter. Once the SPI provides them, this method delegates
-    //   to startProcessInstance(workflowModuleId, bpmnProcessId, aggregateId).
-    throw new UnsupportedOperationException(
-        ("Camunda7[%s]: cannot start workflow for aggregate '%s' - the adapter SPI method "
-            + "MigratableProcessService#startWorkflowPhaseOne does not provide the workflow module ID "
-            + "and BPMN process ID required to select the process to start (platform-integration gap).")
-            .formatted(adapterId, aggregateId));
+    startProcessInstance(workflowModuleId, bpmnProcessId, aggregateId);
 
   }
 
   @Override
   public void startWorkflowPhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
       final Object workflowAggregateId) {
 
     // Camunda 7 starts the workflow entirely in phase one (needsTwoPhaseCommit... == false),
     // so the core never schedules phase two. A call here indicates a wiring problem.
     log.warn(
-        "Camunda7[{}]: startWorkflowPhaseTwo was called for aggregate '{}' although Camunda 7 starts "
-            + "workflows in phase one - ignoring (this should never happen).",
+        "Camunda7[{}]: startWorkflowPhaseTwo was called for workflow '{}' of module '{}' (aggregate "
+            + "'{}') although Camunda 7 starts workflows in phase one - ignoring (this should never "
+            + "happen).",
         adapterId,
+        bpmnProcessId,
+        workflowModuleId,
         workflowAggregateId);
 
   }
