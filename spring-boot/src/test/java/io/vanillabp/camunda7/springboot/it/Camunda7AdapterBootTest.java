@@ -1,6 +1,5 @@
 package io.vanillabp.camunda7.springboot.it;
 
-import java.util.List;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -50,13 +49,9 @@ public class Camunda7AdapterBootTest {
           // the context started without touching the throwing deployment stubs
           Assertions.assertNull(context.getStartupFailure(), "context should start");
 
-          @SuppressWarnings("unchecked")
-          final var deploymentServices = (List<AdapterDeploymentService<?, ?>>) context
-              .getBean("camunda7DeploymentServices", List.class);
-
-          Assertions.assertEquals(1, deploymentServices.size(), "exactly one Camunda 7 deployment service");
-
-          final var deploymentService = deploymentServices.get(0);
+          // element-bean convention: one AdapterDeploymentService bean per adapter
+          // (never a List bean) so several adapter types can coexist
+          final var deploymentService = context.getBean(AdapterDeploymentService.class);
           Assertions.assertEquals("c7", deploymentService.getAdapterId());
           Assertions.assertEquals(
               Camunda7DeploymentService.ADAPTER_TYPE,
