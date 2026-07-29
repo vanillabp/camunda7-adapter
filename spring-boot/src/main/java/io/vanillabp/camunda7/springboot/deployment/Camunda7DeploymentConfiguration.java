@@ -3,12 +3,14 @@ package io.vanillabp.camunda7.springboot.deployment;
 import java.util.Map;
 
 import org.camunda.bpm.engine.RepositoryService;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 
 import io.vanillabp.camunda7.deployment.Camunda7DeploymentService;
 import io.vanillabp.camunda7.springboot.Camunda7AdapterConfiguration;
+import io.vanillabp.camunda7.springboot.Camunda7AdapterConfiguredCondition;
 import io.vanillabp.camunda7.springboot.engine.Camunda7EngineConfiguration;
 import io.vanillabp.integration.adapter.migration.config.MigrationAdapterProperties;
 import io.vanillabp.integration.processservice.SpringBootMigrationAdapterAutoConfiguration;
@@ -29,12 +31,14 @@ import io.vanillabp.integration.processservice.SpringBootMigrationAdapterAutoCon
 @AutoConfiguration(after = {
     SpringBootMigrationAdapterAutoConfiguration.class, Camunda7EngineConfiguration.class
 })
+@Conditional(Camunda7AdapterConfiguredCondition.class)
+@ConditionalOnBean(org.camunda.bpm.engine.ProcessEngine.class)
 public class Camunda7DeploymentConfiguration {
 
   @Bean
   public Camunda7DeploymentService camunda7DeploymentService(
       final MigrationAdapterProperties properties,
-      final ObjectProvider<RepositoryService> repositoryService) {
+      final RepositoryService repositoryService) {
 
     final var adapterId = properties
         .getAdapters()
@@ -45,11 +49,7 @@ public class Camunda7DeploymentConfiguration {
         .findFirst()
         .orElse("");
 
-    // the repository service is resolved here (not injected directly) so the
-    // discovery-only smoke test - which does not wire an embedded engine - can still
-    // build this bean; the core deployment service fails with a clear message if it
-    // is actually used without an engine
-    return new Camunda7DeploymentService(adapterId, repositoryService.getIfAvailable());
+    return new Camunda7DeploymentService(adapterId, repositoryService);
 
   }
 

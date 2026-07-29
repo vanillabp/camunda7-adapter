@@ -29,14 +29,16 @@ service exist per id, not per type.
 Camunda 7 is embedded and joins the application's local transaction. Hence
 `Camunda7ProcessService.needsTwoPhaseCommitForStartingWorkflows()` returns `false`:
 starting a workflow happens completely in phase one; phase two is a no-op and the
-transaction outbox is not involved. Workflow-module isolation will map the workflow
+transaction outbox is not involved. Workflow-module isolation maps the workflow
 module id onto the Camunda **tenant id**, and the 1:1 aggregate relation onto the Camunda
 **business key**.
 
-## Pipeline stubs pending
+## Not-yet-implemented methods
 
-This is the Version-2 skeleton. The SPI pipeline methods (`readBpmn`, `prepareBpmn`,
-`wireBpmn`, `deployResources`, `startWorkflowProcessing`) and the `Camunda7ProcessService`
-runtime methods (`awarenessOf*`, `startWorkflowPhaseOne/Two`) throw
-`UnsupportedOperationException("<method> is implemented in a later story")`. They must
-never silently do nothing — a silent no-op would hide wiring bugs of later stories.
+The deployment pipeline (`readBpmn` … `startWorkflowProcessing`) and the workflow
+start (`startWorkflowPhaseOne`; phase two is a no-op for the embedded engine) are
+implemented. Methods of upcoming stories (currently `awarenessOfTask`/
+`awarenessOfWorkflow`) throw
+`UnsupportedOperationException("<method> is implemented in a later story")` - they
+must never silently do nothing, a silent no-op would hide wiring bugs of later
+stories.

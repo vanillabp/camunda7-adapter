@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>Camunda7ProcessingContext.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">VanillaBP adapter for Camunda 7 - Test coverage report</a> &gt; <a href="../index.html" class="el_bundle">camunda7-adapter</a> &gt; <a href="index.source.html" class="el_package">io.vanillabp.camunda7</a> &gt; <span class="el_source">Camunda7ProcessingContext.java</span></div><h1>Camunda7ProcessingContext.java</h1><pre class="source lang-java linenums">package io.vanillabp.camunda7;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import org.camunda.bpm.model.bpmn.BpmnModelInstance;
+
+import lombok.Getter;
+
+/**
+ * The adapter-specific processing context (the {@code PC} type parameter of
+ * {@link io.vanillabp.integration.adapter.spi.AdapterDeploymentService}). One instance
+ * is accumulated across all BPMN files of a workflow module during the deployment
+ * pipeline and finally handed to
+ * {@link io.vanillabp.camunda7.deployment.Camunda7DeploymentService#deployResources(String, Camunda7ProcessingContext)}.
+ * &lt;p&gt;
+ * It collects the parsed BPMN models to be deployed as a single Camunda 7 deployment
+ * (using the workflow module ID as the Camunda tenant ID). Models are keyed by their
+ * BPMN file name so that a file containing several executable processes contributes its
+ * model only once (the deployment pipeline calls {@code prepareBpmn} once per executable
+ * process, all sharing the same file-level model instance).
+ */
+@Getter
+public class Camunda7ProcessingContext {
+
+  private final String workflowModuleId;
+
+  /**
+   * The BPMN models to be deployed, keyed by their file name. A {@link LinkedHashMap}
+   * keeps the deployment order deterministic (helpful for reproducible deployments and
+   * logging).
+   */
+<span class="fc" id="L33">  private final Map&lt;String, BpmnModelInstance&gt; resourcesByFilename = new LinkedHashMap&lt;&gt;();</span>
+
+  public Camunda7ProcessingContext(
+<span class="fc" id="L36">      final String workflowModuleId) {</span>
+
+<span class="fc" id="L38">    this.workflowModuleId = workflowModuleId;</span>
+
+<span class="fc" id="L40">  }</span>
+
+  /**
+   * Remembers the given BPMN model for deployment. Adding the same file name again (once
+   * per executable process of a multi-process file) keeps a single model instance.
+   *
+   * @param filename The BPMN file name (used as the deployment resource name)
+   * @param model The parsed BPMN model
+   */
+  public void addResource(
+      final String filename,
+      final BpmnModelInstance model) {
+
+<span class="fc" id="L53">    resourcesByFilename.putIfAbsent(filename, model);</span>
+
+<span class="fc" id="L55">  }</span>
+
+  /**
+   * @return Whether no BPMN models were accumulated (e.g. a workflow module without any
+   *         executable BPMN process).
+   */
+  public boolean isEmpty() {
+
+<span class="fc" id="L63">    return resourcesByFilename.isEmpty();</span>
+
+  }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

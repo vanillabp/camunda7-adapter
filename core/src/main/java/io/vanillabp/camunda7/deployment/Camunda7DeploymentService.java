@@ -39,7 +39,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * The adapter type of the Camunda 7 adapter. There may be several adapter ids of this
    * type configured (e.g. two Camunda 7 engines side by side during a migration).
    */
-  public static final String ADAPTER_TYPE = "camunda7";
+  public static final String ADAPTER_TYPE = io.vanillabp.camunda7.Camunda7Adapter.ADAPTER_TYPE;
 
   private final String adapterId;
 
@@ -152,13 +152,6 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
           adapterId,
           workflowModuleId);
       return;
-    }
-
-    if (repositoryService == null) {
-      throw new IllegalStateException(
-          ("Camunda7[%s]: cannot deploy resources of workflow module '%s' - no embedded engine "
-              + "is available! A Camunda 7 adapter requires a data source and a transaction manager "
-              + "so the embedded engine can be wired.").formatted(adapterId, workflowModuleId));
     }
 
     // one deployment per workflow module; tenant id = workflow module id isolates BPMN

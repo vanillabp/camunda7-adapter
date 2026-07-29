@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>Camunda7EngineConfiguration.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">VanillaBP adapter for Camunda 7 - Test coverage report</a> &gt; <a href="../index.html" class="el_bundle">camunda7-adapter-spring-boot</a> &gt; <a href="index.source.html" class="el_package">io.vanillabp.camunda7.springboot.engine</a> &gt; <span class="el_source">Camunda7EngineConfiguration.java</span></div><h1>Camunda7EngineConfiguration.java</h1><pre class="source lang-java linenums">package io.vanillabp.camunda7.springboot.engine;
+
+import javax.sql.DataSource;
+
+import org.camunda.bpm.engine.ProcessEngine;
+import org.camunda.bpm.engine.RepositoryService;
+import org.camunda.bpm.engine.RuntimeService;
+import org.camunda.bpm.engine.spring.SpringProcessEngineConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.core.env.Environment;
+import org.springframework.transaction.PlatformTransactionManager;
+
+import io.vanillabp.camunda7.springboot.Camunda7AdapterConfiguredCondition;
+
+/**
+ * Wires the &lt;b&gt;embedded Camunda 7 engine&lt;/b&gt; so it shares the application's
+ * {@link DataSource} and Spring {@link PlatformTransactionManager}. This is the whole
+ * point of the Camunda 7 adapter: because the engine uses the caller's transaction,
+ * starting a workflow (and any engine state change) is committed or rolled back together
+ * with the business data.
+ * &lt;p&gt;
+ * We do not use {@code camunda-bpm-spring-boot-starter} (it targets Spring Boot 3.5.x and
+ * is incompatible with the Spring Boot 4.1 baseline). Instead the engine is built directly
+ * from {@link SpringProcessEngineConfiguration} (shipped by {@code camunda-engine-spring-6},
+ * whose Spring dependencies are {@code provided} so the application's Spring 7 is used).
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@code dataSource} - the application's data source, so the engine tables (ACT_*)
+ *       live next to the workflow aggregates and share transactions;&lt;/li&gt;
+ *   &lt;li&gt;{@code transactionManager} - the application's transaction manager, so engine
+ *       commands join the caller's transaction;&lt;/li&gt;
+ *   &lt;li&gt;{@code databaseSchemaUpdate} - create/upgrade the engine schema on boot; defaults
+ *       to {@code true}, configurable via
+ *       {@code vanillabp.adapters.&lt;id&gt;.database-schema-update} for manually managed
+ *       schemas;&lt;/li&gt;
+ *   &lt;li&gt;{@code jobExecutorActivate = true} - run asynchronous continuations (async-before/
+ *       after, timers) on the engine's job executor.&lt;/li&gt;
+ * &lt;/ul&gt;
+ * The configuration is only active if at least one adapter of type {@code camunda7} is
+ * configured ({@link Camunda7AdapterConfiguredCondition} - without the gate ANY
+ * application having the jar plus a data source would get {@code ACT_*} tables and a
+ * running job executor in its business database) and if a {@link DataSource} and a
+ * {@link PlatformTransactionManager} are available - a Camunda 7 application always
+ * needs a database.
+ * &lt;p&gt;
+ * The transaction-manager auto-configurations are listed in {@code afterName} so
+ * {@code @ConditionalOnBean(PlatformTransactionManager.class)} cannot evaluate before
+ * the transaction manager is registered - including plain-JDBC applications without
+ * JPA ({@code DataSourceTransactionManagerAutoConfiguration}).
+ */
+@AutoConfiguration(afterName = {
+    &quot;org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration&quot;, &quot;org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration&quot;, &quot;org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration&quot;
+})
+@Conditional(Camunda7AdapterConfiguredCondition.class)
+@ConditionalOnBean({
+    DataSource.class, PlatformTransactionManager.class
+})
+<span class="fc" id="L62">public class Camunda7EngineConfiguration {</span>
+
+  @Bean
+  @ConditionalOnMissingBean
+  public SpringProcessEngineConfiguration camunda7ProcessEngineConfiguration(
+      final DataSource dataSource,
+      final PlatformTransactionManager transactionManager,
+      final Environment environment) {
+
+    // canonical per-adapter location (see the VanillaBP configuration model); the
+    // engine is not per-adapter-id yet (story 26e) - until then the first
+    // configured camunda7 adapter id's setting is used
+<span class="fc" id="L74">    final var adapterId = Camunda7AdapterConfiguredCondition</span>
+<span class="fc" id="L75">        .firstCamunda7AdapterId(environment)</span>
+<span class="fc" id="L76">        .orElseThrow();</span>
+<span class="fc" id="L77">    final var databaseSchemaUpdate = Binder</span>
+<span class="fc" id="L78">        .get(environment)</span>
+<span class="fc" id="L79">        .bind(&quot;vanillabp.adapters.%s.database-schema-update&quot;.formatted(adapterId), String.class)</span>
+<span class="fc" id="L80">        .orElse(&quot;true&quot;);</span>
+
+<span class="fc" id="L82">    final var configuration = new SpringProcessEngineConfiguration();</span>
+<span class="fc" id="L83">    configuration.setProcessEngineName(&quot;vanillabp-camunda7&quot;);</span>
+<span class="fc" id="L84">    configuration.setDataSource(dataSource);</span>
+<span class="fc" id="L85">    configuration.setTransactionManager(transactionManager);</span>
+<span class="fc" id="L86">    configuration.setDatabaseSchemaUpdate(databaseSchemaUpdate);</span>
+<span class="fc" id="L87">    configuration.setJobExecutorActivate(true);</span>
+    // Camunda 7.24 rejects deployments of processes without a history-time-to-live. Provide
+    // an engine-wide default so BPMN models need not declare it individually (a process may
+    // still override it via camunda:historyTimeToLive).
+<span class="fc" id="L91">    configuration.setHistoryTimeToLive(&quot;P180D&quot;);</span>
+<span class="fc" id="L92">    return configuration;</span>
+
+  }
+
+  @Bean(destroyMethod = &quot;close&quot;)
+  @ConditionalOnMissingBean
+  public ProcessEngine camunda7ProcessEngine(
+      final SpringProcessEngineConfiguration camunda7ProcessEngineConfiguration) {
+
+<span class="fc" id="L101">    return camunda7ProcessEngineConfiguration.buildProcessEngine();</span>
+
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  public RepositoryService camunda7RepositoryService(
+      final ProcessEngine camunda7ProcessEngine) {
+
+<span class="fc" id="L110">    return camunda7ProcessEngine.getRepositoryService();</span>
+
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  public RuntimeService camunda7RuntimeService(
+      final ProcessEngine camunda7ProcessEngine) {
+
+<span class="fc" id="L119">    return camunda7ProcessEngine.getRuntimeService();</span>
+
+  }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

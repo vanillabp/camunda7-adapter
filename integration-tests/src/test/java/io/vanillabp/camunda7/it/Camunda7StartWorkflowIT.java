@@ -11,11 +11,13 @@ import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.engine.RuntimeService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import io.vanillabp.camunda7.processservice.Camunda7ProcessService;
+import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.process.ProcessService;
 
 /**
@@ -35,7 +37,9 @@ import io.vanillabp.spi.process.ProcessService;
  * end-to-end via the VanillaBP user API {@link ProcessService#startWorkflow(Object)}.
  */
 @SpringBootTest(classes = TestApplication.class)
-public class Camunda7StartWorkflowTest {
+@ExtendWith(SuppressOutputExtension.class)
+@SuppressOutputExtension.SuppressBackgroundOutput
+public class Camunda7StartWorkflowIT {
 
   private static final String MODULE_ID = "c7-it";
 
