@@ -41,7 +41,7 @@ import io.vanillabp.integration.processservice.SpringBootMigrationAdapterAutoCon
       final RepositoryService repositoryService) {
 
 <span class="fc" id="L43">    final var adapterId = properties</span>
-<span class="fc" id="L44">        .getAdapters()</span>
+<span class="fc" id="L44">        .adapterTypes()</span>
 <span class="fc" id="L45">        .entrySet()</span>
 <span class="fc" id="L46">        .stream()</span>
 <span class="fc" id="L47">        .filter(adapter -&gt; adapter.getValue().equals(Camunda7AdapterConfiguration.ADAPTER_TYPE))</span>

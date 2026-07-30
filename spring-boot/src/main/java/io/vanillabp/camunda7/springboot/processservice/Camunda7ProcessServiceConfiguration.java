@@ -42,7 +42,7 @@ public class Camunda7ProcessServiceConfiguration {
 
     final var adapterId = properties
         .getObject()
-        .getAdapters()
+        .adapterTypes()
         .entrySet()
         .stream()
         .filter(adapter -> Camunda7AdapterConfiguration.ADAPTER_TYPE.equals(adapter.getValue()))

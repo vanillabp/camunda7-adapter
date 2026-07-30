@@ -41,7 +41,7 @@ public class Camunda7DeploymentConfiguration {
       final RepositoryService repositoryService) {
 
     final var adapterId = properties
-        .getAdapters()
+        .adapterTypes()
         .entrySet()
         .stream()
         .filter(adapter -> adapter.getValue().equals(Camunda7AdapterConfiguration.ADAPTER_TYPE))
