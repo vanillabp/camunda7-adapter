@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>Camunda7AdapterBeanRegistrar.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">VanillaBP adapter for Camunda 7 - Test coverage report</a> &gt; <a href="../index.html" class="el_bundle">camunda7-adapter-spring-boot</a> &gt; <a href="index.source.html" class="el_package">io.vanillabp.camunda7.springboot</a> &gt; <span class="el_source">Camunda7AdapterBeanRegistrar.java</span></div><h1>Camunda7AdapterBeanRegistrar.java</h1><pre class="source lang-java linenums">package io.vanillabp.camunda7.springboot;
+
+import org.camunda.bpm.engine.RepositoryService;
+import org.camunda.bpm.engine.RuntimeService;
+import org.springframework.beans.factory.BeanRegistrar;
+import org.springframework.beans.factory.BeanRegistry;
+import org.springframework.core.env.Environment;
+
+import io.vanillabp.camunda7.deployment.Camunda7DeploymentService;
+import io.vanillabp.camunda7.processservice.Camunda7ProcessService;
+import io.vanillabp.integration.adapter.AdapterBeanRegistrarSupport;
+
+/**
+ * Registers the Camunda 7 adapter's per-adapter-id beans: for EACH configured adapter
+ * id of type {@code camunda7} one {@link Camunda7ProcessService} &lt;i&gt;element&lt;/i&gt; bean
+ * and one {@link Camunda7DeploymentService} &lt;i&gt;element&lt;/i&gt; bean are registered - never
+ * beans of type {@code List&lt;...&gt;}: the platform collects element beans via
+ * {@code ObjectProvider.stream()}.
+ * &lt;p&gt;
+ * The id set comes from the runtime configuration, so the beans are registered
+ * programmatically ({@link BeanRegistrar} +
+ * {@link AdapterBeanRegistrarSupport#forEachConfiguredAdapterId}); the adapter id is a
+ * CONSTRUCTOR parameter of each instance. Without any configured {@code camunda7}
+ * adapter id no bean is registered at all - the config-based gating of the former
+ * {@code @Conditional} wiring is preserved implicitly.
+ * &lt;p&gt;
+ * &lt;b&gt;Interim (until the per-id-engines story 26e):&lt;/b&gt; all instances share the SINGLE
+ * embedded engine's {@link RuntimeService}/{@link RepositoryService} - one engine per
+ * configured adapter id (incl. per-id datasource/schema) is introduced there.
+ */
+<span class="fc" id="L31">public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {</span>
+
+  @Override
+  public void register(
+      final BeanRegistry registry,
+      final Environment environment) {
+
+<span class="fc" id="L38">    AdapterBeanRegistrarSupport.forEachConfiguredAdapterId(</span>
+        environment,
+        Camunda7AdapterConfiguration.ADAPTER_TYPE,
+        adapterId -&gt; {
+
+<span class="fc" id="L43">          registry.registerBean(</span>
+<span class="fc" id="L44">              &quot;Camunda7_ProcessService_%s&quot;.formatted(adapterId),</span>
+              Camunda7ProcessService.class,
+<span class="fc" id="L46">              spec -&gt; spec.supplier(supplierContext -&gt; new Camunda7ProcessService&lt;&gt;(</span>
+<span class="fc" id="L47">                  adapterId, supplierContext.bean(RuntimeService.class))));</span>
+
+<span class="fc" id="L49">          registry.registerBean(</span>
+<span class="fc" id="L50">              &quot;Camunda7_DeploymentService_%s&quot;.formatted(adapterId),</span>
+              Camunda7DeploymentService.class,
+<span class="fc" id="L52">              spec -&gt; spec.supplier(supplierContext -&gt; new Camunda7DeploymentService(</span>
+<span class="fc" id="L53">                  adapterId, supplierContext.bean(RepositoryService.class))));</span>
+
+<span class="fc" id="L55">        });</span>
+
+<span class="fc" id="L57">  }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

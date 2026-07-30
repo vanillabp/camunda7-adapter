@@ -9,7 +9,6 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import io.vanillabp.camunda7.deployment.Camunda7DeploymentService;
 import io.vanillabp.camunda7.springboot.Camunda7AdapterConfiguration;
-import io.vanillabp.camunda7.springboot.deployment.Camunda7DeploymentConfiguration;
 import io.vanillabp.camunda7.springboot.engine.Camunda7EngineConfiguration;
 import io.vanillabp.camunda7.springboot.processservice.Camunda7ProcessServiceConfiguration;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
@@ -48,7 +47,6 @@ public class Camunda7AdapterBootTest {
                 org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
                 Camunda7AdapterConfiguration.class,
                 Camunda7EngineConfiguration.class,
-                Camunda7DeploymentConfiguration.class,
                 Camunda7ProcessServiceConfiguration.class,
                 WorkflowModuleAutoConfiguration.class,
                 SpringBootMigrationAdapterAutoConfiguration.class))
@@ -73,6 +71,52 @@ public class Camunda7AdapterBootTest {
   }
 
   @Test
+  public void twoAdapterIdsOfTypeCamunda7YieldPerIdBeans() {
+
+    // per-adapter-id bean convention (adapter-config-model story 26d): TWO ids of
+    // type camunda7 yield one process service and one deployment service PER id
+    // (interim until the per-id-engines story 26e: both share the single engine)
+    this.contextRunner
+        .withPropertyValues(
+            "spring.config.location=classpath:application.yaml",
+            "spring.datasource.url=jdbc:h2:mem:camunda7-two-ids-test;DB_CLOSE_DELAY=-1",
+            "vanillabp.prioritized-adapters=c7,c7-two",
+            "vanillabp.adapters.c7-two.type=camunda7",
+            "vanillabp.workflow-modules.c7-smoke-test.adapters.c7-two.resources-location=classpath*:c7-smoke-test/processes-two")
+        .withInitializer(new ConfigDataApplicationContextInitializer())
+        .withConfiguration(
+            AutoConfigurations.of(
+                org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
+                org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
+                Camunda7AdapterConfiguration.class,
+                Camunda7EngineConfiguration.class,
+                Camunda7ProcessServiceConfiguration.class,
+                WorkflowModuleAutoConfiguration.class,
+                SpringBootMigrationAdapterAutoConfiguration.class))
+        .run(context -> {
+
+          Assertions.assertNull(context.getStartupFailure(), "context should start");
+
+          final var deploymentServiceIds = context
+              .getBeanProvider(AdapterDeploymentService.class)
+              .stream()
+              .map(service -> ((AdapterDeploymentService<?, ?>) service).getAdapterId())
+              .collect(java.util.stream.Collectors.toSet());
+          Assertions.assertEquals(java.util.Set.of("c7", "c7-two"), deploymentServiceIds);
+
+          final var processServiceIds = context
+              .getBeanProvider(io.vanillabp.integration.adapter.spi.MigratableProcessService.class)
+              .stream()
+              .map(service -> ((io.vanillabp.integration.adapter.spi.MigratableProcessService<?>) service)
+                  .getAdapterId())
+              .collect(java.util.stream.Collectors.toSet());
+          Assertions.assertEquals(java.util.Set.of("c7", "c7-two"), processServiceIds);
+
+        });
+
+  }
+
+  @Test
   public void withoutConfiguredCamunda7AdapterNoEngineIsCreated() {
 
     // the adapter jar is on the classpath and a data source exists, but NO
@@ -87,7 +131,6 @@ public class Camunda7AdapterBootTest {
                 org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
                 Camunda7AdapterConfiguration.class,
                 Camunda7EngineConfiguration.class,
-                Camunda7DeploymentConfiguration.class,
                 Camunda7ProcessServiceConfiguration.class))
         .run(context -> {
 
