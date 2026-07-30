@@ -133,6 +133,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   public void startWorkflowPhaseTwo(
       final String workflowModuleId,
       final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
       final Object workflowAggregateId) {
 
     // Camunda 7 starts the workflow entirely in phase one (needsTwoPhaseCommit... == false),

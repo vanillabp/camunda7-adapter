@@ -133,11 +133,12 @@ public class Camunda7ProcessService&lt;A&gt; implements MigratableProcessService
   public void startWorkflowPhaseTwo(
       final String workflowModuleId,
       final String bpmnProcessId,
+      final AggregatePersistenceAware&lt;A&gt; aggregatePersistence,
       final Object workflowAggregateId) {
 
     // Camunda 7 starts the workflow entirely in phase one (needsTwoPhaseCommit... == false),
     // so the core never schedules phase two. A call here indicates a wiring problem.
-<span class="nc" id="L140">    log.warn(</span>
+<span class="nc" id="L141">    log.warn(</span>
         &quot;Camunda7[{}]: startWorkflowPhaseTwo was called for workflow '{}' of module '{}' (aggregate &quot;
             + &quot;'{}') although Camunda 7 starts workflows in phase one - ignoring (this should never &quot;
             + &quot;happen).&quot;,
@@ -146,7 +147,7 @@ public class Camunda7ProcessService&lt;A&gt; implements MigratableProcessService
         workflowModuleId,
         workflowAggregateId);
 
-<span class="nc" id="L149">  }</span>
+<span class="nc" id="L150">  }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
