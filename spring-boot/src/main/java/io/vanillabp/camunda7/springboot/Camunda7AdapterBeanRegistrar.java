@@ -44,15 +44,50 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
               "Camunda7_ProcessService_%s".formatted(adapterId),
               Camunda7ProcessService.class,
               spec -> spec.supplier(supplierContext -> new Camunda7ProcessService<>(
-                  adapterId, supplierContext.bean(RuntimeService.class))));
+                  adapterId, engineService(supplierContext, RuntimeService.class, adapterId))));
 
           registry.registerBean(
               "Camunda7_DeploymentService_%s".formatted(adapterId),
               Camunda7DeploymentService.class,
               spec -> spec.supplier(supplierContext -> new Camunda7DeploymentService(
-                  adapterId, supplierContext.bean(RepositoryService.class))));
+                  adapterId, engineService(supplierContext, RepositoryService.class, adapterId))));
 
         });
+
+  }
+
+  /**
+   * Resolves an engine service with a GUIDING failure instead of a bean-wiring
+   * error: the embedded engine is only created if a {@code DataSource} and a
+   * {@code PlatformTransactionManager} are available - a configured adapter without
+   * a database is a configuration defect the developer has to learn about with the
+   * remedy named, not via a {@code NoSuchBeanDefinitionException}.
+   *
+   * @param <S> The engine-service type
+   * @param supplierContext The bean supplier context
+   * @param serviceType The engine-service type
+   * @param adapterId The adapter ID (used in the guiding message)
+   * @return The engine service
+   */
+  private static <S> S engineService(
+      final BeanRegistry.SupplierContext supplierContext,
+      final Class<S> serviceType,
+      final String adapterId) {
+
+    final var service = supplierContext
+        .beanProvider(serviceType)
+        .getIfAvailable();
+    if (service == null) {
+      throw new IllegalStateException(
+          """
+              Camunda 7 adapter '%s' is configured ('vanillabp.adapters.%s.type: camunda7') but the \
+              embedded engine was not created: no DataSource/PlatformTransactionManager is available. \
+              Camunda 7 runs embedded and always needs a database - configure 'spring.datasource.*' \
+              (and a transaction manager, e.g. via the JDBC or JPA starters) or remove the adapter \
+              configuration."""
+              .formatted(adapterId, adapterId));
+    }
+    return service;
 
   }
 

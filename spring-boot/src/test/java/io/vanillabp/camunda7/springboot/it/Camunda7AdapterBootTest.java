@@ -117,6 +117,42 @@ public class Camunda7AdapterBootTest {
   }
 
   @Test
+  public void configuredAdapterWithoutDataSourceFailsWithGuidingMessage() {
+
+    // a configured camunda7 adapter WITHOUT any DataSource: the boot fails with a
+    // guiding message naming the remedy - not with a NoSuchBeanDefinitionException
+    // (story 26c: configuration defects surface at startup)
+    this.contextRunner
+        .withPropertyValues("spring.config.location=classpath:application.yaml")
+        .withInitializer(new ConfigDataApplicationContextInitializer())
+        .withConfiguration(
+            AutoConfigurations.of(
+                Camunda7AdapterConfiguration.class,
+                Camunda7EngineConfiguration.class,
+                Camunda7ProcessServiceConfiguration.class,
+                WorkflowModuleAutoConfiguration.class,
+                SpringBootMigrationAdapterAutoConfiguration.class))
+        .run(context -> {
+
+          Assertions.assertNotNull(context.getStartupFailure(), "boot has to fail with a guiding message");
+
+          var cause = (Throwable) context.getStartupFailure();
+          while (cause.getCause() != null) {
+            cause = cause.getCause();
+          }
+          final var message = String.valueOf(cause.getMessage());
+          Assertions.assertTrue(
+              message.contains("Camunda 7 adapter 'c7' is configured"),
+              "expected the guiding message but got: "
+                  + message);
+          Assertions.assertTrue(message.contains("no DataSource/PlatformTransactionManager is available"));
+          Assertions.assertTrue(message.contains("spring.datasource."));
+
+        });
+
+  }
+
+  @Test
   public void withoutConfiguredCamunda7AdapterNoEngineIsCreated() {
 
     // the adapter jar is on the classpath and a data source exists, but NO
