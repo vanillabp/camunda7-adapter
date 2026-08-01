@@ -50,6 +50,14 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    */
   private final RepositoryService repositoryService;
 
+  /**
+   * Controls the engine's job executor: activation is deferred to
+   * {@link #startWorkflowProcessing} (the executor is engine-global - the platform's
+   * implementation reference-counts the started modules and stops the executor only
+   * when the last module stops, see {@link Camunda7WorkflowProcessingLifecycle}).
+   */
+  private final Camunda7WorkflowProcessingLifecycle workflowProcessingLifecycle;
+
   @Override
   public String getAdapterId() {
 
@@ -186,11 +194,29 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String workflowModuleId,
       final Camunda7ProcessingContext bpmsProcessingContext) {
 
-    // the job executor is engine-global and already running - nothing to do per module
-    log.debug(
-        "Camunda7[{}]: workflow processing of module '{}' is handled by the engine-global job executor",
+    // asynchronous continuations (async-before/after, timers) run on the engine's
+    // job executor - its activation is deferred to this point (the platform builds
+    // the engine with the executor inactive)
+    log.info(
+        "Camunda7[{}]: starting workflow processing of module '{}'",
         adapterId,
         workflowModuleId);
+    workflowProcessingLifecycle.startWorkflowProcessing(workflowModuleId);
+
+  }
+
+  @Override
+  public void stopWorkflowProcessing(
+      final String workflowModuleId,
+      final Camunda7ProcessingContext bpmsProcessingContext) {
+
+    // graceful shutdown (reverse start order): the executor stops once the LAST
+    // started module stops (see Camunda7WorkflowProcessingLifecycle)
+    log.info(
+        "Camunda7[{}]: stopping workflow processing of module '{}'",
+        adapterId,
+        workflowModuleId);
+    workflowProcessingLifecycle.stopWorkflowProcessing(workflowModuleId);
 
   }
 

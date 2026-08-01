@@ -64,6 +64,23 @@
       <groupId>org.springframework</groupId>
       <artifactId>spring-tx</artifactId>
     </dependency>
+    <!-- ThreadPoolTaskExecutor backing the SpringJobExecutor -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+    </dependency>
+    <!-- DataSourceTransactionManager for engines with an own datasource
+         (vanillabp.adapters.<id>.data-source.*) -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-jdbc</artifactId>
+    </dependency>
+    <!-- pool for engine-own datasources (Spring Boot's default pool, so it is
+         present in JDBC applications anyway) -->
+    <dependency>
+      <groupId>com.zaxxer</groupId>
+      <artifactId>HikariCP</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>

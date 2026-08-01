@@ -9,7 +9,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import io.vanillabp.camunda7.deployment.Camunda7DeploymentService;
 import io.vanillabp.camunda7.springboot.Camunda7AdapterConfiguration;
-import io.vanillabp.camunda7.springboot.engine.Camunda7EngineConfiguration;
+import io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder;
 import io.vanillabp.camunda7.springboot.processservice.Camunda7ProcessServiceConfiguration;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
 import io.vanillabp.integration.processservice.SpringBootMigrationAdapterAutoConfiguration;
@@ -18,11 +18,11 @@ import io.vanillabp.integration.workflowmodule.WorkflowModuleAutoConfiguration;
 /**
  * Boot smoke test proving that the Camunda 7 adapter is discovered purely by
  * configuration ({@code vanillabp.adapters.c7.type: camunda7}). The Camunda 7 beans
- * condition on the embedded engine, so the test wires a plain-JDBC H2 setup
- * ({@code DataSourceAutoConfiguration} + {@code DataSourceTransactionManagerAutoConfiguration},
- * deliberately NO JPA) - proving at the same time that the auto-configuration
- * ordering works for plain-JDBC applications. There are no BPMN files and no
- * {@code @WorkflowService} classes, so no workflow is deployed.
+ * resolve the embedded engine's DataSource lazily, so the test wires a plain-JDBC H2
+ * setup ({@code DataSourceAutoConfiguration} +
+ * {@code DataSourceTransactionManagerAutoConfiguration}, deliberately NO JPA). There
+ * are no BPMN files and no {@code @WorkflowService} classes, so no workflow is
+ * deployed.
  * <p>
  * The deployment lifecycle ({@code DeploymentAutoConfiguration}) is deliberately NOT
  * loaded: the core deployment pipeline would invoke {@code deployResources} once per
@@ -46,7 +46,6 @@ public class Camunda7AdapterBootTest {
                 org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
                 org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
                 Camunda7AdapterConfiguration.class,
-                Camunda7EngineConfiguration.class,
                 Camunda7ProcessServiceConfiguration.class,
                 WorkflowModuleAutoConfiguration.class,
                 SpringBootMigrationAdapterAutoConfiguration.class))
@@ -54,8 +53,16 @@ public class Camunda7AdapterBootTest {
 
           Assertions.assertNull(context.getStartupFailure(), "context should start");
 
-          // the embedded engine was wired (plain JDBC, no JPA)
-          Assertions.assertNotNull(context.getBean(ProcessEngine.class));
+          // the embedded engine was wired (plain JDBC, no JPA), named after the
+          // adapter id, with the job executor still INACTIVE (deferred activation:
+          // startWorkflowProcessing starts it - story 26e)
+          final var engine = context.getBean(ProcessEngine.class);
+          Assertions.assertEquals("vanillabp-camunda7-c7", engine.getName());
+          final var holder = context.getBean(Camunda7EngineHolder.class);
+          Assertions.assertFalse(
+              holder.isJobExecutorActive(),
+              "the job executor must not be active before startWorkflowProcessing");
+          Assertions.assertFalse(holder.usesSeparateDataSource());
 
           // element-bean convention: one AdapterDeploymentService bean per adapter
           // (never a List bean) so several adapter types can coexist
@@ -71,15 +78,83 @@ public class Camunda7AdapterBootTest {
   }
 
   @Test
-  public void twoAdapterIdsOfTypeCamunda7YieldPerIdBeans() {
+  public void twoAdapterIdsOfTypeCamunda7YieldPerIdEnginesAndBeans() {
 
-    // per-adapter-id bean convention (adapter-config-model story 26d): TWO ids of
-    // type camunda7 yield one process service and one deployment service PER id
-    // (interim until the per-id-engines story 26e: both share the single engine)
+    // per-adapter-id convention (stories 26d/26e): TWO ids of type camunda7 yield
+    // one ENGINE, one process service and one deployment service PER id - the
+    // second id needs its own datasource (two embedded engines must never share
+    // one schema, see the validation test below)
     this.contextRunner
         .withPropertyValues(
             "spring.config.location=classpath:application.yaml",
             "spring.datasource.url=jdbc:h2:mem:camunda7-two-ids-test;DB_CLOSE_DELAY=-1",
+            "vanillabp.prioritized-adapters=c7,c7-two",
+            "vanillabp.adapters.c7-two.type=camunda7",
+            "vanillabp.adapters.c7-two.data-source.url=jdbc:h2:mem:camunda7-two-ids-own;DB_CLOSE_DELAY=-1",
+            "vanillabp.workflow-modules.c7-smoke-test.adapters.c7-two.resources-location=classpath*:c7-smoke-test/processes-two")
+        .withInitializer(new ConfigDataApplicationContextInitializer())
+        .withConfiguration(
+            AutoConfigurations.of(
+                org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
+                org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
+                Camunda7AdapterConfiguration.class,
+                Camunda7ProcessServiceConfiguration.class,
+                WorkflowModuleAutoConfiguration.class,
+                SpringBootMigrationAdapterAutoConfiguration.class))
+        .run(context -> {
+
+          Assertions.assertNull(context.getStartupFailure(), "context should start");
+
+          // one engine per adapter id, named after the id
+          final var engineNames = context
+              .getBeansOfType(ProcessEngine.class)
+              .values()
+              .stream()
+              .map(ProcessEngine::getName)
+              .collect(java.util.stream.Collectors.toSet());
+          Assertions.assertEquals(
+              java.util.Set.of("vanillabp-camunda7-c7", "vanillabp-camunda7-c7-two"),
+              engineNames);
+
+          // the id with its own datasource is marked accordingly (its starts use
+          // the two-phase pattern - see Camunda7ProcessService)
+          final var holders = context.getBeansOfType(Camunda7EngineHolder.class);
+          Assertions.assertFalse(holders.get("Camunda7_Engine_c7").usesSeparateDataSource());
+          Assertions.assertTrue(holders.get("Camunda7_Engine_c7-two").usesSeparateDataSource());
+
+          final var deploymentServiceIds = context
+              .getBeanProvider(AdapterDeploymentService.class)
+              .stream()
+              .map(service -> ((AdapterDeploymentService<?, ?>) service).getAdapterId())
+              .collect(java.util.stream.Collectors.toSet());
+          Assertions.assertEquals(java.util.Set.of("c7", "c7-two"), deploymentServiceIds);
+
+          final var processServices = context
+              .getBeanProvider(io.vanillabp.integration.adapter.spi.MigratableProcessService.class)
+              .stream()
+              .map(service -> (io.vanillabp.integration.adapter.spi.MigratableProcessService<?>) service)
+              .collect(java.util.stream.Collectors
+                  .toMap(io.vanillabp.integration.adapter.spi.MigratableProcessService::getAdapterId,
+                      service -> service));
+          Assertions.assertEquals(java.util.Set.of("c7", "c7-two"), processServices.keySet());
+          // shared datasource joins the caller's transaction (no two-phase commit),
+          // an own datasource cannot - such ids use the two-phase pattern
+          Assertions.assertFalse(processServices.get("c7").needsTwoPhaseCommitForStartingWorkflows());
+          Assertions.assertTrue(processServices.get("c7-two").needsTwoPhaseCommitForStartingWorkflows());
+
+        });
+
+  }
+
+  @Test
+  public void twoAdapterIdsSharingTheSameDataSourceFailWithGuidingMessage() {
+
+    // two embedded engines on one schema are the same engine state - configuring
+    // them as two adapters must fail at startup with a guiding message (26c style)
+    this.contextRunner
+        .withPropertyValues(
+            "spring.config.location=classpath:application.yaml",
+            "spring.datasource.url=jdbc:h2:mem:camunda7-same-ds-test;DB_CLOSE_DELAY=-1",
             "vanillabp.prioritized-adapters=c7,c7-two",
             "vanillabp.adapters.c7-two.type=camunda7",
             "vanillabp.workflow-modules.c7-smoke-test.adapters.c7-two.resources-location=classpath*:c7-smoke-test/processes-two")
@@ -89,28 +164,24 @@ public class Camunda7AdapterBootTest {
                 org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
                 org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
                 Camunda7AdapterConfiguration.class,
-                Camunda7EngineConfiguration.class,
                 Camunda7ProcessServiceConfiguration.class,
                 WorkflowModuleAutoConfiguration.class,
                 SpringBootMigrationAdapterAutoConfiguration.class))
         .run(context -> {
 
-          Assertions.assertNull(context.getStartupFailure(), "context should start");
+          Assertions.assertNotNull(context.getStartupFailure(), "boot has to fail with a guiding message");
 
-          final var deploymentServiceIds = context
-              .getBeanProvider(AdapterDeploymentService.class)
-              .stream()
-              .map(service -> ((AdapterDeploymentService<?, ?>) service).getAdapterId())
-              .collect(java.util.stream.Collectors.toSet());
-          Assertions.assertEquals(java.util.Set.of("c7", "c7-two"), deploymentServiceIds);
-
-          final var processServiceIds = context
-              .getBeanProvider(io.vanillabp.integration.adapter.spi.MigratableProcessService.class)
-              .stream()
-              .map(service -> ((io.vanillabp.integration.adapter.spi.MigratableProcessService<?>) service)
-                  .getAdapterId())
-              .collect(java.util.stream.Collectors.toSet());
-          Assertions.assertEquals(java.util.Set.of("c7", "c7-two"), processServiceIds);
+          var cause = (Throwable) context.getStartupFailure();
+          while (cause.getCause() != null) {
+            cause = cause.getCause();
+          }
+          final var message = String.valueOf(cause.getMessage());
+          Assertions.assertTrue(
+              message.contains("'c7', 'c7-two'"),
+              "expected the guiding message naming both adapter ids but got: "
+                  + message);
+          Assertions.assertTrue(message.contains("share the same datasource"));
+          Assertions.assertTrue(message.contains("vanillabp.adapters.<id>.data-source.url"));
 
         });
 
@@ -128,7 +199,6 @@ public class Camunda7AdapterBootTest {
         .withConfiguration(
             AutoConfigurations.of(
                 Camunda7AdapterConfiguration.class,
-                Camunda7EngineConfiguration.class,
                 Camunda7ProcessServiceConfiguration.class,
                 WorkflowModuleAutoConfiguration.class,
                 SpringBootMigrationAdapterAutoConfiguration.class))
@@ -166,7 +236,6 @@ public class Camunda7AdapterBootTest {
                 org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
                 org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
                 Camunda7AdapterConfiguration.class,
-                Camunda7EngineConfiguration.class,
                 Camunda7ProcessServiceConfiguration.class))
         .run(context -> {
 

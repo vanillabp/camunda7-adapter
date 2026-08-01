@@ -13,11 +13,23 @@ import lombok.extern.slf4j.Slf4j;
  * Camunda 7 implementation of the VanillaBP {@link MigratableProcessService}. One
  * instance exists per configured adapter id.
  * <p>
- * Camunda 7 runs embedded in the application's JVM and shares the same database and the
- * same transaction as the business code. Therefore
+ * Camunda 7 runs embedded in the application's JVM and - by default - shares the same
+ * database and the same transaction as the business code. Therefore
  * {@link #needsTwoPhaseCommitForStartingWorkflows()} returns {@code false}: starting a
  * workflow happens completely in phase one within the local transaction; phase two is a
  * no-op and no outbox is involved.
+ * <p>
+ * <b>Exception - adapter ids with their OWN datasource</b>
+ * (<code>vanillabp.adapters.&lt;id&gt;.data-source.*</code>, the engine-side-by-side
+ * migration scenario): such an engine cannot join the caller's transaction (its engine
+ * commands commit on their own transaction manager), so a phase-one start would leave a
+ * ghost process instance if the caller's transaction rolls back afterwards. These
+ * adapter ids therefore use VanillaBP's regular two-phase start
+ * ({@link #needsTwoPhaseCommitForStartingWorkflows()} = {@code true}): phase one does
+ * nothing against the engine, phase two (after commit, dispatched via the phase-two
+ * outbox) starts the instance idempotently (skipped if a RUNNING instance with the same
+ * business key/tenant already exists; like every outbox-based operation this keeps an
+ * at-least-once residual window, e.g. if the first instance already completed).
  * <p>
  * The workflow-aggregate ID maps naturally onto the Camunda 7 <b>business key</b> and the
  * workflow module ID onto the Camunda <b>tenant ID</b> - see
@@ -36,6 +48,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    */
   private final RuntimeService runtimeService;
 
+  /**
+   * Whether this adapter id's engine runs on its OWN datasource (see class comment):
+   * engine commands then do not join the caller's transaction and starting workflows
+   * uses the two-phase pattern.
+   */
+  private final boolean usesSeparateDataSource;
+
   @Override
   public String getAdapterId() {
 
@@ -46,9 +65,12 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   @Override
   public boolean needsTwoPhaseCommitForStartingWorkflows() {
 
-    // Camunda 7 is embedded and joins the local transaction - everything happens in
-    // phase one, so no two-phase commit / outbox is required.
-    return false;
+    // Sharing the application's datasource (the default), Camunda 7 joins the local
+    // transaction - everything happens in phase one, no two-phase commit / outbox
+    // required. With an OWN datasource the engine cannot join the caller's
+    // transaction, so the two-phase pattern prevents ghost instances (see class
+    // comment).
+    return usesSeparateDataSource;
 
   }
 
@@ -120,6 +142,14 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final AggregatePersistenceAware<A> aggregatePersistence,
       final A workflowAggregate) {
 
+    if (usesSeparateDataSource) {
+      // the engine runs on its own datasource and cannot join the caller's
+      // transaction - the instance is created in phase two after the commit (see
+      // class comment); starting a workflow has nothing to validate against the
+      // engine (the degenerate two-phase case, like remote BPMS)
+      return;
+    }
+
     // Camunda 7 is embedded and joins the local transaction, so the workflow is started
     // completely here: the aggregate ID maps onto the Camunda business key, the workflow
     // module ID onto the Camunda tenant ID.
@@ -136,16 +166,43 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final AggregatePersistenceAware<A> aggregatePersistence,
       final Object workflowAggregateId) {
 
-    // Camunda 7 starts the workflow entirely in phase one (needsTwoPhaseCommit... == false),
-    // so the core never schedules phase two. A call here indicates a wiring problem.
-    log.warn(
-        "Camunda7[{}]: startWorkflowPhaseTwo was called for workflow '{}' of module '{}' (aggregate "
-            + "'{}') although Camunda 7 starts workflows in phase one - ignoring (this should never "
-            + "happen).",
-        adapterId,
-        bpmnProcessId,
-        workflowModuleId,
-        workflowAggregateId);
+    if (!usesSeparateDataSource) {
+      // sharing the application's datasource the workflow is started entirely in
+      // phase one (needsTwoPhaseCommit... == false), so the core never schedules
+      // phase two. A call here indicates a wiring problem.
+      log.warn(
+          "Camunda7[{}]: startWorkflowPhaseTwo was called for workflow '{}' of module '{}' (aggregate "
+              + "'{}') although Camunda 7 starts workflows in phase one - ignoring (this should never "
+              + "happen).",
+          adapterId,
+          bpmnProcessId,
+          workflowModuleId,
+          workflowAggregateId);
+      return;
+    }
+
+    // phase two is dispatched at-least-once (outbox retries, crash recovery) - skip
+    // if a running instance for this aggregate already exists (idempotency key:
+    // business key + tenant + process)
+    final var businessKey = String.valueOf(workflowAggregateId);
+    final var alreadyStarted = runtimeService
+        .createProcessInstanceQuery()
+        .processInstanceBusinessKey(businessKey)
+        .processDefinitionKey(bpmnProcessId)
+        .tenantIdIn(workflowModuleId)
+        .count() > 0;
+    if (alreadyStarted) {
+      log.info(
+          "Camunda7[{}]: workflow '{}' of module '{}' was already started for aggregate '{}' - "
+              + "skipping the redelivered phase-two start",
+          adapterId,
+          bpmnProcessId,
+          workflowModuleId,
+          businessKey);
+      return;
+    }
+
+    startProcessInstance(workflowModuleId, bpmnProcessId, workflowAggregateId);
 
   }
 
