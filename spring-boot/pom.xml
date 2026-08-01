@@ -69,17 +69,12 @@
       <groupId>org.springframework</groupId>
       <artifactId>spring-context</artifactId>
     </dependency>
-    <!-- DataSourceTransactionManager for engines with an own datasource
-         (vanillabp.adapters.<id>.data-source.*) -->
+    <!-- DataSourceTransactionManager for engines on a named datasource
+         (vanillabp.adapters.<id>.data-source-name; the datasource itself is
+         application-provided - the adapter never builds its own pool) -->
     <dependency>
       <groupId>org.springframework</groupId>
       <artifactId>spring-jdbc</artifactId>
-    </dependency>
-    <!-- pool for engine-own datasources (Spring Boot's default pool, so it is
-         present in JDBC applications anyway) -->
-    <dependency>
-      <groupId>com.zaxxer</groupId>
-      <artifactId>HikariCP</artifactId>
     </dependency>
 
     <dependency>

@@ -43,7 +43,7 @@ import io.vanillabp.integration.adapter.AdapterBeanRegistrarSupport;
  * <p>
  * <b>Startup validation:</b> two embedded engines on one schema are the same engine
  * state - more than one {@code camunda7} adapter id resolving to the SAME datasource
- * (both the application's, or the same <code>data-source.url</code>) fails the boot
+ * (both the application's, or the same <code>data-source-name</code>) fails the boot
  * with a guiding message naming the property keys to fix.
  */
 public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
@@ -69,13 +69,14 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
               Camunda7EngineHolder.class,
               spec -> spec.supplier(supplierContext -> {
                 final var engineProperties = enginePropertiesFor(environment, adapterId);
-                // the application's DataSource/PlatformTransactionManager are only
-                // needed (and only required to exist) if the id has no own datasource
-                final var usesOwnDataSource = engineProperties.getDataSource().isConfigured();
+                // the application's DEFAULT DataSource/PlatformTransactionManager
+                // are only needed (and only required to exist) if the id references
+                // no named datasource bean (data-source-name)
+                final var usesNamedDataSource = engineProperties.usesSeparateDataSource();
                 return new Camunda7EngineHolder(
-                    adapterId, engineProperties, usesOwnDataSource
+                    adapterId, engineProperties, usesNamedDataSource
                         ? null
-                        : applicationBean(supplierContext, DataSource.class, adapterId), usesOwnDataSource
+                        : applicationBean(supplierContext, DataSource.class, adapterId), usesNamedDataSource
                             ? null
                             : applicationBean(supplierContext, PlatformTransactionManager.class, adapterId));
               }));
@@ -169,8 +170,9 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
               Camunda 7 adapter '%s' is configured ('vanillabp.adapters.%s.type: camunda7') but the \
               embedded engine cannot be created: no DataSource/PlatformTransactionManager is available. \
               Camunda 7 runs embedded and always needs a database - configure 'spring.datasource.*' \
-              (and a transaction manager, e.g. via the JDBC or JPA starters), configure an engine-own \
-              datasource via 'vanillabp.adapters.%s.data-source.*' or remove the adapter configuration."""
+              (and a transaction manager, e.g. via the JDBC or JPA starters), reference an \
+              application-provided DataSource bean via 'vanillabp.adapters.%s.data-source-name' or \
+              remove the adapter configuration."""
               .formatted(adapterId, adapterId, adapterId));
     }
     return bean;
@@ -193,15 +195,15 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
     final var idsByDataSource = new LinkedHashMap<String, List<String>>();
     camunda7AdapterIds
         .forEach(adapterId -> {
-          final var url = Binder
+          final var dataSourceName = Binder
               .get(environment)
               .bind(
-                  "vanillabp.adapters.%s.data-source.url".formatted(adapterId),
+                  "vanillabp.adapters.%s.data-source-name".formatted(adapterId),
                   Bindable.of(String.class))
               .orElse(null);
-          final var effectiveDataSource = (url != null) && !url.isBlank()
-              ? url
-              : "<the application's datasource>";
+          final var effectiveDataSource = (dataSourceName != null) && !dataSourceName.isBlank()
+              ? dataSourceName
+              : "<the application's default datasource>";
           idsByDataSource
               .computeIfAbsent(effectiveDataSource, key -> new LinkedList<>())
               .add(adapterId);
@@ -218,9 +220,9 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
               """
                   The Camunda 7 adapters '%s' would share the same datasource (%s)! Two embedded \
                   engines on one schema are the same engine state - configuring them as separate \
-                  adapters is an error. Give each additional adapter its own schema via \
-                  'vanillabp.adapters.<id>.data-source.url' (plus 'username', 'password', \
-                  'driver-class-name' as needed) or remove all but one of these adapters."""
+                  adapters is an error. Give each additional adapter its own schema: define a \
+                  DataSource bean in your application and reference it via \
+                  'vanillabp.adapters.<id>.data-source-name', or remove all but one of these adapters."""
                   .formatted(String.join("', '", adapterIds), dataSource));
         });
 

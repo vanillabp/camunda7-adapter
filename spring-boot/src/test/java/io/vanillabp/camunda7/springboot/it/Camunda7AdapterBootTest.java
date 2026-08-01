@@ -83,14 +83,25 @@ public class Camunda7AdapterBootTest {
     // per-adapter-id convention (stories 26d/26e): TWO ids of type camunda7 yield
     // one ENGINE, one process service and one deployment service PER id - the
     // second id needs its own datasource (two embedded engines must never share
-    // one schema, see the validation test below)
+    // one schema, see the validation test below), referenced BY BEAN NAME: setting
+    // up datasources is the application's concern, VanillaBP never builds a pool
     this.contextRunner
+        .withBean(
+            "c7TwoDataSource",
+            javax.sql.DataSource.class,
+            () -> new org.springframework.jdbc.datasource.SimpleDriverDataSource(
+                new org.h2.Driver(), "jdbc:h2:mem:camunda7-two-ids-own;DB_CLOSE_DELAY=-1"),
+            // keep the bean out of by-type injection so Spring Boot's
+            // default-datasource auto-configuration stays active (the standard
+            // pattern for additional application datasources)
+            beanDefinition -> ((org.springframework.beans.factory.support.AbstractBeanDefinition) beanDefinition)
+                .setDefaultCandidate(false))
         .withPropertyValues(
             "spring.config.location=classpath:application.yaml",
             "spring.datasource.url=jdbc:h2:mem:camunda7-two-ids-test;DB_CLOSE_DELAY=-1",
             "vanillabp.prioritized-adapters=c7,c7-two",
             "vanillabp.adapters.c7-two.type=camunda7",
-            "vanillabp.adapters.c7-two.data-source.url=jdbc:h2:mem:camunda7-two-ids-own;DB_CLOSE_DELAY=-1",
+            "vanillabp.adapters.c7-two.data-source-name=c7TwoDataSource",
             "vanillabp.workflow-modules.c7-smoke-test.adapters.c7-two.resources-location=classpath*:c7-smoke-test/processes-two")
         .withInitializer(new ConfigDataApplicationContextInitializer())
         .withConfiguration(
@@ -181,7 +192,7 @@ public class Camunda7AdapterBootTest {
               "expected the guiding message naming both adapter ids but got: "
                   + message);
           Assertions.assertTrue(message.contains("share the same datasource"));
-          Assertions.assertTrue(message.contains("vanillabp.adapters.<id>.data-source.url"));
+          Assertions.assertTrue(message.contains("vanillabp.adapters.<id>.data-source-name"));
 
         });
 

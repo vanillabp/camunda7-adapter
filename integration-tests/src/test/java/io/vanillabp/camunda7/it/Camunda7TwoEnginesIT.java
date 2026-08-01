@@ -21,8 +21,9 @@ import io.vanillabp.spi.process.ProcessService;
 /**
  * Two configured {@code camunda7} adapter ids side by side (story 26e - the
  * engine-side-by-side migration scenario): {@code c7} shares the application's
- * datasource, {@code c7b} runs on its OWN H2 database
- * ({@code vanillabp.adapters.c7b.data-source.url}).
+ * datasource, {@code c7b} runs on an application-provided NAMED datasource bean
+ * ({@code vanillabp.adapters.c7b.data-source-name} - setting up datasources is the
+ * application's concern, VanillaBP never builds its own pool).
  * <ul>
  *   <li>two engines exist, named after the adapter ids, and the workflow module's
  *       BPMN is deployed to BOTH (each engine has its own schema);</li>
@@ -33,14 +34,35 @@ import io.vanillabp.spi.process.ProcessService;
  *       idempotently (at-least-once dispatch).</li>
  * </ul>
  */
-@SpringBootTest(classes = TestApplication.class, properties = {
+@SpringBootTest(classes = {
+    TestApplication.class, Camunda7TwoEnginesIT.NamedDataSourceConfiguration.class
+}, properties = {
     // own database: test contexts are cached and live in parallel - another
     // context's engine on the same H2 database would interfere
-    "spring.datasource.url=jdbc:h2:mem:c7-two-engines-it;DB_CLOSE_DELAY=-1", "vanillabp.prioritized-adapters=c7,c7b", "vanillabp.adapters.c7b.type=camunda7", "vanillabp.adapters.c7b.data-source.url=jdbc:h2:mem:c7b-engine;DB_CLOSE_DELAY=-1", "vanillabp.workflow-modules.c7-it.adapters.c7b.resources-location=classpath*:c7-it/processes"
+    "spring.datasource.url=jdbc:h2:mem:c7-two-engines-it;DB_CLOSE_DELAY=-1", "vanillabp.prioritized-adapters=c7,c7b", "vanillabp.adapters.c7b.type=camunda7", "vanillabp.adapters.c7b.data-source-name=c7bDataSource", "vanillabp.workflow-modules.c7-it.adapters.c7b.resources-location=classpath*:c7-it/processes"
 })
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
 public class Camunda7TwoEnginesIT {
+
+  /**
+   * The application-provided datasource bean the {@code c7b} engine runs on.
+   * {@code defaultCandidate = false} keeps it out of by-type injection and lets
+   * Spring Boot's default-datasource auto-configuration stay active (the standard
+   * pattern for additional application datasources).
+   */
+  @org.springframework.boot.test.context.TestConfiguration
+  public static class NamedDataSourceConfiguration {
+
+    @org.springframework.context.annotation.Bean(defaultCandidate = false)
+    public javax.sql.DataSource c7bDataSource() {
+
+      return new org.springframework.jdbc.datasource.SimpleDriverDataSource(
+          new org.h2.Driver(), "jdbc:h2:mem:c7b-engine;DB_CLOSE_DELAY=-1");
+
+    }
+
+  }
 
   private static final String MODULE_ID = "c7-it";
 

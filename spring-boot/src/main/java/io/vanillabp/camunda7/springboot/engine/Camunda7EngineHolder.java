@@ -1,6 +1,5 @@
 package io.vanillabp.camunda7.springboot.engine;
 
-
 import javax.sql.DataSource;
 
 import org.camunda.bpm.engine.ProcessEngine;
@@ -8,15 +7,13 @@ import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.spring.SpringProcessEngineConfiguration;
 import org.camunda.bpm.engine.spring.components.jobexecutor.SpringJobExecutor;
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
-
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 
 import io.vanillabp.camunda7.deployment.Camunda7WorkflowProcessingLifecycle;
 import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
@@ -30,22 +27,23 @@ import lombok.extern.slf4j.Slf4j;
  *   <li><b>Datasource:</b> by default the engine shares the application's
  *       {@link DataSource} and {@link PlatformTransactionManager} - the whole point
  *       of the embedded adapter (engine state commits/rolls back with the business
- *       data). With <code>vanillabp.adapters.&lt;id&gt;.data-source.*</code>
- *       configured, the holder builds an OWN Hikari pool plus
- *       {@link DataSourceTransactionManager} for this engine (engine-side-by-side
- *       migration: two embedded engines must never share one schema) and owns that
- *       pool's lifecycle - created with the engine, closed after the engine
- *       closed.</li>
+ *       data). With <code>vanillabp.adapters.&lt;id&gt;.data-source-name</code>
+ *       configured, the engine runs on the application-provided {@link DataSource}
+ *       BEAN of that name instead (setting up datasources is deliberately NOT
+ *       VanillaBP's concern - the adapter never builds its own pool; required for
+ *       engine-side-by-side migrations, where two embedded engines must never share
+ *       one schema). Engine commands on such a named datasource run on an
+ *       adapter-internal {@link DataSourceTransactionManager} - they do not join
+ *       the caller's transaction, see the two-phase notes on
+ *       {@code Camunda7ProcessService}.</li>
  *   <li><b>Job executor:</b> an idiomatic {@link SpringJobExecutor} backed by a
  *       dedicated {@link ThreadPoolTaskExecutor} (thread-name prefix contains the
  *       adapter id) instead of the engine-default {@code DefaultJobExecutor} with
  *       its raw unmanaged threads. Activation is DEFERRED: the engine is built with
  *       {@code jobExecutorActivate=false}; the deployment pipeline's
  *       {@code startWorkflowProcessing} starts the executor once the first workflow
- *       module starts. Since the executor is engine-global while start/stop is
- *       notified per module, the started modules are reference-counted: the
- *       executor stops when the LAST started module stops (stopping on the first
- *       module's stop would starve the remaining modules) - and unconditionally on
+ *       module starts (reference-counted per module by the shared
+ *       {@link Camunda7JobExecutorLifecycle}) - and it stops unconditionally on
  *       {@link #close()}, before the engine closes.</li>
  * </ul>
  */
@@ -62,8 +60,9 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
   /**
    * Required by {@code SpringProcessEngineConfiguration} (Spring-bean resolution in
-   * scripting/expressions) - injected via {@link ApplicationContextAware}; the
-   * engine is built in {@link #afterPropertiesSet()} once the context is available.
+   * scripting/expressions) and for resolving a named datasource bean - injected via
+   * {@link ApplicationContextAware}; the engine is built in
+   * {@link #afterPropertiesSet()} once the context is available.
    */
   private ApplicationContext applicationContext;
 
@@ -79,12 +78,6 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
   private ThreadPoolTaskExecutor taskExecutor;
 
-  /**
-   * The adapter-owned datasource pool - <code>null</code> if the engine shares the
-   * application's datasource.
-   */
-  private HikariDataSource ownDataSource;
-
   private volatile boolean closed = false;
 
   /**
@@ -95,9 +88,9 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    * @param properties The adapter id's engine settings
    *        (<code>vanillabp.adapters.&lt;id&gt;.*</code>)
    * @param applicationDataSource The application's datasource (unused - may be
-   *        <code>null</code> - if <code>data-source.url</code> is configured)
+   *        <code>null</code> - if <code>data-source-name</code> is configured)
    * @param applicationTransactionManager The application's transaction manager
-   *        (unused - may be <code>null</code> - if <code>data-source.url</code> is
+   *        (unused - may be <code>null</code> - if <code>data-source-name</code> is
    *        configured)
    */
   public Camunda7EngineHolder(
@@ -126,15 +119,17 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
     final DataSource dataSource;
     final PlatformTransactionManager transactionManager;
-    if (properties.getDataSource().isConfigured()) {
-      this.ownDataSource = buildOwnDataSource(adapterId, properties.getDataSource());
-      dataSource = this.ownDataSource;
-      transactionManager = new DataSourceTransactionManager(this.ownDataSource);
+    if (properties.usesSeparateDataSource()) {
+      dataSource = resolveNamedDataSource();
+      // engine commands on the named datasource run on an adapter-internal
+      // transaction manager - they cannot join the caller's transaction (which is
+      // why such adapter ids start workflows two-phase)
+      transactionManager = new DataSourceTransactionManager(dataSource);
       log.info(
-          "Camunda7[{}]: using the adapter's own datasource '{}' - the engine does not join the "
-              + "application's transactions; starting workflows uses the two-phase pattern",
+          "Camunda7[{}]: using the application-provided datasource bean '{}' - the engine does not "
+              + "join the application's transactions; starting workflows uses the two-phase pattern",
           adapterId,
-          properties.getDataSource().getUrl());
+          properties.getDataSourceName());
     } else {
       dataSource = applicationDataSource;
       transactionManager = applicationTransactionManager;
@@ -170,23 +165,32 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
   }
 
-  private static HikariDataSource buildOwnDataSource(
-      final String adapterId,
-      final Camunda7EngineProperties.EngineDataSource dataSourceProperties) {
+  /**
+   * Resolves the application-provided {@link DataSource} bean referenced by
+   * <code>data-source-name</code> - with a GUIDING failure listing the available
+   * datasource beans (setting up datasources is the application's concern, so a
+   * missing bean is a configuration defect the developer has to learn about with
+   * the remedy named).
+   */
+  private DataSource resolveNamedDataSource() {
 
-    final var config = new HikariConfig();
-    config.setPoolName("vanillabp-camunda7-%s".formatted(adapterId));
-    config.setJdbcUrl(dataSourceProperties.getUrl());
-    if (dataSourceProperties.getUsername() != null) {
-      config.setUsername(dataSourceProperties.getUsername());
+    final var dataSourceName = properties.getDataSourceName();
+    try {
+      return applicationContext.getBean(dataSourceName, DataSource.class);
+    } catch (final BeansException e) {
+      throw new IllegalStateException(
+          """
+              Camunda 7 adapter '%s' references the datasource bean '%s' \
+              ('vanillabp.adapters.%s.data-source-name') but no such DataSource bean exists! Define a \
+              DataSource bean of that name in your application (setting up datasources is the \
+              application's concern - VanillaBP never builds its own pool). Available DataSource \
+              beans: %s."""
+              .formatted(
+                  adapterId,
+                  dataSourceName,
+                  adapterId,
+                  String.join(", ", applicationContext.getBeanNamesForType(DataSource.class))), e);
     }
-    if (dataSourceProperties.getPassword() != null) {
-      config.setPassword(dataSourceProperties.getPassword());
-    }
-    if (dataSourceProperties.getDriverClassName() != null) {
-      config.setDriverClassName(dataSourceProperties.getDriverClassName());
-    }
-    return new HikariDataSource(config);
 
   }
 
@@ -215,12 +219,12 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   }
 
   /**
-   * @return Whether this adapter id's engine runs on its own datasource (see class
+   * @return Whether this adapter id's engine runs on a named datasource (see class
    *         comment)
    */
   public boolean usesSeparateDataSource() {
 
-    return ownDataSource != null;
+    return properties.usesSeparateDataSource();
 
   }
 
@@ -231,7 +235,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    */
   public boolean isJobExecutorActive() {
 
-    return (jobExecutor != null) && jobExecutor.isActive();
+    return (jobExecutorLifecycle != null) && jobExecutorLifecycle.isActive();
 
   }
 
@@ -252,8 +256,9 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   }
 
   /**
-   * Shutdown ordering: job executor stop &rarr; engine close &rarr; own datasource
-   * close &rarr; thread pool shutdown. Safe to call more than once.
+   * Shutdown ordering: job executor stop &rarr; engine close &rarr; thread pool
+   * shutdown (the datasource itself is application-provided and NOT closed by the
+   * adapter). Safe to call more than once.
    */
   @Override
   public synchronized void close() {
@@ -268,9 +273,6 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     }
     if (processEngine != null) {
       processEngine.close();
-    }
-    if (ownDataSource != null) {
-      ownDataSource.close();
     }
     if (taskExecutor != null) {
       taskExecutor.shutdown();

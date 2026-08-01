@@ -1,9 +1,12 @@
 package io.vanillabp.camunda7.springboot.it;
 
+import org.h2.Driver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.context.support.StaticApplicationContext;
+import org.springframework.jdbc.datasource.SimpleDriverDataSource;
 
 import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
 import io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder;
@@ -15,18 +18,19 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * is engine-global while start/stop is notified per workflow module, so the started
  * modules are reference-counted - the executor stops only when the LAST started
  * module stops, and unconditionally on {@code close()} (which is idempotent). The
- * holder is built standalone on the adapter's OWN datasource (H2), which also covers
- * the own-pool construction path.
+ * holder is built on a NAMED, application-provided datasource bean
+ * (<code>data-source-name</code>), which also covers the named-bean resolution path
+ * (VanillaBP never builds its own pool - datasources are the application's concern).
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
 public class Camunda7EngineHolderTest {
 
-  private static Camunda7EngineProperties ownDataSourceProperties(
-      final String database) {
+  private static Camunda7EngineProperties namedDataSourceProperties(
+      final String dataSourceName) {
 
     final var properties = new Camunda7EngineProperties();
-    properties.getDataSource().setUrl("jdbc:h2:mem:%s;DB_CLOSE_DELAY=-1".formatted(database));
+    properties.setDataSourceName(dataSourceName);
     return properties;
 
   }
@@ -36,10 +40,16 @@ public class Camunda7EngineHolderTest {
   public void jobExecutorLifecycleIsReferenceCounted() {
 
     final var holder = new Camunda7EngineHolder(
-        "holder-test", ownDataSourceProperties("holder-test"), null, null);
+        "holder-test", namedDataSourceProperties("holderTestDataSource"), null, null);
     // Spring lifecycle done manually: SpringProcessEngineConfiguration needs an
-    // ApplicationContext (Spring-bean resolution in scripting/expressions)
-    try (var applicationContext = new org.springframework.context.support.StaticApplicationContext()) {
+    // ApplicationContext (Spring-bean resolution in scripting/expressions), and the
+    // named datasource bean is resolved from it
+    try (var applicationContext = new StaticApplicationContext()) {
+      applicationContext
+          .getBeanFactory()
+          .registerSingleton(
+              "holderTestDataSource",
+              new SimpleDriverDataSource(new Driver(), "jdbc:h2:mem:holder-test;DB_CLOSE_DELAY=-1"));
       holder.setApplicationContext(applicationContext);
       holder.afterPropertiesSet();
     }
@@ -78,6 +88,33 @@ public class Camunda7EngineHolderTest {
     // safe to call more than once
     Assertions.assertFalse(holder.isJobExecutorActive());
     holder.close();
+
+  }
+
+  @Test
+  @DisplayName("An unknown data-source-name fails with a guiding message listing the available beans")
+  public void unknownDataSourceNameFailsWithGuidingMessage() {
+
+    final var holder = new Camunda7EngineHolder(
+        "holder-test", namedDataSourceProperties("not-there"), null, null);
+    try (var applicationContext = new StaticApplicationContext()) {
+      applicationContext
+          .getBeanFactory()
+          .registerSingleton(
+              "someOtherDataSource",
+              new SimpleDriverDataSource(new Driver(), "jdbc:h2:mem:holder-guide-test;DB_CLOSE_DELAY=-1"));
+      holder.setApplicationContext(applicationContext);
+
+      final var exception = Assertions.assertThrows(
+          IllegalStateException.class,
+          holder::afterPropertiesSet);
+      Assertions.assertTrue(
+          exception.getMessage().contains("references the datasource bean 'not-there'"),
+          "expected the guiding message but got: "
+              + exception.getMessage());
+      Assertions.assertTrue(exception.getMessage().contains("vanillabp.adapters.holder-test.data-source-name"));
+      Assertions.assertTrue(exception.getMessage().contains("someOtherDataSource"));
+    }
 
   }
 

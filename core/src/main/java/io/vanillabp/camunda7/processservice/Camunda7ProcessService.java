@@ -20,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;
  * no-op and no outbox is involved.
  * <p>
  * <b>Exception - adapter ids with their OWN datasource</b>
- * (<code>vanillabp.adapters.&lt;id&gt;.data-source.*</code>, the engine-side-by-side
+ * (<code>vanillabp.adapters.&lt;id&gt;.data-source-name</code>, the engine-side-by-side
  * migration scenario): such an engine cannot join the caller's transaction (its engine
  * commands commit on their own transaction manager), so a phase-one start would leave a
  * ghost process instance if the caller's transaction rolls back afterwards. These

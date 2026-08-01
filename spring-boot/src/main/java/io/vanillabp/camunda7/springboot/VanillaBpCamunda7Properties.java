@@ -13,9 +13,8 @@ import lombok.Setter;
  * tree: the adapter's engine settings live at the canonical per-adapter location
  * <code>vanillabp.adapters.&lt;id&gt;.*</code> (keys documented in
  * {@link Camunda7EngineProperties}: <code>database-schema-update</code>,
- * <code>history-time-to-live</code>, <code>data-source.url</code>,
- * <code>data-source.username</code>, <code>data-source.password</code>,
- * <code>data-source.driver-class-name</code>). A second
+ * <code>history-time-to-live</code>, <code>data-source-name</code> - on Spring Boot
+ * the name of an application-provided {@code DataSource} BEAN). A second
  * {@code @ConfigurationProperties} class over the same prefix coexists with the
  * platform's binding of the core model; keys unknown to either view are ignored by
  * the JavaBean binding.

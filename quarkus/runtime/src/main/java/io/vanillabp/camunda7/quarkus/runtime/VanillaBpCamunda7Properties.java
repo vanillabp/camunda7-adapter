@@ -16,11 +16,11 @@ import io.smallrye.config.ConfigMapping;
  * since the platform dropped the blanket {@code withMappingIgnore}, this overlay
  * doubles as the unknown-key validation coverage for the adapter's keys.
  * <p>
- * NOTE the platform difference (documented in the README): on Quarkus an adapter id's
- * own datasource is referenced BY NAME (<code>data-source-name</code> pointing at a
- * declared <code>quarkus.datasource.&lt;name&gt;.*</code> datasource - named Agroal
- * datasources are build-time-declared), whereas the Spring Boot module builds its own
- * pool from <code>data-source.url</code> etc.
+ * The keys are IDENTICAL to the Spring Boot module: an adapter id's own datasource is
+ * referenced BY NAME on both platforms (<code>data-source-name</code>; always
+ * application-/runtime-provided - VanillaBP never builds a pool). On Quarkus the name
+ * points at a declared <code>quarkus.datasource.&lt;name&gt;.*</code> datasource, on
+ * Spring Boot at a {@code DataSource} bean.
  * <p>
  * The adapter-id set is NEVER derived from this overlay map - it always comes from the
  * platform's core properties ({@code adapterTypes()} filtered by type

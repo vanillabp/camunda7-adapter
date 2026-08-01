@@ -62,13 +62,25 @@ vanillabp:
       # of processes without one); default: P180D; a process may override it via
       # camunda:historyTimeToLive
       history-time-to-live: P180D
-      # OPTIONAL: an own datasource for this id's engine (required for every
-      # additional camunda7 id - see the transaction caveat below!)
-      data-source:
-        url: jdbc:postgresql://legacy-host/legacy-db
-        username: camunda
-        password: ...
-        driver-class-name: org.postgresql.Driver
+      # OPTIONAL: the name of an APPLICATION-PROVIDED datasource this id's engine
+      # runs on (required for every additional camunda7 id - see the transaction
+      # caveat below!). Setting up datasources is deliberately the application's
+      # concern - VanillaBP never builds its own pool. Spring Boot: the name of a
+      # DataSource bean; Quarkus: the name of a declared named Agroal datasource
+      # (quarkus.datasource.<name>.*).
+      data-source-name: legacy
+```
+
+On Spring Boot, declare the additional datasource bean with
+`defaultCandidate = false` so it stays out of by-type injection and Spring Boot's
+default-datasource auto-configuration stays active (the standard pattern for
+additional application datasources):
+
+```java
+@Bean(defaultCandidate = false)
+public DataSource legacy() {
+    return DataSourceBuilder.create()...build();
+}
 ```
 
 BPMN files are read from each workflow module's configured `resources-location` and
@@ -95,10 +107,11 @@ deployed to the embedded engine of every prioritized adapter.
   once the last workflow module stopped - before the engine closes. (An immediate
   wake-up after commits creating jobs - Version 1's `WakeupJobExecutor` - is a planned
   follow-up; until then new jobs are picked up by the executor's regular acquisition.)
-- **Transaction caveat for ids with an OWN datasource.** An engine on its own
-  datasource CANNOT join the caller's transaction (its engine commands commit on the
-  engine's own transaction manager). Starting workflows through such an adapter id
-  therefore uses VanillaBP's regular **two-phase start**
+- **Transaction caveat for ids with an OWN (named) datasource.** An engine on a
+  named datasource CANNOT join the caller's transaction (its engine commands commit
+  on an adapter-internal transaction manager bound to that datasource). Starting
+  workflows through such an adapter id therefore uses VanillaBP's regular
+  **two-phase start**
   (`needsTwoPhaseCommitForStartingWorkflows()` is `true`): phase one does nothing
   against the engine, phase two - dispatched via the phase-two outbox after the
   caller's commit - starts the instance idempotently (skipped if a running instance
@@ -122,9 +135,11 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used). The
 - uses the application's `DataSource` (engine tables `ACT_*` live next to the
   aggregates) and the application's `PlatformTransactionManager` (engine commands join
   the caller's transaction — this in-transaction guarantee is the whole point of the
-  C7 adapter) — UNLESS `vanillabp.adapters.<id>.data-source.*` configures an own
-  datasource: then the adapter builds and owns a dedicated pool plus transaction
-  manager for that engine (see the transaction caveat above),
+  C7 adapter) — UNLESS `vanillabp.adapters.<id>.data-source-name` references an
+  application-provided `DataSource` bean of that name: then the engine runs on that
+  bean's datasource with an adapter-internal transaction manager (see the transaction
+  caveat above; the adapter never builds a pool — a missing bean fails the boot
+  listing the available `DataSource` beans),
 - creates/upgrades its schema on boot (`database-schema-update`, default `true`),
 - runs asynchronous continuations on a `SpringJobExecutor` backed by a dedicated
   managed thread pool, activated only while workflow processing is started, and
@@ -174,10 +189,11 @@ operations run in their own JTA transaction (Agroal has no deferred enlistment).
 engine stack — MyBatis, JUEL, scripting, reflective delegate instantiation — is
 reflection-heavy; Camunda never supported native images and neither do the forks).
 
-Configuration keys match the Spring Boot module (`database-schema-update`,
-`history-time-to-live`), with ONE platform difference: an adapter id's own datasource
-is referenced **by name** instead of by URL, because named Quarkus datasources are
-build-time-declared:
+Configuration keys are IDENTICAL to the Spring Boot module (`database-schema-update`,
+`history-time-to-live`, `data-source-name`) — `data-source-name` references a named
+Quarkus datasource declared under `quarkus.datasource.<name>.*` (on Spring Boot it
+references a `DataSource` bean of that name; in both cases the datasource is
+application-/runtime-provided, VanillaBP never builds a pool):
 
 ```yaml
 quarkus:
