@@ -1,7 +1,5 @@
 package io.vanillabp.camunda7.springboot.engine;
 
-import java.util.HashSet;
-import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -22,6 +20,7 @@ import com.zaxxer.hikari.HikariDataSource;
 
 import io.vanillabp.camunda7.deployment.Camunda7WorkflowProcessingLifecycle;
 import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
+import io.vanillabp.camunda7.engine.Camunda7JobExecutorLifecycle;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -72,6 +71,12 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
   private SpringJobExecutor jobExecutor;
 
+  /**
+   * The reference-counted executor lifecycle shared with the Quarkus module (the
+   * executor is engine-global while start/stop is notified per workflow module).
+   */
+  private Camunda7JobExecutorLifecycle jobExecutorLifecycle;
+
   private ThreadPoolTaskExecutor taskExecutor;
 
   /**
@@ -79,12 +84,6 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    * application's datasource.
    */
   private HikariDataSource ownDataSource;
-
-  /**
-   * The workflow modules whose processing was started and not yet stopped - the
-   * reference count deciding when the engine-global job executor stops.
-   */
-  private final Set<String> startedWorkflowModules = new HashSet<>();
 
   private volatile boolean closed = false;
 
@@ -167,6 +166,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     configuration.setHistoryTimeToLive(properties.getHistoryTimeToLive());
 
     this.processEngine = configuration.buildProcessEngine();
+    this.jobExecutorLifecycle = new Camunda7JobExecutorLifecycle(adapterId, this.jobExecutor);
 
   }
 
@@ -236,26 +236,18 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   }
 
   @Override
-  public synchronized void startWorkflowProcessing(
+  public void startWorkflowProcessing(
       final String workflowModuleId) {
 
-    startedWorkflowModules.add(workflowModuleId);
-    if (!jobExecutor.isActive()) {
-      log.info("Camunda7[{}]: starting the job executor", adapterId);
-      jobExecutor.start();
-    }
+    jobExecutorLifecycle.startWorkflowProcessing(workflowModuleId);
 
   }
 
   @Override
-  public synchronized void stopWorkflowProcessing(
+  public void stopWorkflowProcessing(
       final String workflowModuleId) {
 
-    startedWorkflowModules.remove(workflowModuleId);
-    if (startedWorkflowModules.isEmpty() && jobExecutor.isActive()) {
-      log.info("Camunda7[{}]: stopping the job executor (last workflow module stopped)", adapterId);
-      jobExecutor.shutdown();
-    }
+    jobExecutorLifecycle.stopWorkflowProcessing(workflowModuleId);
 
   }
 
@@ -271,9 +263,8 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     }
     closed = true;
 
-    startedWorkflowModules.clear();
-    if ((jobExecutor != null) && jobExecutor.isActive()) {
-      jobExecutor.shutdown();
+    if (jobExecutorLifecycle != null) {
+      jobExecutorLifecycle.shutdown();
     }
     if (processEngine != null) {
       processEngine.close();

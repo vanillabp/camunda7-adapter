@@ -25,6 +25,16 @@
     </dependency>
     <dependency>
       <groupId>org.camunda.community.vanillabp</groupId>
+      <artifactId>camunda7-adapter-quarkus</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.camunda.community.vanillabp</groupId>
+      <artifactId>camunda7-adapter-quarkus-deployment</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.camunda.community.vanillabp</groupId>
       <artifactId>camunda7-adapter-integration-tests</artifactId>
       <version>${project.version}</version>
     </dependency>

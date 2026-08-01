@@ -28,6 +28,8 @@
   <modules>
     <module>core</module>
     <module>spring-boot</module>
+    <module>quarkus/runtime</module>
+    <module>quarkus/deployment</module>
     <module>integration-tests</module>
     <module>test-coverage-report</module>
   </modules>
@@ -42,6 +44,7 @@
     <adapter-platform.version>2.0.0-SNAPSHOT</adapter-platform.version>
     <camunda.version>7.24.0</camunda.version>
     <spring-boot.version>4.1.0</spring-boot.version>
+    <quarkus.version>3.37.1</quarkus.version>
     <lombok.version>1.18.46</lombok.version>
   </properties>
 
@@ -51,6 +54,13 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
         <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-bom</artifactId>
+        <version>${quarkus.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -67,6 +77,16 @@
       <dependency>
         <groupId>io.vanillabp</groupId>
         <artifactId>vanillabp-spring-boot-integration</artifactId>
+        <version>${adapter-platform.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.vanillabp</groupId>
+        <artifactId>vanillabp-quarkus-integration</artifactId>
+        <version>${adapter-platform.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.vanillabp</groupId>
+        <artifactId>vanillabp-quarkus-integration-deployment</artifactId>
         <version>${adapter-platform.version}</version>
       </dependency>
       <dependency>

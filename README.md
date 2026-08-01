@@ -147,14 +147,58 @@ the same transaction as the business code. Consequently starting a workflow happ
 completely within the local transaction (no two-phase commit / transaction outbox), and
 engine queries are immediately consistent.
 
-## No Quarkus module (yet)
+## Quarkus (JVM mode only!)
 
-This repository currently ships `core` and `spring-boot` only. A Quarkus module IS
-planned and proven feasible (roadmap story 26f): it wires the plain engine via the
-engine-shipped `JakartaTransactionProcessEngineConfiguration` with Agroal and
-Narayana — Camunda's own Quarkus extension is not used (version-locked to older
-Quarkus releases). The Quarkus module will be **JVM-mode only** (the engine stack is
-reflection-heavy; no native-image support upstream).
+Both VanillaBP and the adapter are Quarkus extensions, so both must be added
+explicitly:
+
+```xml
+<dependency>
+  <groupId>io.vanillabp</groupId>
+  <artifactId>vanillabp-quarkus-integration</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.camunda.community.vanillabp</groupId>
+  <artifactId>camunda7-adapter-quarkus</artifactId>
+</dependency>
+```
+
+The extension wires the **plain Camunda 7 engine** via the engine-shipped
+`JakartaTransactionProcessEngineConfiguration` on the application's Agroal datasource
+with the Narayana transaction manager — Camunda's own Quarkus extension is not used
+(version-locked to older Quarkus releases). Engine commands join the caller's JTA
+transaction, so the in-transaction guarantee holds like on Spring Boot; schema
+operations run in their own JTA transaction (Agroal has no deferred enlistment).
+
+**The Quarkus extension is JVM-mode only — native images are not supported** (the
+engine stack — MyBatis, JUEL, scripting, reflective delegate instantiation — is
+reflection-heavy; Camunda never supported native images and neither do the forks).
+
+Configuration keys match the Spring Boot module (`database-schema-update`,
+`history-time-to-live`), with ONE platform difference: an adapter id's own datasource
+is referenced **by name** instead of by URL, because named Quarkus datasources are
+build-time-declared:
+
+```yaml
+quarkus:
+  datasource:            # the application's default datasource (aggregates + engine)
+    db-kind: postgresql
+    ...
+    legacy:              # a second, named datasource for the OLD engine
+      db-kind: postgresql
+      ...
+vanillabp:
+  adapters:
+    c7:
+      type: camunda7     # runs on the default datasource (in-transaction guarantee)
+    c7-legacy:
+      type: camunda7
+      data-source-name: legacy   # runs on its own schema (two-phase start, see the
+                                 # transaction caveat above)
+```
+
+An unknown `data-source-name` and two adapter ids sharing one datasource fail the
+boot with guiding messages.
 
 ## Known issues
 
