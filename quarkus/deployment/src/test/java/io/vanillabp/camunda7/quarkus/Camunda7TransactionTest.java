@@ -65,6 +65,7 @@ public class Camunda7TransactionTest {
         .engineFor("c7")
         .getRuntimeService()
         .createProcessInstanceQuery()
+        .processDefinitionKey(BPMN_PROCESS_ID)
         .processInstanceBusinessKey(businessKey)
         .tenantIdIn(MODULE_ID)
         .count();

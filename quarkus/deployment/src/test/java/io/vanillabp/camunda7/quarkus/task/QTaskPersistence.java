@@ -1,4 +1,4 @@
-package io.vanillabp.camunda7.quarkus.sample;
+package io.vanillabp.camunda7.quarkus.task;
 
 import io.vanillabp.integration.spi.AggregatePersistenceAware;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -6,26 +6,25 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 
 /**
- * JPA persistence of the {@link TestAggregate} - saves within the caller's JTA
- * transaction, so the aggregate commits/rolls back together with the embedded
- * engine's state (the property asserted by the transaction tests).
+ * JPA persistence of {@link QTaskAggregate} - loads and saves within the caller's
+ * JTA transaction (the engine's job transaction when processing tasks).
  */
 @ApplicationScoped
-public class TestAggregatePersistence implements AggregatePersistenceAware<TestAggregate> {
+public class QTaskPersistence implements AggregatePersistenceAware<QTaskAggregate> {
 
   @Inject
   EntityManager entityManager;
 
   @Override
-  public Class<TestAggregate> getAggregateClass() {
+  public Class<QTaskAggregate> getAggregateClass() {
 
-    return TestAggregate.class;
+    return QTaskAggregate.class;
 
   }
 
   @Override
-  public TestAggregate save(
-      final TestAggregate aggregate) {
+  public QTaskAggregate save(
+      final QTaskAggregate aggregate) {
 
     if (aggregate.getId() == null) {
       entityManager.persist(aggregate);
@@ -38,17 +37,17 @@ public class TestAggregatePersistence implements AggregatePersistenceAware<TestA
 
   @Override
   public Object getAggregateId(
-      final TestAggregate aggregate) {
+      final QTaskAggregate aggregate) {
 
     return aggregate.getId();
 
   }
 
   @Override
-  public TestAggregate loadById(
+  public QTaskAggregate loadById(
       final Object aggregateId) {
 
-    return entityManager.find(TestAggregate.class, aggregateId);
+    return entityManager.find(QTaskAggregate.class, aggregateId);
 
   }
 

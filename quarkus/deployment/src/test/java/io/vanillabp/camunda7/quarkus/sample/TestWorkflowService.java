@@ -29,4 +29,12 @@ public class TestWorkflowService {
 
   }
 
+  @io.vanillabp.spi.service.WorkflowTask
+  public void testTask(
+      final TestAggregate aggregate) {
+
+    aggregate.setContent("task-done");
+
+  }
+
 }

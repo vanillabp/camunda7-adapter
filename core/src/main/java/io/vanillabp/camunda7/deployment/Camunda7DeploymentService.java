@@ -2,17 +2,30 @@ package io.vanillabp.camunda7.deployment;
 
 import java.io.InputStream;
 import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.model.bpmn.Bpmn;
 import org.camunda.bpm.model.bpmn.BpmnModelInstance;
+import org.camunda.bpm.model.bpmn.instance.BusinessRuleTask;
+import org.camunda.bpm.model.bpmn.instance.FlowElement;
 import org.camunda.bpm.model.bpmn.instance.Process;
+import org.camunda.bpm.model.bpmn.instance.SendTask;
+import org.camunda.bpm.model.bpmn.instance.ServiceTask;
+import org.camunda.bpm.model.bpmn.instance.Task;
+import org.camunda.bpm.model.xml.instance.ModelElementInstance;
 
 import io.vanillabp.camunda7.Camunda7ProcessingContext;
+import io.vanillabp.camunda7.wiring.Camunda7TaskConnectable;
+import io.vanillabp.camunda7.wiring.Camunda7TaskRegistry;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
 import io.vanillabp.integration.adapter.spi.BpmnParseException;
+import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
+import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,9 +40,10 @@ import lombok.extern.slf4j.Slf4j;
  * modules; duplicate filtering is enabled so unchanged models are not redeployed on every
  * boot.
  * <p>
- * Task wiring ({@link #wireBpmn}) is intentionally a no-op (log only) in this story - the
- * embedded engine executes only what the BPMN itself defines; wiring {@code @WorkflowTask}
- * methods is a later story.
+ * Task wiring ({@link #wireBpmn}) extracts the service-like tasks from the model, validates
+ * them against the registered {@code @WorkflowTask} methods (both directions, guiding
+ * messages) and registers the connectables with the engine's EL resolver - the engine then
+ * dispatches task executions through the core's {@code WorkflowTaskInvoker}.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -57,6 +71,28 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * when the last module stops, see {@link Camunda7WorkflowProcessingLifecycle}).
    */
   private final Camunda7WorkflowProcessingLifecycle workflowProcessingLifecycle;
+
+  /**
+   * The core's task-processing entry point: wiring validation during
+   * {@link #wireBpmn} and task dispatch at runtime (via the EL resolver).
+   */
+  private final WorkflowTaskInvoker workflowTaskInvoker;
+
+  /**
+   * The task connectables of this adapter id's engine, registered during
+   * {@link #wireBpmn} and looked up by the engine's EL resolver.
+   */
+  private final Camunda7TaskRegistry taskRegistry;
+
+  /**
+   * The namespace of Camunda's BPMN extension attributes. Kept as ONE constant and
+   * read namespace-generically ({@code getAttributeValueNs}) - fork portability
+   * (Operaton/CIB seven renamed the typed extension getters, the attribute
+   * namespace is accepted by both).
+   */
+  public static final String CAMUNDA_NS = "http://camunda.org/schema/1.0/bpmn";
+
+  private static final Pattern EL_PATTERN = Pattern.compile("^[#$]\\{([^}]+)}$");
 
   @Override
   public String getAdapterId() {
@@ -137,13 +173,110 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final BpmnModelInstance model,
       final Camunda7ProcessingContext context) {
 
-    // task wiring is a later story - nothing to wire yet
-    log.debug(
-        "Camunda7[{}]: not wiring BPMN process '{}' of file '{}' (workflow module '{}') - task wiring is a later story",
+    // extract the service-like tasks of THIS process from the model: VanillaBP's
+    // Camunda 7 convention wires tasks by 'camunda:expression' (handler runs while
+    // the expression evaluates) or 'camunda:delegateExpression' (@TaskId tasks can
+    // stay open) - the unwrapped expression text is the task definition
+    final var specs = new LinkedList<BpmnTaskSpec>();
+    final var connectables = new LinkedList<Camunda7TaskConnectable>();
+    serviceLikeTasksOf(model, bpmnProcessId)
+        .forEach(task -> {
+          final var delegateExpression = task.getAttributeValueNs(CAMUNDA_NS, "delegateExpression");
+          final var expression = task.getAttributeValueNs(CAMUNDA_NS, "expression");
+          final var topic = task.getAttributeValueNs(CAMUNDA_NS, "topic");
+          if ((topic != null) && !topic.isBlank()) {
+            throw new IllegalStateException(
+                """
+                    Task '%s' of BPMN process '%s' (file '%s', workflow module '%s') is implemented \
+                    as an external task (camunda:topic) which is not supported by VanillaBP yet! \
+                    Wire the task by 'camunda:expression' or 'camunda:delegateExpression' naming the \
+                    @WorkflowTask method's task definition, e.g. ${%s}."""
+                    .formatted(task.getId(), bpmnProcessId, filename, workflowModuleId, topic));
+          }
+          final String rawExpression;
+          final Camunda7TaskConnectable.Type type;
+          if ((delegateExpression != null) && !delegateExpression.isBlank()) {
+            rawExpression = delegateExpression;
+            type = Camunda7TaskConnectable.Type.DELEGATE_EXPRESSION;
+          } else if ((expression != null) && !expression.isBlank()) {
+            rawExpression = expression;
+            type = Camunda7TaskConnectable.Type.EXPRESSION;
+          } else {
+            // no implementation given: reported by the wiring validation with a
+            // guiding message (task definition null - matched by activity ID only)
+            specs.add(new BpmnTaskSpec(task.getId(), null));
+            return;
+          }
+          final var taskDefinition = unwrapExpression(
+              rawExpression, task.getId(), bpmnProcessId, filename, workflowModuleId);
+          specs.add(new BpmnTaskSpec(task.getId(), taskDefinition));
+          connectables.add(new Camunda7TaskConnectable(
+              workflowModuleId, bpmnProcessId, task.getId(), taskDefinition, type));
+        });
+
+    // both directions with guiding messages; throwing here honors the
+    // deployment-failure policy for non-first-priority adapter ids
+    workflowTaskInvoker.validateTaskWiring(workflowModuleId, bpmnProcessId, specs);
+
+    connectables.forEach(taskRegistry::register);
+
+    log.info(
+        "Camunda7[{}]: wired {} task(s) of BPMN process '{}' (file '{}', workflow module '{}')",
         adapterId,
+        connectables.size(),
         bpmnProcessId,
         filename,
         workflowModuleId);
+
+  }
+
+  /**
+   * The service-like tasks (service, send, business-rule tasks) of the given
+   * executable process, including tasks inside embedded subprocesses.
+   */
+  private static Stream<Task> serviceLikeTasksOf(
+      final BpmnModelInstance model,
+      final String bpmnProcessId) {
+
+    return Stream
+        .of(ServiceTask.class, SendTask.class, BusinessRuleTask.class)
+        .flatMap(type -> model.getModelElementsByType(type).stream())
+        .map(Task.class::cast)
+        .filter(task -> bpmnProcessId.equals(owningProcessId(task)));
+
+  }
+
+  private static String owningProcessId(
+      final FlowElement element) {
+
+    ModelElementInstance current = element;
+    while (current != null) {
+      if (current instanceof Process process) {
+        return process.getId();
+      }
+      current = current.getParentElement();
+    }
+    return null;
+
+  }
+
+  private static String unwrapExpression(
+      final String rawExpression,
+      final String elementId,
+      final String bpmnProcessId,
+      final String filename,
+      final String workflowModuleId) {
+
+    final var matcher = EL_PATTERN.matcher(rawExpression.trim());
+    if (!matcher.matches()) {
+      throw new IllegalStateException(
+          """
+              The expression '%s' of task '%s' of BPMN process '%s' (file '%s', workflow module \
+              '%s') is not supported by VanillaBP! Use a simple expression naming the @WorkflowTask \
+              method's task definition, e.g. ${myTaskDefinition}."""
+              .formatted(rawExpression, elementId, bpmnProcessId, filename, workflowModuleId));
+    }
+    return matcher.group(1).trim();
 
   }
 

@@ -7,6 +7,7 @@ import io.vanillabp.camunda7.Camunda7Adapter;
 import io.vanillabp.camunda7.deployment.Camunda7DeploymentService;
 import io.vanillabp.camunda7.processservice.Camunda7ProcessService;
 import io.vanillabp.integration.adapter.migration.config.MigrationAdapterProperties;
+import io.vanillabp.integration.adapter.migration.workflowtask.WorkflowTaskRegistry;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
 import io.vanillabp.integration.adapter.spi.MigratableProcessService;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -54,14 +55,15 @@ public class Camunda7AdapterProducer {
   })
   public List<AdapterDeploymentService<Object, Object>> camunda7AdapterDeploymentServices(
       final MigrationAdapterProperties properties,
-      final Camunda7QuarkusEngineRegistry engineRegistry) {
+      final Camunda7QuarkusEngineRegistry engineRegistry,
+      final WorkflowTaskRegistry workflowTaskRegistry) {
 
     return (List) camunda7AdapterIds(properties)
         .stream()
         .map(adapterId -> {
           final var engine = engineRegistry.engineFor(adapterId);
           return new Camunda7DeploymentService(
-              adapterId, engine.getRepositoryService(), engine);
+              adapterId, engine.getRepositoryService(), engine, workflowTaskRegistry, engine.getTaskRegistry());
         })
         .toList();
 

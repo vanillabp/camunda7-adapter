@@ -12,6 +12,7 @@ import io.smallrye.config.SmallRyeConfig;
 import io.vanillabp.camunda7.Camunda7Adapter;
 import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
 import io.vanillabp.integration.adapter.migration.config.MigrationAdapterProperties;
+import io.vanillabp.integration.adapter.migration.workflowtask.WorkflowTaskRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.Disposes;
@@ -47,6 +48,7 @@ public class Camunda7EngineProducer {
   public Camunda7QuarkusEngineRegistry camunda7EngineRegistry(
       final MigrationAdapterProperties properties,
       final TransactionManager transactionManager,
+      final WorkflowTaskRegistry workflowTaskRegistry,
       @Any final Instance<AgroalDataSource> dataSources) {
 
     final var overlay = ConfigProvider
@@ -75,7 +77,8 @@ public class Camunda7EngineProducer {
           final var dataSource = resolveDataSource(dataSources, adapterId, dataSourceName);
           try {
             engines.put(adapterId, new Camunda7QuarkusEngineHolder(
-                adapterId, toEngineProperties(keys), dataSource, dataSourceName != null, transactionManager));
+                adapterId, toEngineProperties(
+                    keys), dataSource, dataSourceName != null, transactionManager, workflowTaskRegistry));
           } catch (final RuntimeException e) {
             throw new IllegalStateException(
                 """

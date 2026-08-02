@@ -40,7 +40,7 @@ public class Camunda7EngineHolderTest {
   public void jobExecutorLifecycleIsReferenceCounted() {
 
     final var holder = new Camunda7EngineHolder(
-        "holder-test", namedDataSourceProperties("holderTestDataSource"), null, null);
+        "holder-test", namedDataSourceProperties("holderTestDataSource"), null, null, null);
     // Spring lifecycle done manually: SpringProcessEngineConfiguration needs an
     // ApplicationContext (Spring-bean resolution in scripting/expressions), and the
     // named datasource bean is resolved from it
@@ -96,7 +96,7 @@ public class Camunda7EngineHolderTest {
   public void unknownDataSourceNameFailsWithGuidingMessage() {
 
     final var holder = new Camunda7EngineHolder(
-        "holder-test", namedDataSourceProperties("not-there"), null, null);
+        "holder-test", namedDataSourceProperties("not-there"), null, null, null);
     try (var applicationContext = new StaticApplicationContext()) {
       applicationContext
           .getBeanFactory()

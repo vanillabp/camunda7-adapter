@@ -5,11 +5,9 @@
       <bpmn:outgoing>Flow_start_to_task</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:sequenceFlow id="Flow_start_to_task" sourceRef="StartEvent_1" targetRef="ServiceTask_1" />
-    <!-- async-before parks the instance in the job executor BEFORE the service task is
-         executed, so the (not yet wired) service task is never run synchronously at start.
-         The trivial expression ${true} lets the job executor complete the task without any
-         business-code wiring once the surrounding transaction has committed. -->
-    <bpmn:serviceTask id="ServiceTask_1" camunda:asyncBefore="true" camunda:expression="${true}">
+    <!-- since task wiring (story 21b) the expression names the @WorkflowTask method's
+         task definition; the adapter's parse listener forces async-before/after anyway -->
+    <bpmn:serviceTask id="ServiceTask_1" camunda:expression="${testTask}">
       <bpmn:incoming>Flow_start_to_task</bpmn:incoming>
       <bpmn:outgoing>Flow_task_to_end</bpmn:outgoing>
     </bpmn:serviceTask>

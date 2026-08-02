@@ -18,6 +18,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import io.vanillabp.camunda7.deployment.Camunda7WorkflowProcessingLifecycle;
 import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
 import io.vanillabp.camunda7.engine.Camunda7JobExecutorLifecycle;
+import io.vanillabp.camunda7.wiring.Camunda7TaskRegistry;
+import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -51,6 +54,15 @@ import lombok.extern.slf4j.Slf4j;
 public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle, ApplicationContextAware, InitializingBean, AutoCloseable {
 
   private final String adapterId;
+
+  /**
+   * The task connectables of this engine, registered by the deployment service
+   * during wireBpmn and looked up by the engine's EL resolver.
+   */
+  @Getter
+  private final Camunda7TaskRegistry taskRegistry = new Camunda7TaskRegistry();
+
+  private final WorkflowTaskInvoker workflowTaskInvoker;
 
   private final Camunda7EngineProperties properties;
 
@@ -97,9 +109,11 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       final String adapterId,
       final Camunda7EngineProperties properties,
       final DataSource applicationDataSource,
-      final PlatformTransactionManager applicationTransactionManager) {
+      final PlatformTransactionManager applicationTransactionManager,
+      final WorkflowTaskInvoker workflowTaskInvoker) {
 
     this.adapterId = adapterId;
+    this.workflowTaskInvoker = workflowTaskInvoker;
     this.properties = properties;
     this.applicationDataSource = applicationDataSource;
     this.applicationTransactionManager = applicationTransactionManager;
@@ -148,6 +162,13 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
     final var configuration = new SpringProcessEngineConfiguration();
     configuration.setApplicationContext(applicationContext);
+    // VanillaBP task wiring: top-level EL names resolve @WorkflowTask methods and
+    // workflow-aggregate attributes (Spring beans stay resolvable); the parse
+    // listener aligns transaction boundaries with remote BPMS (async before/after)
+    configuration.setExpressionManager(new Camunda7SpringExpressionManager(
+        applicationContext, taskRegistry, workflowTaskInvoker));
+    configuration.setCustomPreBPMNParseListeners(new java.util.ArrayList<>(
+        java.util.List.of(new io.vanillabp.camunda7.wiring.Camunda7AsyncBpmnParseListener())));
     configuration.setProcessEngineName("vanillabp-camunda7-%s".formatted(adapterId));
     configuration.setDataSource(dataSource);
     configuration.setTransactionManager(transactionManager);

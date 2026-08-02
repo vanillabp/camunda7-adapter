@@ -151,6 +151,40 @@ A `DataSource` and a `PlatformTransactionManager` must be present (a Camunda 7
 application always needs a database) unless every configured id brings its own
 datasource.
 
+## Task processing (execution model)
+
+`@WorkflowTask` methods are wired to BPMN tasks by expression: implement a service
+task as *Expression* `${myTaskDefinition}` (or *Delegate expression*) - the
+expression text names the method's task definition (defaulting to the method
+name). At deployment the adapter validates both directions (every task has a
+method, every method matches a task of one of its class' BPMN processes) with
+guiding messages, and forces `asyncBefore`/`asyncAfter` onto service-like tasks:
+every task runs in its own job transaction, aligning the embedded engine with
+remote BPMS.
+
+Handlers run INSIDE the engine's job transaction (Spring-managed respectively JTA
+on Quarkus, with the CDI request context activated): the workflow aggregate is
+loaded by the business key, the method invoked with bound parameters and the
+aggregate saved - business changes and engine state commit or roll back together.
+Outcomes:
+
+- normal return - the task completes;
+- `TaskException` - the task completes with a BPMN error (error-boundary
+  routing); the aggregate changes COMMIT (V1 contract - do not add your own
+  `@Transactional`);
+- any other exception - the job transaction rolls back and the job executor
+  retries (finally: incident);
+- methods declaring `@TaskId` leave the task open (asynchronous completion via
+  `ProcessService#completeTask`, upcoming story) - such tasks have to be wired by
+  *Delegate expression* (an *Expression* task completes when the expression
+  returns and could never stay open).
+
+BPMN expressions like gateway conditions or multi-instance collections
+(`${riskAcceptable}`, `${items}`) resolve against the workflow aggregate
+identified by the business key (getter, boolean getter or field - Spring beans
+remain resolvable on Spring Boot). External tasks (`camunda:topic`) are not
+supported yet.
+
 ## Supported Camunda version
 
 Camunda **7.24** is the final feature release of Camunda 7 (October 2025, LTS). The

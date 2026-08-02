@@ -11,6 +11,10 @@ import io.agroal.api.AgroalDataSource;
 import io.vanillabp.camunda7.deployment.Camunda7WorkflowProcessingLifecycle;
 import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
 import io.vanillabp.camunda7.engine.Camunda7JobExecutorLifecycle;
+import io.vanillabp.camunda7.wiring.Camunda7AsyncBpmnParseListener;
+import io.vanillabp.camunda7.wiring.Camunda7TaskExpressionManager;
+import io.vanillabp.camunda7.wiring.Camunda7TaskRegistry;
+import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
 import jakarta.transaction.TransactionManager;
 
 /**
@@ -39,6 +43,12 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
 
   private final String adapterId;
 
+  /**
+   * The task connectables of this engine, registered by the deployment service
+   * during wireBpmn and looked up by the engine's EL resolver.
+   */
+  private final Camunda7TaskRegistry taskRegistry = new Camunda7TaskRegistry();
+
   private final boolean usesSeparateDataSource;
 
   private final ProcessEngine processEngine;
@@ -64,12 +74,19 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
       final Camunda7EngineProperties properties,
       final AgroalDataSource dataSource,
       final boolean usesSeparateDataSource,
-      final TransactionManager transactionManager) {
+      final TransactionManager transactionManager,
+      final WorkflowTaskInvoker workflowTaskInvoker) {
 
     this.adapterId = adapterId;
     this.usesSeparateDataSource = usesSeparateDataSource;
 
     final var configuration = new Camunda7QuarkusProcessEngineConfiguration(transactionManager);
+    // VanillaBP task wiring: top-level EL names resolve @WorkflowTask methods and
+    // workflow-aggregate attributes; the parse listener aligns transaction
+    // boundaries with remote BPMS (async before/after)
+    configuration.setExpressionManager(new Camunda7TaskExpressionManager(taskRegistry, workflowTaskInvoker));
+    configuration.setCustomPreBPMNParseListeners(new java.util.ArrayList<>(
+        java.util.List.of(new Camunda7AsyncBpmnParseListener())));
     configuration.setProcessEngineName("vanillabp-camunda7-%s".formatted(adapterId));
     configuration.setDataSource(dataSource);
     configuration.setDatabaseSchemaUpdate(properties.getDatabaseSchemaUpdate());
@@ -86,6 +103,12 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     this.processEngine = configuration.buildProcessEngine();
     this.jobExecutorLifecycle = new Camunda7JobExecutorLifecycle(
         adapterId, ((ProcessEngineConfigurationImpl) processEngine.getProcessEngineConfiguration()).getJobExecutor());
+
+  }
+
+  public Camunda7TaskRegistry getTaskRegistry() {
+
+    return taskRegistry;
 
   }
 

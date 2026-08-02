@@ -103,9 +103,24 @@ public class Camunda7JobExecutorLifecycleTest {
 
     final var deadline = System.currentTimeMillis() + 15000;
     while (countInstances(businessKey) > 0) {
-      Assertions.assertTrue(
-          System.currentTimeMillis() < deadline,
-          "the pending job was not executed after processing was started");
+      if (System.currentTimeMillis() >= deadline) {
+        // failed jobs park with an exception - surface it for diagnosis
+        final var failedJob = engine
+            .getProcessEngine()
+            .getManagementService()
+            .createJobQuery()
+            .noRetriesLeft()
+            .singleResult();
+        Assertions.fail(
+            "the pending job was not executed after processing was started"
+                + (failedJob != null
+                    ? "; job exception: "
+                        + engine
+                            .getProcessEngine()
+                            .getManagementService()
+                            .getJobExceptionStacktrace(failedJob.getId())
+                    : ""));
+      }
       Thread.sleep(100);
     }
 

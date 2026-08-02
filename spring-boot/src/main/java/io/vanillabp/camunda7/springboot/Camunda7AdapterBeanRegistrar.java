@@ -21,6 +21,7 @@ import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
 import io.vanillabp.camunda7.processservice.Camunda7ProcessService;
 import io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder;
 import io.vanillabp.integration.adapter.AdapterBeanRegistrarSupport;
+import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
 
 /**
  * Registers the Camunda 7 adapter's per-adapter-id beans: for EACH configured adapter
@@ -78,7 +79,9 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                         ? null
                         : applicationBean(supplierContext, DataSource.class, adapterId), usesNamedDataSource
                             ? null
-                            : applicationBean(supplierContext, PlatformTransactionManager.class, adapterId));
+                            : applicationBean(supplierContext, PlatformTransactionManager.class,
+                                adapterId), supplierContext
+                                    .bean(WorkflowTaskInvoker.class));
               }));
 
           registry.registerBean(
@@ -96,7 +99,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
               spec -> spec.supplier(supplierContext -> {
                 final var engine = engineHolder(supplierContext, adapterId);
                 return new Camunda7DeploymentService(
-                    adapterId, engine.getRepositoryService(), engine);
+                    adapterId, engine.getRepositoryService(), engine, supplierContext
+                        .bean(WorkflowTaskInvoker.class), engine.getTaskRegistry());
               }));
 
           // named convenience beans, e.g. for tests and applications integrating
