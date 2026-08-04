@@ -166,7 +166,26 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   public WorkflowAwareness awarenessOfWorkflow(
       final Object workflowAggregateId) {
 
-    throw new UnsupportedOperationException("awarenessOfWorkflow is implemented in a later story");
+    // the business key IS the aggregate ID; without engine history an ended
+    // instance is indistinguishable from a never-existing one - both map to
+    // UNKNOWN_TO_BPMS (the guiding error of the caller explains the causes)
+    try {
+      final var active = runtimeService
+          .createProcessInstanceQuery()
+          .processInstanceBusinessKey(String.valueOf(workflowAggregateId))
+          .count() > 0;
+      return active
+          ? WorkflowAwareness.ACTIVE
+          : WorkflowAwareness.UNKNOWN_TO_BPMS;
+    } catch (final org.camunda.bpm.engine.ProcessEngineException e) {
+      log.warn(
+          "Camunda7[{}]: could not determine awareness of the workflow of aggregate '{}' - "
+              + "reporting BPMS_UNAVAILABLE",
+          adapterId,
+          workflowAggregateId,
+          e);
+      return WorkflowAwareness.BPMS_UNAVAILABLE;
+    }
 
   }
 
@@ -407,6 +426,152 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String bpmnErrorCode) {
 
     signalTask(taskId, bpmnErrorCode, true);
+
+  }
+
+  /**
+   * The V1-compatible name of the LOCAL variable holding the expected correlation
+   * id at a message subscription's execution:
+   * <code>&lt;bpmnProcessId&gt;-&lt;messageName&gt;</code>. Applications set this
+   * local variable at the receiving scope; a correlation carrying a correlation id
+   * only matches executions whose variable equals it.
+   */
+  public static String correlationIdVariableName(
+      final String bpmnProcessId,
+      final String messageName) {
+
+    return bpmnProcessId
+        + "-"
+        + messageName;
+
+  }
+
+  private org.camunda.bpm.engine.runtime.MessageCorrelationBuilder messageCorrelation(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String messageName,
+      final String businessKey,
+      final String correlationId) {
+
+    var correlation = runtimeService
+        .createMessageCorrelation(messageName)
+        .tenantId(workflowModuleId)
+        .processInstanceBusinessKey(businessKey);
+    if (correlationId != null) {
+      // V1 convention: the local variable '<bpmnProcessId>-<messageName>' at the
+      // subscription's execution holds the expected correlation id
+      correlation = correlation.localVariableEquals(
+          correlationIdVariableName(bpmnProcessId, messageName),
+          correlationId);
+    }
+    return correlation;
+
+  }
+
+  @Override
+  public void correlateMessagePhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final A workflowAggregate,
+      final String messageName,
+      final String correlationId) {
+
+    if (usesSeparateDataSource) {
+      // the engine cannot join the caller's transaction - correlating here would
+      // advance the process although the transaction may still roll back
+      return;
+    }
+    // PAYLOAD DOCTRINE: no variables are set - the aggregate is the source of truth
+    final var businessKey = String.valueOf(aggregatePersistence.getAggregateId(workflowAggregate));
+    messageCorrelation(workflowModuleId, bpmnProcessId, messageName, businessKey, correlationId)
+        .correlateWithResult();
+
+  }
+
+  @Override
+  public void correlateMessagePhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String messageName,
+      final String correlationId) {
+
+    final var businessKey = String.valueOf(workflowAggregateId);
+    // check BEFORE correlating (rollback-only pitfall, see signalTask): a waiting
+    // subscription gone by dispatch time is the at-least-once residual
+    final var subscriptionWaiting = runtimeService
+        .createExecutionQuery()
+        .messageEventSubscriptionName(messageName)
+        .processInstanceBusinessKey(businessKey)
+        .count() > 0;
+    if (!subscriptionWaiting) {
+      log.warn(
+          "Camunda7[{}]: no waiting subscription for message '{}' of workflow aggregate '{}' - "
+              + "skipping the redelivered phase-two correlation",
+          adapterId,
+          messageName,
+          businessKey);
+      return;
+    }
+    messageCorrelation(workflowModuleId, bpmnProcessId, messageName, businessKey, correlationId)
+        .correlateWithResult();
+
+  }
+
+  @Override
+  public void startWorkflowByMessagePhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final A workflowAggregate,
+      final String messageName) {
+
+    if (usesSeparateDataSource) {
+      return;
+    }
+    final var businessKey = String.valueOf(aggregatePersistence.getAggregateId(workflowAggregate));
+    runtimeService
+        .createMessageCorrelation(messageName)
+        .tenantId(workflowModuleId)
+        .processInstanceBusinessKey(businessKey)
+        .correlateStartMessage();
+
+  }
+
+  @Override
+  public void startWorkflowByMessagePhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String messageName) {
+
+    // at-least-once: skip if an instance for this aggregate already exists (the
+    // same idempotency contract as startWorkflowPhaseTwo)
+    final var businessKey = String.valueOf(workflowAggregateId);
+    final var alreadyStarted = runtimeService
+        .createProcessInstanceQuery()
+        .processInstanceBusinessKey(businessKey)
+        .processDefinitionKey(bpmnProcessId)
+        .tenantIdIn(workflowModuleId)
+        .count() > 0;
+    if (alreadyStarted) {
+      log.info(
+          "Camunda7[{}]: workflow '{}' of module '{}' was already started for aggregate '{}' - "
+              + "skipping the redelivered phase-two start-by-message",
+          adapterId,
+          bpmnProcessId,
+          workflowModuleId,
+          businessKey);
+      return;
+    }
+    runtimeService
+        .createMessageCorrelation(messageName)
+        .tenantId(workflowModuleId)
+        .processInstanceBusinessKey(businessKey)
+        .correlateStartMessage();
 
   }
 

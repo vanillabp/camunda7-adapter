@@ -392,6 +392,19 @@ public class Camunda7TaskProcessingIT {
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
         c7ProcessService.awarenessOfUserTask(aggregateId, "999999999"));
 
+    // correlation phase-two tolerance (story 23): no waiting subscription and an
+    // already-started instance are warned no-ops, never errors
+    transactionTemplate.executeWithoutResult(status -> {
+      c7ProcessService.correlateMessagePhaseTwo(
+          "c7-it", "MessageProcess", null, aggregateId, "PaymentReceived", null);
+      c7ProcessService.startWorkflowByMessagePhaseTwo(
+          "c7-it", "AsyncProcess", null, aggregateId, "OrderPlaced");
+    });
+    // workflow awareness edge: unknown aggregate
+    assertEquals(
+        io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
+        c7ProcessService.awarenessOfWorkflow(-1L));
+
     // cleanup: complete the still-open task
     transactionTemplate.executeWithoutResult(status -> {
       final var aggregate = repository.findById(aggregateId).orElseThrow();
@@ -601,6 +614,150 @@ public class Camunda7TaskProcessingIT {
       workflowService.completeUserTask(aggregate, taskId.get());
     });
     awaitUntil(() -> processEnded(aggregateId), "SilentUserTaskProcess to end");
+
+  }
+
+  @Test
+  @DisplayName("correlateMessage resumes the instance waiting at a message catch event")
+  public void correlateMessageResumesProcess() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("MessageProcess", true, null);
+    awaitUntil(
+        () -> runtimeService
+            .createExecutionQuery()
+            .messageEventSubscriptionName("PaymentReceived")
+            .processInstanceBusinessKey(String.valueOf(aggregateId))
+            .count() > 0,
+        "the instance to wait at the message catch event");
+
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      aggregate.appendResult("correlating");
+      workflowService.correlate(aggregate, "PaymentReceived");
+    });
+
+    awaitUntil(() -> processEnded(aggregateId), "MessageProcess to end after the correlation");
+    assertEquals("correlating|message-arrived", repository.findById(aggregateId).orElseThrow().getResults());
+
+  }
+
+  @Test
+  @DisplayName("correlateMessage with a correlation id matches via the local-variable convention")
+  public void correlateMessageWithCorrelationId() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("MessageProcess", true, null);
+    awaitUntil(
+        () -> runtimeService
+            .createExecutionQuery()
+            .messageEventSubscriptionName("PaymentReceived")
+            .processInstanceBusinessKey(String.valueOf(aggregateId))
+            .count() > 0,
+        "the instance to wait at the message catch event");
+
+    // V1 convention: the local variable '<bpmnProcessId>-<messageName>' at the
+    // subscription's execution holds the expected correlation id
+    final var execution = runtimeService
+        .createExecutionQuery()
+        .messageEventSubscriptionName("PaymentReceived")
+        .processInstanceBusinessKey(String.valueOf(aggregateId))
+        .singleResult();
+    // NOTE: the variable-name convention uses the PRIMARY BPMN process id of the
+    // process service (V1 semantics) - here 'TaskProcess', not 'MessageProcess'
+    transactionTemplate.executeWithoutResult(status -> runtimeService
+        .setVariableLocal(
+            execution.getId(),
+            io.vanillabp.camunda7.processservice.Camunda7ProcessService
+                .correlationIdVariableName("TaskProcess", "PaymentReceived"),
+            "payment-42"));
+
+    // a mismatching correlation id does not correlate
+    assertThrows(
+        org.camunda.bpm.engine.MismatchingMessageCorrelationException.class,
+        () -> transactionTemplate.executeWithoutResult(status -> {
+          final var aggregate = repository.findById(aggregateId).orElseThrow();
+          workflowService.correlate(aggregate, "PaymentReceived", "wrong-id");
+        }));
+    assertNotNull(instanceIdOf(aggregateId), "the instance must still wait");
+
+    // the matching one does
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.correlate(aggregate, "PaymentReceived", "payment-42");
+    });
+    awaitUntil(() -> processEnded(aggregateId), "MessageProcess to end after the matching correlation");
+
+  }
+
+  @Test
+  @DisplayName("A rolled-back correlation leaves the instance waiting (shared transaction)")
+  public void rolledBackCorrelationLeavesInstanceWaiting() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("MessageProcess", true, null);
+    awaitUntil(
+        () -> runtimeService
+            .createExecutionQuery()
+            .messageEventSubscriptionName("PaymentReceived")
+            .processInstanceBusinessKey(String.valueOf(aggregateId))
+            .count() > 0,
+        "the instance to wait at the message catch event");
+
+    assertThrows(
+        RuntimeException.class,
+        () -> transactionTemplate.executeWithoutResult(status -> {
+          final var aggregate = repository.findById(aggregateId).orElseThrow();
+          workflowService.correlate(aggregate, "PaymentReceived");
+          throw new RuntimeException("test rollback");
+        }));
+
+    Thread.sleep(500);
+    assertNotNull(instanceIdOf(aggregateId), "the rolled-back correlation must leave the instance waiting");
+
+    // retried correlation converges
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.correlate(aggregate, "PaymentReceived");
+    });
+    awaitUntil(() -> processEnded(aggregateId), "MessageProcess to end after the retried correlation");
+
+  }
+
+  @Test
+  @DisplayName("startWorkflowByMessage starts the instance via the message start event")
+  public void startWorkflowByMessageStartsInstance() throws Exception {
+
+    final var aggregateId = transactionTemplate.execute(status -> {
+      final var aggregate = new TaskTestAggregate();
+      aggregate.setApproved(true);
+      final var saved = repository.save(aggregate);
+      workflowService.startByMessage(saved, "OrderPlaced");
+      return saved.getId();
+    });
+
+    awaitUntil(
+        () -> {
+          final var results = repository.findById(aggregateId).orElseThrow().getResults();
+          return (results != null) && results.contains("order-placed");
+        },
+        "the message start event to start the instance");
+    awaitUntil(() -> processEnded(aggregateId), "MessageStartProcess to end");
+
+  }
+
+  @Test
+  @DisplayName("Correlating an unknown workflow raises the guiding WorkflowNotFoundException")
+  public void correlateUnknownWorkflowRaisesGuidingException() {
+
+    final var aggregateId = transactionTemplate.execute(status -> repository
+        .save(new TaskTestAggregate())
+        .getId());
+
+    final var exception = assertThrows(
+        io.vanillabp.spi.process.WorkflowNotFoundException.class,
+        () -> transactionTemplate.executeWithoutResult(status -> {
+          final var aggregate = repository.findById(aggregateId).orElseThrow();
+          workflowService.correlate(aggregate, "PaymentReceived");
+        }));
+    assertTrue(exception.getMessage().contains("startWorkflowByMessage"));
 
   }
 

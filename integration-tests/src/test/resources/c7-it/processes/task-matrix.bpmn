@@ -219,4 +219,41 @@
       <bpmn:incoming>SU_f2</bpmn:incoming>
     </bpmn:endEvent>
   </bpmn:process>
+  <bpmn:message id="Msg_Payment" name="PaymentReceived" />
+  <bpmn:message id="Msg_Order" name="OrderPlaced" />
+  <bpmn:process id="MessageProcess" isExecutable="true">
+    <bpmn:startEvent id="MP_Start">
+      <bpmn:outgoing>MP_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="MP_f1" sourceRef="MP_Start" targetRef="MP_Wait" />
+    <bpmn:intermediateCatchEvent id="MP_Wait">
+      <bpmn:incoming>MP_f1</bpmn:incoming>
+      <bpmn:outgoing>MP_f2</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MP_MsgDef" messageRef="Msg_Payment" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="MP_f2" sourceRef="MP_Wait" targetRef="MP_Done" />
+    <bpmn:serviceTask id="MP_Done" camunda:expression="${messageArrived}">
+      <bpmn:incoming>MP_f2</bpmn:incoming>
+      <bpmn:outgoing>MP_f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="MP_f3" sourceRef="MP_Done" targetRef="MP_End" />
+    <bpmn:endEvent id="MP_End">
+      <bpmn:incoming>MP_f3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="MessageStartProcess" isExecutable="true">
+    <bpmn:startEvent id="MS_Start">
+      <bpmn:outgoing>MS_f1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MS_MsgDef" messageRef="Msg_Order" />
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="MS_f1" sourceRef="MS_Start" targetRef="MS_Task" />
+    <bpmn:serviceTask id="MS_Task" camunda:expression="${orderPlaced}">
+      <bpmn:incoming>MS_f1</bpmn:incoming>
+      <bpmn:outgoing>MS_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="MS_f2" sourceRef="MS_Task" targetRef="MS_End" />
+    <bpmn:endEvent id="MS_End">
+      <bpmn:incoming>MS_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
 </bpmn:definitions>

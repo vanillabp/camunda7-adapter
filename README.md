@@ -204,6 +204,15 @@ never completes the task: `ProcessService#completeUserTask` maps to
 engines, two-phase on separate-datasource adapter ids. `awarenessOfUserTask`
 locates a task by its globally unique task ID plus a business-key check.
 
+**Message correlation (story 23):** `correlateMessage` runs entirely within the
+caller's transaction (tenant = workflow module, business key = aggregate ID) - a
+rollback leaves the instance waiting. A correlation id matches via the V1
+local-variable convention `<primary bpmnProcessId>-<messageName>` at the receiving
+scope. `startWorkflowByMessage` uses `correlateStartMessage()`. Separate-datasource
+adapter ids run both two-phase through the outbox (with waiting-subscription /
+already-started pre-checks tolerating stale entries). No variables are ever set -
+the payload doctrine.
+
 BPMN expressions like gateway conditions or multi-instance collections
 (`${riskAcceptable}`, `${items}`) resolve against the workflow aggregate
 identified by the business key (getter, boolean getter or field - Spring beans

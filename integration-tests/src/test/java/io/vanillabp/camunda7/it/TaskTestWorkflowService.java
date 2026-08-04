@@ -28,7 +28,8 @@ import io.vanillabp.spi.service.WorkflowTask;
             bpmnProcessId = "AsyncProcess"), @BpmnProcess(bpmnProcessId = "MultiInstanceProcess"), @BpmnProcess(
                 bpmnProcessId = "AsyncCancelProcess"), @BpmnProcess(bpmnProcessId = "CancelEventProcess"), @BpmnProcess(
                     bpmnProcessId = "MixedProcess"), @BpmnProcess(bpmnProcessId = "UserTaskProcess"), @BpmnProcess(
-                        bpmnProcessId = "SilentUserTaskProcess")
+                        bpmnProcessId = "SilentUserTaskProcess"), @BpmnProcess(
+                            bpmnProcessId = "MessageProcess"), @BpmnProcess(bpmnProcessId = "MessageStartProcess")
     })
 public class TaskTestWorkflowService {
 
@@ -213,6 +214,47 @@ public class TaskTestWorkflowService {
       final TaskTestAggregate aggregate) {
 
     aggregate.appendResult("usertask-cancel-handled");
+
+  }
+
+  public TaskTestAggregate correlate(
+      final TaskTestAggregate aggregate,
+      final String messageName) {
+
+    return processService.correlateMessage(aggregate, messageName);
+
+  }
+
+  public TaskTestAggregate correlate(
+      final TaskTestAggregate aggregate,
+      final String messageName,
+      final String correlationId) {
+
+    return processService.correlateMessage(aggregate, messageName, correlationId);
+
+  }
+
+  public TaskTestAggregate startByMessage(
+      final TaskTestAggregate aggregate,
+      final String messageName) {
+
+    return processService.startWorkflowByMessage(aggregate, messageName);
+
+  }
+
+  @WorkflowTask
+  public void messageArrived(
+      final TaskTestAggregate aggregate) {
+
+    aggregate.appendResult("message-arrived");
+
+  }
+
+  @WorkflowTask
+  public void orderPlaced(
+      final TaskTestAggregate aggregate) {
+
+    aggregate.appendResult("order-placed");
 
   }
 
