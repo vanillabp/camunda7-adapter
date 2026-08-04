@@ -42,7 +42,7 @@ public class Camunda7AdapterProducer {
         .<MigratableProcessService<Object>>map(adapterId -> {
           final var engine = engineRegistry.engineFor(adapterId);
           return new Camunda7ProcessService<>(
-              adapterId, engine.getRuntimeService(), engine.usesSeparateDataSource());
+              adapterId, engine.getRuntimeService(), engine.getTaskService(), engine.usesSeparateDataSource());
         })
         .toList();
 

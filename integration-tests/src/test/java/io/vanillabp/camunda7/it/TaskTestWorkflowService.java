@@ -27,7 +27,8 @@ import io.vanillabp.spi.service.WorkflowTask;
         @BpmnProcess(bpmnProcessId = "ErrorProcess"), @BpmnProcess(bpmnProcessId = "FailProcess"), @BpmnProcess(
             bpmnProcessId = "AsyncProcess"), @BpmnProcess(bpmnProcessId = "MultiInstanceProcess"), @BpmnProcess(
                 bpmnProcessId = "AsyncCancelProcess"), @BpmnProcess(bpmnProcessId = "CancelEventProcess"), @BpmnProcess(
-                    bpmnProcessId = "MixedProcess")
+                    bpmnProcessId = "MixedProcess"), @BpmnProcess(bpmnProcessId = "UserTaskProcess"), @BpmnProcess(
+                        bpmnProcessId = "SilentUserTaskProcess")
     })
 public class TaskTestWorkflowService {
 
@@ -169,6 +170,49 @@ public class TaskTestWorkflowService {
       final TaskTestAggregate aggregate) {
 
     aggregate.appendResult("mixed-rule");
+
+  }
+
+  public TaskTestAggregate completeUserTask(
+      final TaskTestAggregate aggregate,
+      final String taskId) {
+
+    return processService.completeUserTask(aggregate, taskId);
+
+  }
+
+  public TaskTestAggregate cancelUserTask(
+      final TaskTestAggregate aggregate,
+      final String taskId,
+      final String bpmnErrorCode) {
+
+    return processService.cancelUserTask(aggregate, taskId, bpmnErrorCode);
+
+  }
+
+  @WorkflowTask(taskDefinition = "approveRequest")
+  public void approveRequestNotification(
+      final TaskTestAggregate aggregate,
+      @TaskId final String taskId,
+      @TaskEvent final io.vanillabp.spi.service.TaskEvent.Event event) {
+
+    // user-task lifecycle notification (story 24): CREATED when the task shows
+    // up, CANCELED when its activity is canceled
+    if (event == io.vanillabp.spi.service.TaskEvent.Event.CREATED) {
+      aggregate.setTaskId(taskId);
+      aggregate.appendResult("usertask-created");
+    } else {
+      aggregate.appendResult("usertask-"
+          + event.name().toLowerCase());
+    }
+
+  }
+
+  @WorkflowTask
+  public void userTaskCancelHandled(
+      final TaskTestAggregate aggregate) {
+
+    aggregate.appendResult("usertask-cancel-handled");
 
   }
 

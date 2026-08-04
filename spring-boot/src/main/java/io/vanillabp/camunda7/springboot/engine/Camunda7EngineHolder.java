@@ -170,7 +170,8 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     configuration.setCustomPreBPMNParseListeners(new java.util.ArrayList<>(
         java.util.List.of(new io.vanillabp.camunda7.wiring.Camunda7AsyncBpmnParseListener(
             new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
-                workflowTaskInvoker, taskRegistry)))));
+                workflowTaskInvoker, taskRegistry), new io.vanillabp.camunda7.wiring.Camunda7UserTaskEventListener(
+                    workflowTaskInvoker, taskRegistry)))));
     configuration.setProcessEngineName("vanillabp-camunda7-%s".formatted(adapterId));
     configuration.setDataSource(dataSource);
     configuration.setTransactionManager(transactionManager);
@@ -232,6 +233,12 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   public RuntimeService getRuntimeService() {
 
     return processEngine.getRuntimeService();
+
+  }
+
+  public org.camunda.bpm.engine.TaskService getTaskService() {
+
+    return processEngine.getTaskService();
 
   }
 

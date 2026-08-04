@@ -25,10 +25,19 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
    */
   private final Camunda7TaskCancellationListener cancellationListener;
 
+  /**
+   * Notifies optional <code>&#64;WorkflowTask</code> handlers about user-task
+   * lifecycle events (story 24) - attached to user tasks for the engine's global
+   * CREATE and DELETE task-listener events.
+   */
+  private final Camunda7UserTaskEventListener userTaskEventListener;
+
   public Camunda7AsyncBpmnParseListener(
-      final Camunda7TaskCancellationListener cancellationListener) {
+      final Camunda7TaskCancellationListener cancellationListener,
+      final Camunda7UserTaskEventListener userTaskEventListener) {
 
     this.cancellationListener = cancellationListener;
+    this.userTaskEventListener = userTaskEventListener;
 
   }
 
@@ -98,6 +107,17 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
       final ActivityImpl activity) {
 
     asyncAfterOnly(activity);
+    // user-task lifecycle notifications (story 24): the engine's global CREATE
+    // and DELETE task-listener events reach optional @WorkflowTask handlers -
+    // BUILT-IN listeners run before any modeller-defined ones (V1 semantics)
+    final var taskDefinition = ((org.camunda.bpm.engine.impl.bpmn.behavior.UserTaskActivityBehavior) activity
+        .getActivityBehavior()).getTaskDefinition();
+    taskDefinition.addBuiltInTaskListener(
+        org.camunda.bpm.engine.delegate.TaskListener.EVENTNAME_CREATE,
+        userTaskEventListener);
+    taskDefinition.addBuiltInTaskListener(
+        org.camunda.bpm.engine.delegate.TaskListener.EVENTNAME_DELETE,
+        userTaskEventListener);
 
   }
 

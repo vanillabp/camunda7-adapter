@@ -382,7 +382,15 @@ public class Camunda7TaskProcessingIT {
     transactionTemplate.executeWithoutResult(status -> {
       c7ProcessService.completeTaskPhaseTwo("c7-it", "AsyncProcess", null, aggregateId, "999999999");
       c7ProcessService.cancelTaskPhaseTwo("c7-it", "AsyncProcess", null, aggregateId, "999999999", "ERR");
+      // user-task variants behave identically (story 24)
+      c7ProcessService.completeUserTaskPhaseTwo("c7-it", "UserTaskProcess", null, aggregateId, "999999999");
+      c7ProcessService.cancelUserTaskPhaseTwo("c7-it", "UserTaskProcess", null, aggregateId, "999999999", "ERR");
     });
+
+    // user-task awareness edge cases
+    assertEquals(
+        io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
+        c7ProcessService.awarenessOfUserTask(aggregateId, "999999999"));
 
     // cleanup: complete the still-open task
     transactionTemplate.executeWithoutResult(status -> {
@@ -421,6 +429,178 @@ public class Camunda7TaskProcessingIT {
       assertTrue(activity.isAsyncAfter(), activityId
           + " asyncAfter");
     }
+
+  }
+
+  @Test
+  @DisplayName("User-task awareness: ACTIVE with matching business key, UNKNOWN otherwise")
+  public void userTaskAwarenessEdgeCases() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("UserTaskProcess", true, null);
+    awaitUntil(
+        () -> repository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the CREATED notification to run");
+    final var taskId = repository.findById(aggregateId).orElseThrow().getTaskId();
+
+    @SuppressWarnings("unchecked")
+    final var c7ProcessService = (io.vanillabp.camunda7.processservice.Camunda7ProcessService<TaskTestAggregate>) applicationContext
+        .getBean("Camunda7_ProcessService_c7");
+
+    assertEquals(
+        io.vanillabp.integration.adapter.spi.WorkflowAwareness.ACTIVE,
+        c7ProcessService.awarenessOfUserTask(aggregateId, taskId));
+    assertEquals(
+        io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
+        c7ProcessService.awarenessOfUserTask(-1L, taskId));
+
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.completeUserTask(aggregate, taskId);
+    });
+    awaitUntil(() -> processEnded(aggregateId), "UserTaskProcess to end");
+
+  }
+
+  @Test
+  @DisplayName("User task: CREATED notification, completeUserTask resumes the process")
+  public void userTaskCreatedNotificationAndComplete() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("UserTaskProcess", true, null);
+
+    // the CREATE task listener notified the optional handler (with @TaskId)
+    awaitUntil(
+        () -> {
+          final var aggregate = repository.findById(aggregateId).orElseThrow();
+          return (aggregate.getTaskId() != null) && aggregate.getResults().contains("usertask-created");
+        },
+        "the CREATED notification to run and commit the task id");
+
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      aggregate.appendResult("approving");
+      workflowService.completeUserTask(aggregate, aggregate.getTaskId());
+    });
+
+    awaitUntil(() -> processEnded(aggregateId), "UserTaskProcess to end after completeUserTask");
+    assertEquals("usertask-created|approving", repository.findById(aggregateId).orElseThrow().getResults());
+
+  }
+
+  @Test
+  @DisplayName("cancelUserTask routes the BPMN error through the boundary and delivers CANCELED")
+  public void cancelUserTaskRoutesBoundary() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("UserTaskProcess", true, null);
+    awaitUntil(
+        () -> repository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the CREATED notification to run");
+
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.cancelUserTask(aggregate, aggregate.getTaskId(), "PAYMENT_FAILED");
+    });
+
+    awaitUntil(
+        () -> {
+          final var results = repository.findById(aggregateId).orElseThrow().getResults();
+          return (results != null) && results.contains("usertask-cancel-handled");
+        },
+        "the error boundary to route to the handling task");
+    // handleBpmnError deletes the task - the DELETE listener delivered CANCELED
+    assertTrue(
+        repository.findById(aggregateId).orElseThrow().getResults().contains("usertask-canceled"),
+        "expected the CANCELED notification but got: "
+            + repository.findById(aggregateId).orElseThrow().getResults());
+    awaitUntil(() -> processEnded(aggregateId), "UserTaskProcess to end via the boundary");
+
+  }
+
+  @Test
+  @DisplayName("Instance termination delivers CANCELED to the user-task handler")
+  public void userTaskCanceledOnInstanceTermination() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("UserTaskProcess", true, null);
+    awaitUntil(
+        () -> repository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the CREATED notification to run");
+
+    final var instanceId = instanceIdOf(aggregateId);
+    transactionTemplate.executeWithoutResult(status -> runtimeService
+        .deleteProcessInstance(instanceId, "story-24 test cancellation"));
+
+    awaitUntil(
+        () -> {
+          final var results = repository.findById(aggregateId).orElseThrow().getResults();
+          return (results != null) && results.contains("usertask-canceled");
+        },
+        "the CANCELED notification to be delivered");
+
+  }
+
+  @Test
+  @DisplayName("completeUserTask inside a rolled-back transaction leaves the task open")
+  public void completeUserTaskInRolledBackTransactionLeavesTaskOpen() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("UserTaskProcess", true, null);
+    awaitUntil(
+        () -> repository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the CREATED notification to run");
+    final var taskId = repository.findById(aggregateId).orElseThrow().getTaskId();
+
+    assertThrows(
+        RuntimeException.class,
+        () -> transactionTemplate.executeWithoutResult(status -> {
+          final var aggregate = repository.findById(aggregateId).orElseThrow();
+          workflowService.completeUserTask(aggregate, taskId);
+          throw new RuntimeException("test rollback");
+        }));
+
+    Thread.sleep(500);
+    assertNotNull(instanceIdOf(aggregateId), "the process must still be active");
+
+    // the retried completion converges
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.completeUserTask(aggregate, taskId);
+    });
+    awaitUntil(() -> processEnded(aggregateId), "UserTaskProcess to end after the retried completion");
+
+  }
+
+  @Test
+  @DisplayName("A user task WITHOUT a handler boots and completes through the SPI (optional notification)")
+  public void userTaskWithoutHandlerIsOptional() throws Exception {
+
+    // SilentUserTaskProcess' user task has NO @WorkflowTask handler - the wiring
+    // validation must not complain (user-task handlers are optional) and the
+    // task is processed through the SPI like any externally managed task
+    final var aggregateId = startSecondaryProcess("SilentUserTaskProcess", true, null);
+
+    final var taskId = new java.util.concurrent.atomic.AtomicReference<String>();
+    awaitUntil(
+        () -> {
+          final var instanceId = instanceIdOf(aggregateId);
+          if (instanceId == null) {
+            return false;
+          }
+          final var task = processEngine
+              .getTaskService()
+              .createTaskQuery()
+              .processInstanceId(instanceId)
+              .singleResult();
+          if (task == null) {
+            return false;
+          }
+          taskId.set(task.getId());
+          return true;
+        },
+        "the silent user task to show up");
+
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.completeUserTask(aggregate, taskId.get());
+    });
+    awaitUntil(() -> processEnded(aggregateId), "SilentUserTaskProcess to end");
 
   }
 

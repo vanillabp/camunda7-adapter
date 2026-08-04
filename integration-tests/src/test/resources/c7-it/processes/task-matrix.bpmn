@@ -178,4 +178,45 @@
       <bpmn:incoming>MX_f6</bpmn:incoming>
     </bpmn:endEvent>
   </bpmn:process>
+  <bpmn:process id="UserTaskProcess" isExecutable="true">
+    <bpmn:startEvent id="UT_Start">
+      <bpmn:outgoing>UT_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="UT_f1" sourceRef="UT_Start" targetRef="UT_Task" />
+    <bpmn:userTask id="UT_Task" camunda:formKey="approveRequest">
+      <bpmn:incoming>UT_f1</bpmn:incoming>
+      <bpmn:outgoing>UT_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="UT_Boundary" attachedToRef="UT_Task">
+      <bpmn:outgoing>UT_fErr</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="UT_ErrDef" errorRef="Error_Payment" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="UT_fErr" sourceRef="UT_Boundary" targetRef="UT_Handle" />
+    <bpmn:serviceTask id="UT_Handle" camunda:expression="${userTaskCancelHandled}">
+      <bpmn:incoming>UT_fErr</bpmn:incoming>
+      <bpmn:outgoing>UT_f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="UT_f2" sourceRef="UT_Task" targetRef="UT_End" />
+    <bpmn:sequenceFlow id="UT_f3" sourceRef="UT_Handle" targetRef="UT_EndHandled" />
+    <bpmn:endEvent id="UT_End">
+      <bpmn:incoming>UT_f2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="UT_EndHandled">
+      <bpmn:incoming>UT_f3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="SilentUserTaskProcess" isExecutable="true">
+    <bpmn:startEvent id="SU_Start">
+      <bpmn:outgoing>SU_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="SU_f1" sourceRef="SU_Start" targetRef="SU_Task" />
+    <bpmn:userTask id="SU_Task">
+      <bpmn:incoming>SU_f1</bpmn:incoming>
+      <bpmn:outgoing>SU_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="SU_f2" sourceRef="SU_Task" targetRef="SU_End" />
+    <bpmn:endEvent id="SU_End">
+      <bpmn:incoming>SU_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
 </bpmn:definitions>

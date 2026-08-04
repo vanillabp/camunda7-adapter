@@ -90,7 +90,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
               spec -> spec.supplier(supplierContext -> {
                 final var engine = engineHolder(supplierContext, adapterId);
                 return new Camunda7ProcessService<>(
-                    adapterId, engine.getRuntimeService(), engine.usesSeparateDataSource());
+                    adapterId, engine.getRuntimeService(), engine.getTaskService(), engine
+                        .usesSeparateDataSource());
               }));
 
           registry.registerBean(

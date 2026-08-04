@@ -33,7 +33,13 @@ public record Camunda7TaskConnectable(
      * adapter's {@link Camunda7WorkflowTaskBehavior} - the task stays open for
      * <code>&#64;TaskId</code> methods and is completed asynchronously later.
      */
-    DELEGATE_EXPRESSION
+    DELEGATE_EXPRESSION,
+    /**
+     * A BPMN user task (story 24): the task definition is the task's
+     * <code>camunda:formKey</code>; the handler (if any) is notified via task
+     * listeners (CREATED/CANCELED) and never completes the task on return.
+     */
+    USER_TASK
   }
 
   /**
@@ -44,7 +50,7 @@ public record Camunda7TaskConnectable(
       final String currentElementId,
       final String propertyName) {
 
-    return elementId.equals(currentElementId) || taskDefinition.equals(propertyName);
+    return elementId.equals(currentElementId) || ((taskDefinition != null) && taskDefinition.equals(propertyName));
 
   }
 

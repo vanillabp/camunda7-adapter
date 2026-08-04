@@ -68,11 +68,16 @@ public class Camunda7TaskELResolver extends ELResolver {
         : null;
     final var propertyName = property.toString();
 
-    final var connectable = taskRegistry.resolve(
-        workflowModuleId,
-        bpmnProcessId,
-        currentElementId,
-        propertyName);
+    final var connectable = taskRegistry
+        .resolve(
+            workflowModuleId,
+            bpmnProcessId,
+            currentElementId,
+            propertyName)
+        // user-task connectables (story 24) are served by task listeners, never
+        // by EL names - a formKey colliding with an aggregate attribute must not
+        // shadow the attribute
+        .filter(candidate -> candidate.type() != Camunda7TaskConnectable.Type.USER_TASK);
     if (connectable.isPresent()) {
       context.setPropertyResolved(true);
       final var behavior = new Camunda7WorkflowTaskBehavior(connectable.get(), workflowTaskInvoker);

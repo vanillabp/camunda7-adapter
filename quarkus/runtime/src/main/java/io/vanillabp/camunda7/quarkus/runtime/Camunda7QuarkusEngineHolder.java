@@ -88,7 +88,8 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     configuration.setCustomPreBPMNParseListeners(new java.util.ArrayList<>(
         java.util.List.of(new Camunda7AsyncBpmnParseListener(
             new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
-                workflowTaskInvoker, taskRegistry)))));
+                workflowTaskInvoker, taskRegistry), new io.vanillabp.camunda7.wiring.Camunda7UserTaskEventListener(
+                    workflowTaskInvoker, taskRegistry)))));
     configuration.setProcessEngineName("vanillabp-camunda7-%s".formatted(adapterId));
     configuration.setDataSource(dataSource);
     configuration.setDatabaseSchemaUpdate(properties.getDatabaseSchemaUpdate());
@@ -123,6 +124,12 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
   public ProcessEngine getProcessEngine() {
 
     return processEngine;
+
+  }
+
+  public org.camunda.bpm.engine.TaskService getTaskService() {
+
+    return processEngine.getTaskService();
 
   }
 

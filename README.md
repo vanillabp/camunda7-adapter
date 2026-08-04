@@ -193,6 +193,17 @@ execution listener attached at parse time invokes handlers subscribing to
 lifecycle events when the open task's activity is canceled (interrupting
 boundary event, instance termination), within the cancellation's transaction.
 
+**User tasks (story 24):** the user task's `camunda:formKey` is the task
+definition; a matching `@WorkflowTask` method is an OPTIONAL notification handler
+invoked on the engine's global CREATE and DELETE task-listener events (CREATED /
+CANCELED via `@TaskEvent`, the task's ID via `@TaskId`) - attached as BUILT-IN
+listeners at parse time, so they run before modeller-defined ones. The handler
+never completes the task: `ProcessService#completeUserTask` maps to
+`TaskService.complete`, `#cancelUserTask` to `TaskService.handleBpmnError`
+(error-boundary routing) - within the caller's transaction on shared-datasource
+engines, two-phase on separate-datasource adapter ids. `awarenessOfUserTask`
+locates a task by its globally unique task ID plus a business-key check.
+
 BPMN expressions like gateway conditions or multi-instance collections
 (`${riskAcceptable}`, `${items}`) resolve against the workflow aggregate
 identified by the business key (getter, boolean getter or field - Spring beans

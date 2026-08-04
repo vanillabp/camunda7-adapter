@@ -214,6 +214,20 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
               workflowModuleId, bpmnProcessId, task.getId(), taskDefinition, type));
         });
 
+    // user tasks (story 24): the task definition is the camunda:formKey; a
+    // matching @WorkflowTask method is OPTIONAL (notification only) - the spec
+    // still marks matching methods as wired
+    model
+        .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.UserTask.class)
+        .stream()
+        .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
+        .forEach(task -> {
+          final var formKey = task.getAttributeValueNs(CAMUNDA_NS, "formKey");
+          specs.add(BpmnTaskSpec.userTask(task.getId(), formKey));
+          connectables.add(new Camunda7TaskConnectable(
+              workflowModuleId, bpmnProcessId, task.getId(), formKey, Camunda7TaskConnectable.Type.USER_TASK));
+        });
+
     // both directions with guiding messages; throwing here honors the
     // deployment-failure policy for non-first-priority adapter ids
     workflowTaskInvoker.validateTaskWiring(workflowModuleId, bpmnProcessId, specs);

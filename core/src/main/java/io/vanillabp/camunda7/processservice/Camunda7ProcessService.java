@@ -49,6 +49,11 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private final RuntimeService runtimeService;
 
   /**
+   * The embedded engine's task service - user-task operations (story 24).
+   */
+  private final org.camunda.bpm.engine.TaskService taskService;
+
+  /**
    * Whether this adapter id's engine runs on its OWN datasource (see class comment):
    * engine commands then do not join the caller's transaction and starting workflows
    * uses the two-phase pattern.
@@ -211,6 +216,137 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
           bpmnErrorCode,
           java.util.Map.of());
     }
+
+  }
+
+  @Override
+  public WorkflowAwareness awarenessOfUserTask(
+      final Object workflowAggregateId,
+      final String taskId) {
+
+    // user-task IDs (ACT_RU_TASK) are globally unique within the engine - the
+    // business key is verified like in awarenessOfTask
+    try {
+      final var task = taskService
+          .createTaskQuery()
+          .taskId(taskId)
+          .singleResult();
+      if (task == null) {
+        return WorkflowAwareness.UNKNOWN_TO_BPMS;
+      }
+      final var processInstance = runtimeService
+          .createProcessInstanceQuery()
+          .processInstanceId(task.getProcessInstanceId())
+          .singleResult();
+      if ((processInstance == null) || !String.valueOf(workflowAggregateId).equals(processInstance.getBusinessKey())) {
+        return WorkflowAwareness.UNKNOWN_TO_BPMS;
+      }
+      return WorkflowAwareness.ACTIVE;
+    } catch (final org.camunda.bpm.engine.ProcessEngineException e) {
+      log.warn(
+          "Camunda7[{}]: could not determine awareness of user task '{}' - reporting BPMS_UNAVAILABLE",
+          adapterId,
+          taskId,
+          e);
+      return WorkflowAwareness.BPMS_UNAVAILABLE;
+    }
+
+  }
+
+  /**
+   * Completes (or cancels by BPMN error) a user task. Runs within the caller's
+   * transaction for engines sharing the application's datasource.
+   *
+   * @param taskId The user task's ID (ACT_RU_TASK)
+   * @param bpmnErrorCode The BPMN error code or <code>null</code> to complete
+   * @param tolerateGoneTask Whether a no-longer-existing task is tolerated (phase
+   *        two is at-least-once)
+   */
+  private void executeUserTask(
+      final String taskId,
+      final String bpmnErrorCode,
+      final boolean tolerateGoneTask) {
+
+    if (tolerateGoneTask) {
+      // check BEFORE executing - see signalTask: a failing engine command would
+      // mark the joined transaction rollback-only even if the exception is caught
+      final var exists = taskService
+          .createTaskQuery()
+          .taskId(taskId)
+          .count() > 0;
+      if (!exists) {
+        log.warn(
+            "Camunda7[{}]: user task '{}' is gone - skipping the redelivered phase-two {}",
+            adapterId,
+            taskId,
+            bpmnErrorCode == null
+                ? "completion"
+                : "cancellation");
+        return;
+      }
+    }
+    if (bpmnErrorCode == null) {
+      taskService.complete(taskId);
+    } else {
+      // routes the workflow through an error boundary event on the user task
+      taskService.handleBpmnError(taskId, bpmnErrorCode);
+    }
+
+  }
+
+  @Override
+  public void completeUserTaskPhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final A workflowAggregate,
+      final String taskId) {
+
+    if (usesSeparateDataSource) {
+      return;
+    }
+    executeUserTask(taskId, null, false);
+
+  }
+
+  @Override
+  public void completeUserTaskPhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String taskId) {
+
+    executeUserTask(taskId, null, true);
+
+  }
+
+  @Override
+  public void cancelUserTaskPhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final A workflowAggregate,
+      final String taskId,
+      final String bpmnErrorCode) {
+
+    if (usesSeparateDataSource) {
+      return;
+    }
+    executeUserTask(taskId, bpmnErrorCode, false);
+
+  }
+
+  @Override
+  public void cancelUserTaskPhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String taskId,
+      final String bpmnErrorCode) {
+
+    executeUserTask(taskId, bpmnErrorCode, true);
 
   }
 
