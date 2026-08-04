@@ -3,11 +3,11 @@
 This is the [VanillaBP](https://www.vanillabp.io) Version 2 adapter for
 [Camunda 7](https://camunda.com/), the embedded workflow engine.
 
-> **Status: Version 2, in development.** BPMN deployment and starting workflows are
-> implemented (embedded engine, in the caller's transaction) and work end-to-end through
-> `ProcessService.startWorkflow`. Task wiring (`@WorkflowTask`), message correlation and
-> BPMS-election awareness are not implemented yet and their SPI methods throw
-> `UnsupportedOperationException`.
+> **Status: Version 2, in development.** BPMN deployment, starting workflows, task
+> processing (`@WorkflowTask`), completing/canceling asynchronous tasks, user tasks,
+> message correlation and the BPMS-election awareness probes are implemented (embedded
+> engine, in the caller's transaction). Remaining feature stories: viewer/history API,
+> `@SyncWithBPMS`.
 
 ## Coordinates
 
