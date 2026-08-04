@@ -7,6 +7,7 @@ import io.vanillabp.spi.service.BpmnProcess;
 import io.vanillabp.spi.service.MultiInstanceElement;
 import io.vanillabp.spi.service.MultiInstanceIndex;
 import io.vanillabp.spi.service.MultiInstanceTotal;
+import io.vanillabp.spi.service.TaskEvent;
 import io.vanillabp.spi.service.TaskException;
 import io.vanillabp.spi.service.TaskId;
 import io.vanillabp.spi.service.WorkflowService;
@@ -24,7 +25,9 @@ import io.vanillabp.spi.service.WorkflowTask;
     bpmnProcess = @BpmnProcess(bpmnProcessId = "TaskProcess"),
     secondaryBpmnProcesses = {
         @BpmnProcess(bpmnProcessId = "ErrorProcess"), @BpmnProcess(bpmnProcessId = "FailProcess"), @BpmnProcess(
-            bpmnProcessId = "AsyncProcess"), @BpmnProcess(bpmnProcessId = "MultiInstanceProcess")
+            bpmnProcessId = "AsyncProcess"), @BpmnProcess(bpmnProcessId = "MultiInstanceProcess"), @BpmnProcess(
+                bpmnProcessId = "AsyncCancelProcess"), @BpmnProcess(bpmnProcessId = "CancelEventProcess"), @BpmnProcess(
+                    bpmnProcessId = "MixedProcess")
     })
 public class TaskTestWorkflowService {
 
@@ -97,6 +100,75 @@ public class TaskTestWorkflowService {
 
     aggregate.setTaskId(taskId);
     aggregate.appendResult("async-open");
+
+  }
+
+  public TaskTestAggregate completeAsyncTask(
+      final TaskTestAggregate aggregate,
+      final String taskId) {
+
+    return processService.completeTask(aggregate, taskId);
+
+  }
+
+  public TaskTestAggregate cancelAsyncTask(
+      final TaskTestAggregate aggregate,
+      final String taskId,
+      final String bpmnErrorCode) {
+
+    return processService.cancelTask(aggregate, taskId, bpmnErrorCode);
+
+  }
+
+  @WorkflowTask
+  public void awaitCancel(
+      final TaskTestAggregate aggregate,
+      @TaskId final String taskId) {
+
+    aggregate.setTaskId(taskId);
+    aggregate.appendResult("await-cancel");
+
+  }
+
+  @WorkflowTask
+  public void cancelHandled(
+      final TaskTestAggregate aggregate) {
+
+    aggregate.appendResult("cancel-handled");
+
+  }
+
+  @WorkflowTask
+  public void awaitCancelEvent(
+      final TaskTestAggregate aggregate,
+      @TaskId final String taskId,
+      @TaskEvent final io.vanillabp.spi.service.TaskEvent.Event event) {
+
+    // subscribed to ALL events (default): CREATED parks the task, CANCELED is
+    // delivered when the activity is canceled (story 22)
+    if (event == io.vanillabp.spi.service.TaskEvent.Event.CREATED) {
+      aggregate.setTaskId(taskId);
+      aggregate.appendResult("event-created");
+    } else {
+      aggregate.appendResult("event-"
+          + event.name().toLowerCase());
+    }
+
+  }
+
+  @WorkflowTask
+  public void mixedSend(
+      final TaskTestAggregate aggregate) {
+
+    aggregate.appendResult("mixed-send");
+
+  }
+
+  @WorkflowTask
+  public void mixedRule(
+      final TaskTestAggregate aggregate) {
+
+    aggregate.appendResult("mixed-rule");
 
   }
 

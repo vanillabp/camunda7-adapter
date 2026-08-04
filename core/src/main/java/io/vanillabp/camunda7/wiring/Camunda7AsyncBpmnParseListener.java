@@ -18,11 +18,28 @@ import org.camunda.bpm.engine.impl.util.xml.Element;
  */
 public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
 
+  /**
+   * Delivers CANCELED lifecycle events to subscribing handlers - attached as an END
+   * execution listener to service-like activities (see
+   * {@link Camunda7TaskCancellationListener}).
+   */
+  private final Camunda7TaskCancellationListener cancellationListener;
+
+  public Camunda7AsyncBpmnParseListener(
+      final Camunda7TaskCancellationListener cancellationListener) {
+
+    this.cancellationListener = cancellationListener;
+
+  }
+
   private void asyncBeforeAndAfter(
       final ActivityImpl activity) {
 
     activity.setAsyncBefore(true, true);
     activity.setAsyncAfter(true, true);
+    activity.addListener(
+        org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_END,
+        cancellationListener);
 
   }
 

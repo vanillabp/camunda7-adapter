@@ -144,6 +144,54 @@ public class Camunda7TaskProcessingTest {
   }
 
   @Test
+  @DisplayName("completeTask resumes the parked async task within the caller's JTA transaction")
+  public void completeTaskResumesProcess() throws Exception {
+
+    final var aggregateId = start("QAsyncProcess");
+
+    // wait for the async handler (CREATED) to run and commit the task id
+    final var deadline = System.currentTimeMillis() + 15000;
+    String taskId = null;
+    while (taskId == null) {
+      Assertions.assertTrue(
+          System.currentTimeMillis() < deadline,
+          "the async handler did not commit the task id in time");
+      userTransaction.begin();
+      try {
+        final var aggregate = entityManager.find(QTaskAggregate.class, aggregateId);
+        taskId = aggregate != null
+            ? aggregate.getTaskId()
+            : null;
+      } finally {
+        userTransaction.rollback();
+      }
+      Thread.sleep(100);
+    }
+
+    userTransaction.begin();
+    try {
+      final var aggregate = entityManager.find(QTaskAggregate.class, aggregateId);
+      aggregate.appendResult("completing");
+      workflowService.completeAsyncTask(aggregate, taskId);
+      userTransaction.commit();
+    } catch (final Exception e) {
+      userTransaction.rollback();
+      throw e;
+    }
+
+    final var endDeadline = System.currentTimeMillis() + 15000;
+    while (countInstances(aggregateId) > 0) {
+      Assertions.assertTrue(
+          System.currentTimeMillis() < endDeadline,
+          "QAsyncProcess did not end after completeTask; results: "
+              + resultsOf(aggregateId));
+      Thread.sleep(100);
+    }
+    Assertions.assertEquals("async-open|completing", resultsOf(aggregateId));
+
+  }
+
+  @Test
   @DisplayName("A technical exception rolls back the job's JTA transaction and decrements the retries")
   public void technicalExceptionRollsBackAndRetries() throws Exception {
 

@@ -3,6 +3,7 @@ package io.vanillabp.camunda7.it;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -60,6 +61,9 @@ public class Camunda7TaskProcessingIT {
 
   @Autowired
   private TransactionTemplate transactionTemplate;
+
+  @Autowired
+  private org.springframework.context.ApplicationContext applicationContext;
 
   private Long startWorkflow() {
 
@@ -217,6 +221,206 @@ public class Camunda7TaskProcessingIT {
             .count(),
         "no job pending for the parked async task");
     assertEquals("async-open", repository.findById(aggregateId).orElseThrow().getResults());
+
+  }
+
+  @Test
+  @DisplayName("completeTask resumes the parked async task and the process ends")
+  public void completeTaskResumesProcess() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("AsyncProcess", true, null);
+    awaitUntil(
+        () -> repository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the async handler to run and commit the task id");
+
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      aggregate.appendResult("completing");
+      workflowService.completeAsyncTask(aggregate, aggregate.getTaskId());
+    });
+
+    // the signal leaves the activity; async-after parks a job - the process ends
+    // through the job executor
+    awaitUntil(() -> processEnded(aggregateId), "AsyncProcess to end after completeTask");
+    assertEquals("async-open|completing", repository.findById(aggregateId).orElseThrow().getResults());
+
+  }
+
+  @Test
+  @DisplayName("cancelTask propagates the BPMN error through the error boundary")
+  public void cancelTaskRoutesErrorBoundary() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("AsyncCancelProcess", true, null);
+    awaitUntil(
+        () -> repository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the async handler to run and commit the task id");
+
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.cancelAsyncTask(aggregate, aggregate.getTaskId(), "PAYMENT_FAILED");
+    });
+
+    awaitUntil(
+        () -> {
+          final var results = repository.findById(aggregateId).orElseThrow().getResults();
+          return (results != null) && results.contains("cancel-handled");
+        },
+        "the error boundary to route to the handling task");
+    awaitUntil(() -> processEnded(aggregateId), "AsyncCancelProcess to end via the boundary");
+
+  }
+
+  @Test
+  @DisplayName("completeTask inside a rolled-back transaction leaves the task open (shared transaction)")
+  public void completeTaskInRolledBackTransactionLeavesTaskOpen() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("AsyncProcess", true, null);
+    awaitUntil(
+        () -> repository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the async handler to run and commit the task id");
+    final var taskId = repository.findById(aggregateId).orElseThrow().getTaskId();
+
+    assertThrows(
+        RuntimeException.class,
+        () -> transactionTemplate.executeWithoutResult(status -> {
+          final var aggregate = repository.findById(aggregateId).orElseThrow();
+          workflowService.completeAsyncTask(aggregate, taskId);
+          throw new RuntimeException("test rollback");
+        }));
+
+    // the engine shares the caller's transaction: the rolled-back signal never
+    // happened - the execution is still parked at the task
+    Thread.sleep(500);
+    final var instanceId = instanceIdOf(aggregateId);
+    assertNotNull(instanceId, "the process must still be active");
+    assertEquals(
+        List.of("AP_Task"),
+        runtimeService.getActiveActivityIds(instanceId),
+        "the task has to stay open after the rollback");
+
+    // the retried completion converges
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.completeAsyncTask(aggregate, taskId);
+    });
+    awaitUntil(() -> processEnded(aggregateId), "AsyncProcess to end after the retried completeTask");
+
+  }
+
+  @Test
+  @DisplayName("completeTask of an unknown task raises the guiding TaskNotFoundException")
+  public void completeUnknownTaskRaisesGuidingException() {
+
+    final var aggregateId = startSecondaryProcess("AsyncProcess", true, null);
+
+    final var exception = assertThrows(
+        io.vanillabp.spi.process.TaskNotFoundException.class,
+        () -> transactionTemplate.executeWithoutResult(status -> {
+          final var aggregate = repository.findById(aggregateId).orElseThrow();
+          workflowService.completeAsyncTask(aggregate, "no-such-task");
+        }));
+    assertTrue(
+        exception.getMessage().contains("no-such-task"),
+        "expected the unknown task to be named but got: "
+            + exception.getMessage());
+
+  }
+
+  @Test
+  @DisplayName("@TaskEvent: CANCELED is delivered when the open task's activity is canceled")
+  public void taskEventCanceledDeliveredOnCancellation() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("CancelEventProcess", true, null);
+    awaitUntil(
+        () -> repository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the async handler to run (CREATED event) and commit the task id");
+    assertEquals("event-created", repository.findById(aggregateId).orElseThrow().getResults());
+
+    // canceling the whole instance cancels the parked activity - the END listener
+    // delivers CANCELED to the subscribing handler within the same transaction
+    final var instanceId = instanceIdOf(aggregateId);
+    transactionTemplate.executeWithoutResult(status -> runtimeService
+        .deleteProcessInstance(instanceId, "story-22 test cancellation"));
+
+    awaitUntil(
+        () -> {
+          final var results = repository.findById(aggregateId).orElseThrow().getResults();
+          return (results != null) && results.contains("event-canceled");
+        },
+        "the CANCELED event to be delivered to the handler");
+
+  }
+
+  @Test
+  @DisplayName("Awareness edge cases and gone-task tolerance of phase two")
+  public void awarenessAndPhaseTwoEdgeCases() throws Exception {
+
+    final var aggregateId = startSecondaryProcess("AsyncProcess", true, null);
+    awaitUntil(
+        () -> repository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the async handler to run and commit the task id");
+    final var taskId = repository.findById(aggregateId).orElseThrow().getTaskId();
+
+    @SuppressWarnings("unchecked")
+    final var c7ProcessService = (io.vanillabp.camunda7.processservice.Camunda7ProcessService<TaskTestAggregate>) applicationContext
+        .getBean("Camunda7_ProcessService_c7");
+
+    // ACTIVE: execution exists and the business key matches
+    assertEquals(
+        io.vanillabp.integration.adapter.spi.WorkflowAwareness.ACTIVE,
+        c7ProcessService.awarenessOfTask(aggregateId, taskId));
+    // UNKNOWN: no such execution
+    assertEquals(
+        io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
+        c7ProcessService.awarenessOfTask(aggregateId, "999999999"));
+    // UNKNOWN: execution exists but belongs to ANOTHER workflow aggregate
+    assertEquals(
+        io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
+        c7ProcessService.awarenessOfTask(-1L, taskId));
+
+    // phase two tolerates a gone task (stale outbox entry - warned no-op)
+    transactionTemplate.executeWithoutResult(status -> {
+      c7ProcessService.completeTaskPhaseTwo("c7-it", "AsyncProcess", null, aggregateId, "999999999");
+      c7ProcessService.cancelTaskPhaseTwo("c7-it", "AsyncProcess", null, aggregateId, "999999999", "ERR");
+    });
+
+    // cleanup: complete the still-open task
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.completeAsyncTask(aggregate, taskId);
+    });
+    awaitUntil(() -> processEnded(aggregateId), "AsyncProcess to end");
+
+  }
+
+  @Test
+  @DisplayName("Send/business-rule/script/user/receive tasks get their async flags at parse time")
+  public void mixedTaskTypesGetAsyncFlags() {
+
+    final var definition = processEngine
+        .getRepositoryService()
+        .createProcessDefinitionQuery()
+        .processDefinitionKey("MixedProcess")
+        .tenantIdIn(MODULE_ID)
+        .latestVersion()
+        .singleResult();
+    assertNotNull(definition, "MixedProcess deployed");
+    final var parsed = ((org.camunda.bpm.engine.impl.persistence.entity.ProcessDefinitionEntity) processEngine
+        .getRepositoryService()
+        .getProcessDefinition(definition.getId()));
+
+    for (final var activityId : List.of("MX_Send", "MX_Rule", "MX_Script")) {
+      final var activity = parsed.findActivity(activityId);
+      assertTrue(activity.isAsyncBefore(), activityId
+          + " asyncBefore");
+      assertTrue(activity.isAsyncAfter(), activityId
+          + " asyncAfter");
+    }
+    for (final var activityId : List.of("MX_User", "MX_Receive")) {
+      final var activity = parsed.findActivity(activityId);
+      assertTrue(activity.isAsyncAfter(), activityId
+          + " asyncAfter");
+    }
 
   }
 

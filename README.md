@@ -175,9 +175,23 @@ Outcomes:
 - any other exception - the job transaction rolls back and the job executor
   retries (finally: incident);
 - methods declaring `@TaskId` leave the task open (asynchronous completion via
-  `ProcessService#completeTask`, upcoming story) - such tasks have to be wired by
+  `ProcessService#completeTask`) - such tasks have to be wired by
   *Delegate expression* (an *Expression* task completes when the expression
   returns and could never stay open).
+
+**Completing/canceling async tasks (`ProcessService#completeTask`/`#cancelTask`,
+story 22):** the `@TaskId` value is the parked execution's ID; completing signals
+that execution, canceling signals it with the adapter's cancel marker and the
+behavior propagates the BPMN error (error-boundary routing). Both run ENTIRELY
+within the caller's transaction (embedded engine, shared datasource): a rollback
+leaves the task open - business data and engine state stay consistent
+automatically. Adapter IDs on their OWN datasource (`data-source-name`) run the
+completion two-phase through the outbox instead (same rule as workflow starts).
+`awarenessOfTask` locates a task by its globally unique execution ID plus a
+business-key check. `@TaskEvent CANCELED` IS delivered on Camunda 7: an END
+execution listener attached at parse time invokes handlers subscribing to
+lifecycle events when the open task's activity is canceled (interrupting
+boundary event, instance termination), within the cancellation's transaction.
 
 BPMN expressions like gateway conditions or multi-instance collections
 (`${riskAcceptable}`, `${items}`) resolve against the workflow aggregate

@@ -24,6 +24,8 @@ public class QTaskAggregate {
 
   private String results;
 
+  private String taskId;
+
   public void appendResult(
       final String result) {
 

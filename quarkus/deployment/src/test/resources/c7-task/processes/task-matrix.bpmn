@@ -47,4 +47,18 @@
       <bpmn:incoming>QF_f2</bpmn:incoming>
     </bpmn:endEvent>
   </bpmn:process>
+  <bpmn:process id="QAsyncProcess" isExecutable="true">
+    <bpmn:startEvent id="QA_Start">
+      <bpmn:outgoing>QA_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="QA_f1" sourceRef="QA_Start" targetRef="QA_Task" />
+    <bpmn:serviceTask id="QA_Task" camunda:delegateExpression="${qAsync}">
+      <bpmn:incoming>QA_f1</bpmn:incoming>
+      <bpmn:outgoing>QA_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="QA_f2" sourceRef="QA_Task" targetRef="QA_End" />
+    <bpmn:endEvent id="QA_End">
+      <bpmn:incoming>QA_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
 </bpmn:definitions>

@@ -75,13 +75,30 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
   }
 
+  /**
+   * The signal name carrying a cancellation
+   * ({@code ProcessService#cancelTask}): the signal data is the BPMN error code to
+   * propagate.
+   */
+  public static final String SIGNAL_CANCEL = "vanillabp:cancel";
+
   @Override
   public void signal(
       final ActivityExecution execution,
       final String signalName,
       final Object signalData) throws Exception {
 
-    // asynchronous completion (ProcessService#completeTask, upcoming story)
+    // asynchronous completion/cancellation (ProcessService#completeTask/cancelTask
+    // signals the parked execution - see Camunda7ProcessService)
+    if (SIGNAL_CANCEL.equals(signalName)) {
+      // cancelTask: route the workflow through an error boundary event; thrown
+      // BpmnErrors are not translated automatically on the signal path, so the
+      // error is propagated explicitly
+      org.camunda.bpm.engine.impl.bpmn.helper.BpmnExceptionHandler.propagateBpmnError(
+          new BpmnError(String.valueOf(signalData)),
+          execution);
+      return;
+    }
     leave(execution);
 
   }
@@ -122,14 +139,33 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
     private final DelegateExecution execution;
 
+    private final io.vanillabp.spi.service.TaskEvent.Event taskEvent;
+
     private Map<String, MultiInstanceValue> multiInstances;
 
     Camunda7TaskInvocationContext(
         final Camunda7TaskConnectable connectable,
         final DelegateExecution execution) {
 
+      this(connectable, execution, io.vanillabp.spi.service.TaskEvent.Event.CREATED);
+
+    }
+
+    Camunda7TaskInvocationContext(
+        final Camunda7TaskConnectable connectable,
+        final DelegateExecution execution,
+        final io.vanillabp.spi.service.TaskEvent.Event taskEvent) {
+
       this.connectable = connectable;
       this.execution = execution;
+      this.taskEvent = taskEvent;
+
+    }
+
+    @Override
+    public io.vanillabp.spi.service.TaskEvent.Event getTaskEvent() {
+
+      return taskEvent;
 
     }
 

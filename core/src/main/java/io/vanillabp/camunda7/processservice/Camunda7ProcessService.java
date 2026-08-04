@@ -123,7 +123,37 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String taskId) {
 
-    throw new UnsupportedOperationException("awarenessOfTask is implemented in a later story");
+    // the task ID of a Camunda 7 @TaskId handler is the parked execution's ID -
+    // globally unique within the engine, so no tenant/process scoping is needed
+    // (the business key is verified so a foreign engine's execution ID can never
+    // match a different workflow)
+    try {
+      final var execution = runtimeService
+          .createExecutionQuery()
+          .executionId(taskId)
+          .singleResult();
+      if (execution == null) {
+        return WorkflowAwareness.UNKNOWN_TO_BPMS;
+      }
+      final var processInstance = runtimeService
+          .createProcessInstanceQuery()
+          .processInstanceId(execution.getProcessInstanceId())
+          .singleResult();
+      if ((processInstance == null) || !String.valueOf(workflowAggregateId).equals(processInstance.getBusinessKey())) {
+        return WorkflowAwareness.UNKNOWN_TO_BPMS;
+      }
+      return WorkflowAwareness.ACTIVE;
+    } catch (final org.camunda.bpm.engine.ProcessEngineException e) {
+      // an embedded engine sharing the application's datasource practically cannot
+      // be unavailable; an engine on its OWN datasource can - never fall back to
+      // another adapter in that case (contract)
+      log.warn(
+          "Camunda7[{}]: could not determine awareness of task '{}' - reporting BPMS_UNAVAILABLE",
+          adapterId,
+          taskId,
+          e);
+      return WorkflowAwareness.BPMS_UNAVAILABLE;
+    }
 
   }
 
@@ -132,6 +162,115 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId) {
 
     throw new UnsupportedOperationException("awarenessOfWorkflow is implemented in a later story");
+
+  }
+
+  /**
+   * Completes (or cancels, if an error code is given) the parked execution of an
+   * asynchronous task by signaling it - the {@code Camunda7WorkflowTaskBehavior}
+   * leaves the activity or propagates the BPMN error. Runs within the caller's
+   * transaction for engines sharing the application's datasource.
+   *
+   * @param taskId The parked execution's ID
+   * @param bpmnErrorCode The BPMN error code or <code>null</code> to complete
+   * @param tolerateGoneTask Whether a no-longer-existing execution is tolerated
+   *        (phase two is at-least-once) instead of failing
+   */
+  private void signalTask(
+      final String taskId,
+      final String bpmnErrorCode,
+      final boolean tolerateGoneTask) {
+
+    if (tolerateGoneTask) {
+      // check BEFORE signaling: a failing engine command would mark the joined
+      // transaction rollback-only even if the exception is caught - the outbox
+      // dispatcher's transaction could then never commit the DONE entry
+      final var exists = runtimeService
+          .createExecutionQuery()
+          .executionId(taskId)
+          .count() > 0;
+      if (!exists) {
+        // at-least-once residual: the task disappeared between the dispatch-time
+        // probe and this signal (e.g. a boundary event canceled it)
+        log.warn(
+            "Camunda7[{}]: task '{}' is gone - skipping the redelivered phase-two {}",
+            adapterId,
+            taskId,
+            bpmnErrorCode == null
+                ? "completion"
+                : "cancellation");
+        return;
+      }
+    }
+    if (bpmnErrorCode == null) {
+      runtimeService.signal(taskId);
+    } else {
+      runtimeService.signal(
+          taskId,
+          io.vanillabp.camunda7.wiring.Camunda7WorkflowTaskBehavior.SIGNAL_CANCEL,
+          bpmnErrorCode,
+          java.util.Map.of());
+    }
+
+  }
+
+  @Override
+  public void completeTaskPhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final A workflowAggregate,
+      final String taskId) {
+
+    if (usesSeparateDataSource) {
+      // the engine cannot join the caller's transaction - completing here would
+      // advance the process although the transaction may still roll back; the
+      // completion happens in phase two (the awareness probe already verified the
+      // task exists - the non-advancing check)
+      return;
+    }
+    signalTask(taskId, null, false);
+
+  }
+
+  @Override
+  public void completeTaskPhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String taskId) {
+
+    signalTask(taskId, null, true);
+
+  }
+
+  @Override
+  public void cancelTaskPhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final A workflowAggregate,
+      final String taskId,
+      final String bpmnErrorCode) {
+
+    if (usesSeparateDataSource) {
+      return;
+    }
+    signalTask(taskId, bpmnErrorCode, false);
+
+  }
+
+  @Override
+  public void cancelTaskPhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String taskId,
+      final String bpmnErrorCode) {
+
+    signalTask(taskId, bpmnErrorCode, true);
 
   }
 

@@ -86,7 +86,9 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     // boundaries with remote BPMS (async before/after)
     configuration.setExpressionManager(new Camunda7TaskExpressionManager(taskRegistry, workflowTaskInvoker));
     configuration.setCustomPreBPMNParseListeners(new java.util.ArrayList<>(
-        java.util.List.of(new Camunda7AsyncBpmnParseListener())));
+        java.util.List.of(new Camunda7AsyncBpmnParseListener(
+            new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
+                workflowTaskInvoker, taskRegistry)))));
     configuration.setProcessEngineName("vanillabp-camunda7-%s".formatted(adapterId));
     configuration.setDataSource(dataSource);
     configuration.setDatabaseSchemaUpdate(properties.getDatabaseSchemaUpdate());

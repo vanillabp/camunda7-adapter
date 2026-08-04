@@ -16,7 +16,9 @@ import jakarta.inject.Inject;
 @WorkflowService(
     workflowAggregateClass = QTaskAggregate.class,
     bpmnProcess = @BpmnProcess(bpmnProcessId = "QTaskProcess"),
-    secondaryBpmnProcesses = @BpmnProcess(bpmnProcessId = "QFailProcess"))
+    secondaryBpmnProcesses = {
+        @BpmnProcess(bpmnProcessId = "QFailProcess"), @BpmnProcess(bpmnProcessId = "QAsyncProcess")
+    })
 public class QTaskWorkflowService {
 
   @Inject
@@ -52,6 +54,24 @@ public class QTaskWorkflowService {
       final QTaskAggregate aggregate) {
 
     aggregate.appendResult("handled");
+
+  }
+
+  public QTaskAggregate completeAsyncTask(
+      final QTaskAggregate aggregate,
+      final String taskId) {
+
+    return processService.completeTask(aggregate, taskId);
+
+  }
+
+  @WorkflowTask
+  public void qAsync(
+      final QTaskAggregate aggregate,
+      @io.vanillabp.spi.service.TaskId final String taskId) {
+
+    aggregate.setTaskId(taskId);
+    aggregate.appendResult("async-open");
 
   }
 
