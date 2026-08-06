@@ -38,8 +38,14 @@ public class Camunda7SameDataSourceValidationTest {
             message.contains("'c7', 'c7b'"),
             "expected the guiding message naming both adapter ids but got: "
                 + message);
-        Assertions.assertTrue(message.contains("share the same datasource"));
+        Assertions.assertTrue(
+            message.contains("run on the SAME engine database"),
+            "expected the guiding message but got: "
+                + message);
         Assertions.assertTrue(message.contains("data-source-name"));
+        Assertions.assertTrue(
+            message.contains("table-prefix"),
+            "the message has to name the second way of making two ids distinct");
       });
 
   private static String rootCauseMessage(

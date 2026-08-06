@@ -1,6 +1,5 @@
 package io.vanillabp.camunda7.springboot;
 
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -18,6 +17,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import io.vanillabp.camunda7.deployment.Camunda7DeploymentService;
 import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
+import io.vanillabp.camunda7.engine.Camunda7InstanceIdentity;
 import io.vanillabp.camunda7.processservice.Camunda7ProcessService;
 import io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder;
 import io.vanillabp.integration.adapter.AdapterBeanRegistrarSupport;
@@ -43,9 +43,12 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
  * executor appear in applications merely having the adapter jar on the classpath.
  * <p>
  * <b>Startup validation:</b> two embedded engines on one schema are the same engine
- * state - more than one {@code camunda7} adapter id resolving to the SAME datasource
- * (both the application's, or the same <code>data-source-name</code>) fails the boot
- * with a guiding message naming the property keys to fix.
+ * state. Since story 34 that check runs through the adapter SPI hook
+ * {@code AdapterDeploymentService#validateDistinctAdapterInstances} (implemented ONCE
+ * in {@link Camunda7DeploymentService} for both platforms): adapter ids sharing one
+ * datasource AND one table prefix fail the boot with a guiding message. An
+ * application providing SEVERAL datasources additionally has to name the one an
+ * adapter id runs on (see {@link #applicationBean}).
  */
 public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
 
@@ -59,8 +62,6 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
         environment,
         Camunda7AdapterConfiguration.ADAPTER_TYPE,
         camunda7AdapterIds::add);
-
-    validateDistinctDataSources(environment, camunda7AdapterIds);
 
     camunda7AdapterIds
         .forEach(adapterId -> {
@@ -102,7 +103,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 final var engine = engineHolder(supplierContext, adapterId);
                 return new Camunda7DeploymentService(
                     adapterId, engine.getRepositoryService(), engine, supplierContext
-                        .bean(WorkflowTaskInvoker.class), engine.getTaskRegistry());
+                        .bean(WorkflowTaskInvoker.class), engine.getTaskRegistry(), id -> instanceIdentityOf(
+                            environment, id));
               }));
 
           // named convenience beans, e.g. for tests and applications integrating
@@ -167,6 +169,22 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
       final Class<S> beanType,
       final String adapterId) {
 
+    // several datasources available: which one the engine runs on is not VanillaBP's
+    // guess (story 34) - not even a @Primary bean decides it, because an embedded
+    // engine writes its ACT_* tables into whatever database it gets
+    final var availableBeanNames = availableBeanNames(supplierContext, beanType);
+    if ((availableBeanNames.size() > 1) && DataSource.class.equals(beanType)) {
+      throw new IllegalStateException(
+          """
+              Camunda 7 adapter '%s' runs embedded and needs a database, but the application \
+              provides SEVERAL DataSource beans: '%s'. Name the one this adapter id runs on:
+                vanillabp.adapters.%s.data-source-name: <bean name>
+              Use the reserved value 'default' for the application's default (primary) datasource. \
+              (Two adapter ids may also share one datasource if each uses its own \
+              'vanillabp.adapters.<id>.table-prefix'.)"""
+              .formatted(adapterId, String.join("', '", availableBeanNames), adapterId));
+    }
+
     final var bean = supplierContext
         .beanProvider(beanType)
         .getIfAvailable();
@@ -186,51 +204,52 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
   }
 
   /**
-   * Fails the boot if more than one {@code camunda7} adapter id resolves to the same
-   * datasource: two embedded engines on one schema are the same engine state -
-   * configuring them as two adapters is an error (validated at startup, 26c style).
+   * What makes an adapter id a distinct engine: its datasource and table prefix
+   * (see {@link Camunda7InstanceIdentity}). Read from the environment because the
+   * check runs before/independently of the engine beans.
    */
-  private static void validateDistinctDataSources(
+  private static Camunda7InstanceIdentity instanceIdentityOf(
       final Environment environment,
-      final List<String> camunda7AdapterIds) {
+      final String adapterId) {
 
-    if (camunda7AdapterIds.size() < 2) {
-      return;
+    return new Camunda7InstanceIdentity(
+        adapterProperty(environment, adapterId, "data-source-name"), adapterProperty(environment, adapterId,
+            "table-prefix"));
+
+  }
+
+  private static String adapterProperty(
+      final Environment environment,
+      final String adapterId,
+      final String key) {
+
+    return Binder
+        .get(environment)
+        .bind(
+            "vanillabp.adapters.%s.%s".formatted(adapterId, key),
+            Bindable.of(String.class))
+        .orElse(null);
+
+  }
+
+
+  /**
+   * The NAMES of all beans of the given type - looked up without instantiating them
+   * (bean types only). An empty list if the bean factory cannot be reached, in
+   * which case the ambiguity check simply does not fire.
+   */
+  private static List<String> availableBeanNames(
+      final BeanRegistry.SupplierContext supplierContext,
+      final Class<?> beanType) {
+
+    try {
+      return List.of(
+          supplierContext
+              .bean(org.springframework.context.ApplicationContext.class)
+              .getBeanNamesForType(beanType, true, false));
+    } catch (final RuntimeException e) {
+      return List.of();
     }
-
-    final var idsByDataSource = new LinkedHashMap<String, List<String>>();
-    camunda7AdapterIds
-        .forEach(adapterId -> {
-          final var dataSourceName = Binder
-              .get(environment)
-              .bind(
-                  "vanillabp.adapters.%s.data-source-name".formatted(adapterId),
-                  Bindable.of(String.class))
-              .orElse(null);
-          final var effectiveDataSource = (dataSourceName != null) && !dataSourceName.isBlank()
-              ? dataSourceName
-              : "<the application's default datasource>";
-          idsByDataSource
-              .computeIfAbsent(effectiveDataSource, key -> new LinkedList<>())
-              .add(adapterId);
-        });
-
-    idsByDataSource
-        .forEach((
-            dataSource,
-            adapterIds) -> {
-          if (adapterIds.size() < 2) {
-            return;
-          }
-          throw new IllegalStateException(
-              """
-                  The Camunda 7 adapters '%s' would share the same datasource (%s)! Two embedded \
-                  engines on one schema are the same engine state - configuring them as separate \
-                  adapters is an error. Give each additional adapter its own schema: define a \
-                  DataSource bean in your application and reference it via \
-                  'vanillabp.adapters.<id>.data-source-name', or remove all but one of these adapters."""
-                  .formatted(String.join("', '", adapterIds), dataSource));
-        });
 
   }
 

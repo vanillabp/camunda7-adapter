@@ -177,7 +177,11 @@ public class Camunda7AdapterBootTest {
                 Camunda7AdapterConfiguration.class,
                 Camunda7ProcessServiceConfiguration.class,
                 WorkflowModuleAutoConfiguration.class,
-                SpringBootMigrationAdapterAutoConfiguration.class))
+                SpringBootMigrationAdapterAutoConfiguration.class,
+                // since story 34 the distinctness of two ids of one type is
+                // validated through the adapter SPI hook, which the deployment
+                // pipeline calls at startup
+                io.vanillabp.integration.deployment.DeploymentAutoConfiguration.class))
         .run(context -> {
 
           Assertions.assertNotNull(context.getStartupFailure(), "boot has to fail with a guiding message");
@@ -191,8 +195,14 @@ public class Camunda7AdapterBootTest {
               message.contains("'c7', 'c7-two'"),
               "expected the guiding message naming both adapter ids but got: "
                   + message);
-          Assertions.assertTrue(message.contains("share the same datasource"));
-          Assertions.assertTrue(message.contains("vanillabp.adapters.<id>.data-source-name"));
+          Assertions.assertTrue(
+              message.contains("run on the SAME engine database"),
+              "expected the guiding message but got: "
+                  + message);
+          Assertions.assertTrue(message.contains("data-source-name"));
+          Assertions.assertTrue(
+              message.contains("table-prefix"),
+              "the message has to name the second way of making two ids distinct");
 
         });
 
@@ -234,14 +244,17 @@ public class Camunda7AdapterBootTest {
   }
 
   @Test
-  public void withoutConfiguredCamunda7AdapterNoEngineIsCreated() {
+  public void withAnotherBpmsConfiguredNoCamunda7EngineIsCreated() {
 
-    // the adapter jar is on the classpath and a data source exists, but NO
-    // vanillabp.adapters.<id>.type=camunda7 is configured: the gate must prevent
-    // the engine (and with it the ACT_* tables and the job executor) entirely
+    // the adapter jar is on the classpath but ANOTHER BPMS is configured: the gate
+    // must prevent the engine (and with it the ACT_* tables and the job executor)
+    // entirely. (Configuring NOTHING is a different case since story 34: the single
+    // adapter type of the classpath IS the configuration - see
+    // withoutAnyConfigurationTheClasspathAdapterIsUsed.)
     this.contextRunner
         .withPropertyValues(
-            "spring.datasource.url=jdbc:h2:mem:camunda7-gate-test;DB_CLOSE_DELAY=-1")
+            "spring.datasource.url=jdbc:h2:mem:camunda7-gate-test;DB_CLOSE_DELAY=-1",
+            "vanillabp.adapters.other-bpms.type=other-bpms")
         .withConfiguration(
             AutoConfigurations.of(
                 org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
@@ -263,6 +276,38 @@ public class Camunda7AdapterBootTest {
               "ACT_%", null)) {
             Assertions.assertFalse(tables.next(), "no ACT_* tables may exist");
           }
+
+        });
+
+  }
+
+  @Test
+  public void withoutAnyConfigurationTheClasspathAdapterIsUsed() {
+
+    // story 34: the adapter jar on the classpath IS the configuration - the engine
+    // of the derived adapter id (which is the adapter type) is created
+    this.contextRunner
+        .withPropertyValues(
+            "spring.datasource.url=jdbc:h2:mem:camunda7-convention-test;DB_CLOSE_DELAY=-1")
+        // the task invoker is contributed by the platform integration, which is not
+        // part of this minimal runner - the engine needs it to be built
+        .withBean(
+            io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker.class,
+            () -> org.mockito.Mockito
+                .mock(io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker.class))
+        .withConfiguration(
+            AutoConfigurations.of(
+                org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
+                org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
+                Camunda7AdapterConfiguration.class,
+                Camunda7ProcessServiceConfiguration.class))
+        .run(context -> {
+
+          Assertions.assertNull(context.getStartupFailure(), "context should start");
+          Assertions.assertTrue(
+              context.containsBean("Camunda7_Engine_camunda7"),
+              () -> "expected the engine of the derived adapter id 'camunda7' but got the beans: "
+                  + java.util.Arrays.toString(context.getBeanDefinitionNames()));
 
         });
 

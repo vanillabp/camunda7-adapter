@@ -26,6 +26,13 @@ package io.vanillabp.camunda7.engine;
  *       embedded engines must never share one schema) - and starting workflows
  *       uses VanillaBP's two-phase pattern (see
  *       <code>Camunda7ProcessService</code>).</li>
+ *   <li><code>table-prefix</code> - OPTIONAL prefix of the engine's database tables
+ *       (engine setting <code>databaseTablePrefix</code>). It lets two adapter ids
+ *       share ONE datasource while running separate engines - exactly the
+ *       side-by-side migration setup on a single database. The tables of each
+ *       prefix have to exist (the engine's schema creation honors the prefix, so
+ *       <code>database-schema-update</code> creates them; a prefix pointing at a
+ *       schema, e.g. <code>MY_SCHEMA.</code>, requires that schema to exist).</li>
  * </ul>
  */
 public class Camunda7EngineProperties {
@@ -35,6 +42,8 @@ public class Camunda7EngineProperties {
   private String historyTimeToLive = "P180D";
 
   private String dataSourceName;
+
+  private String tablePrefix;
 
   public String getDatabaseSchemaUpdate() {
     return databaseSchemaUpdate;
@@ -54,6 +63,15 @@ public class Camunda7EngineProperties {
     this.historyTimeToLive = historyTimeToLive;
   }
 
+  public String getTablePrefix() {
+    return tablePrefix;
+  }
+
+  public void setTablePrefix(
+      final String tablePrefix) {
+    this.tablePrefix = tablePrefix;
+  }
+
   public String getDataSourceName() {
     return dataSourceName;
   }
@@ -66,8 +84,28 @@ public class Camunda7EngineProperties {
   /**
    * @return Whether an own (named) datasource is configured for the adapter id
    */
+  /**
+   * The reserved value of {@code data-source-name} naming the application's
+   * DEFAULT datasource explicitly. Needed because an application providing several
+   * datasources has to name the one each adapter id runs on (story 34) - and the
+   * default datasource has no name of its own on either platform.
+   */
+  public static final String DEFAULT_DATA_SOURCE_NAME = "default";
+
+  /**
+   * @param dataSourceName A configured datasource name
+   * @return Whether it names the application's DEFAULT datasource
+   */
+  public static boolean isDefaultDataSourceName(
+      final String dataSourceName) {
+
+    return (dataSourceName == null) || dataSourceName.isBlank() || DEFAULT_DATA_SOURCE_NAME
+        .equalsIgnoreCase(dataSourceName.trim());
+
+  }
+
   public boolean usesSeparateDataSource() {
-    return (dataSourceName != null) && !dataSourceName.isBlank();
+    return !isDefaultDataSourceName(dataSourceName);
   }
 
 }

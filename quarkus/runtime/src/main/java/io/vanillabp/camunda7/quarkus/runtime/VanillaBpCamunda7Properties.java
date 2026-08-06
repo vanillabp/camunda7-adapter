@@ -68,6 +68,15 @@ public interface VanillaBpCamunda7Properties {
      */
     Optional<String> dataSourceName();
 
+    /**
+     * OPTIONAL prefix of the engine's database tables (engine setting
+     * <code>databaseTablePrefix</code>). It lets two adapter ids share ONE
+     * datasource while running separate engines - the side-by-side migration setup
+     * on a single database. The tables of each prefix have to exist (the engine's
+     * schema creation honors the prefix).
+     */
+    Optional<String> tablePrefix();
+
   }
 
 }

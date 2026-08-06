@@ -20,13 +20,13 @@ import org.camunda.bpm.model.bpmn.instance.Task;
 import org.camunda.bpm.model.xml.instance.ModelElementInstance;
 
 import io.vanillabp.camunda7.Camunda7ProcessingContext;
+import io.vanillabp.camunda7.engine.Camunda7InstanceIdentity;
 import io.vanillabp.camunda7.wiring.Camunda7TaskConnectable;
 import io.vanillabp.camunda7.wiring.Camunda7TaskRegistry;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
 import io.vanillabp.integration.adapter.spi.BpmnParseException;
 import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -46,7 +46,6 @@ import lombok.extern.slf4j.Slf4j;
  * dispatches task executions through the core's {@code WorkflowTaskInvoker}.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnModelInstance, Camunda7ProcessingContext> {
 
   /**
@@ -93,6 +92,59 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   public static final String CAMUNDA_NS = "http://camunda.org/schema/1.0/bpmn";
 
   private static final Pattern EL_PATTERN = Pattern.compile("^[#$]\\{([^}]+)}$");
+
+  /**
+   * Resolves what makes an adapter id a DISTINCT engine (datasource and table
+   * prefix) - platform-supplied, used by
+   * {@link #validateDistinctAdapterInstances(List)}. May be <code>null</code>
+   * (tests): the check is skipped then.
+   */
+  private final java.util.function.Function<String, Camunda7InstanceIdentity> instanceIdentities;
+
+  /**
+   * Convenience constructor without the instance-identity resolver (tests) - two
+   * adapter ids of this type are not checked for distinctness then.
+   */
+  public Camunda7DeploymentService(
+      final String adapterId,
+      final RepositoryService repositoryService,
+      final Camunda7WorkflowProcessingLifecycle workflowProcessingLifecycle,
+      final WorkflowTaskInvoker workflowTaskInvoker,
+      final Camunda7TaskRegistry taskRegistry) {
+
+    this(adapterId, repositoryService, workflowProcessingLifecycle, workflowTaskInvoker, taskRegistry, null);
+
+  }
+
+  public Camunda7DeploymentService(
+      final String adapterId,
+      final RepositoryService repositoryService,
+      final Camunda7WorkflowProcessingLifecycle workflowProcessingLifecycle,
+      final WorkflowTaskInvoker workflowTaskInvoker,
+      final Camunda7TaskRegistry taskRegistry,
+      final java.util.function.Function<String, Camunda7InstanceIdentity> instanceIdentities) {
+
+    this.adapterId = adapterId;
+    this.repositoryService = repositoryService;
+    this.workflowProcessingLifecycle = workflowProcessingLifecycle;
+    this.workflowTaskInvoker = workflowTaskInvoker;
+    this.taskRegistry = taskRegistry;
+    this.instanceIdentities = instanceIdentities;
+
+  }
+
+  /**
+   * Two <code>camunda7</code> adapter ids are only distinct engines if they run on
+   * different databases: an own datasource, or an own table prefix on a shared one
+   * (see {@link Camunda7InstanceIdentity}).
+   */
+  @Override
+  public void validateDistinctAdapterInstances(
+      final List<String> adapterIdsOfThisType) {
+
+    Camunda7InstanceIdentity.validateDistinct(adapterIdsOfThisType, instanceIdentities);
+
+  }
 
   @Override
   public String getAdapterId() {

@@ -14,6 +14,7 @@ vanillabp:
   adapters:
     c7:
       type: camunda7
+      data-source-name: default
     c7b:
       type: camunda7
       data-source-name: c7b

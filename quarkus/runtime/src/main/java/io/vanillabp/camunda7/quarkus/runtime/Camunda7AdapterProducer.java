@@ -57,14 +57,16 @@ public class Camunda7AdapterProducer {
   public List<AdapterDeploymentService<Object, Object>> camunda7AdapterDeploymentServices(
       final MigrationAdapterProperties properties,
       final Camunda7QuarkusEngineRegistry engineRegistry,
-      final WorkflowTaskRegistry workflowTaskRegistry) {
+      final WorkflowTaskRegistry workflowTaskRegistry,
+      final VanillaBpCamunda7Properties overlay) {
 
     return (List) camunda7AdapterIds(properties)
         .stream()
         .map(adapterId -> {
           final var engine = engineRegistry.engineFor(adapterId);
           return new Camunda7DeploymentService(
-              adapterId, engine.getRepositoryService(), engine, workflowTaskRegistry, engine.getTaskRegistry());
+              adapterId, engine.getRepositoryService(), engine, workflowTaskRegistry, engine
+                  .getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
         })
         .toList();
 
@@ -81,6 +83,32 @@ public class Camunda7AdapterProducer {
         .map(Map.Entry::getKey)
         .sorted()
         .toList();
+
+  }
+
+
+  /**
+   * What makes an adapter id a distinct engine: its datasource and table prefix
+   * (see {@code Camunda7InstanceIdentity}) - the adapter SPI hook
+   * {@code validateDistinctAdapterInstances} compares them (story 34).
+   */
+  private static io.vanillabp.camunda7.engine.Camunda7InstanceIdentity instanceIdentityOf(
+      final VanillaBpCamunda7Properties overlay,
+      final String adapterId) {
+
+    final var keys = overlay
+        .adapters()
+        .get(adapterId);
+    return new io.vanillabp.camunda7.engine.Camunda7InstanceIdentity(
+        keys == null
+            ? null
+            : keys
+                .dataSourceName()
+                .orElse(null), keys == null
+                    ? null
+                    : keys
+                        .tablePrefix()
+                        .orElse(null));
 
   }
 

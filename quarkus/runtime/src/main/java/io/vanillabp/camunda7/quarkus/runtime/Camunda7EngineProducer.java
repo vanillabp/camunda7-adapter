@@ -65,8 +65,6 @@ public class Camunda7EngineProducer {
         .sorted()
         .toList();
 
-    validateDistinctDataSources(camunda7AdapterIds, overlay);
-
     final var engines = new LinkedHashMap<String, Camunda7QuarkusEngineHolder>();
     camunda7AdapterIds
         .forEach(adapterId -> {
@@ -78,7 +76,8 @@ public class Camunda7EngineProducer {
           try {
             engines.put(adapterId, new Camunda7QuarkusEngineHolder(
                 adapterId, toEngineProperties(
-                    keys), dataSource, dataSourceName != null, transactionManager, workflowTaskRegistry));
+                    keys), dataSource, !io.vanillabp.camunda7.engine.Camunda7EngineProperties
+                        .isDefaultDataSourceName(dataSourceName), transactionManager, workflowTaskRegistry));
           } catch (final RuntimeException e) {
             throw new IllegalStateException(
                 """
@@ -118,6 +117,7 @@ public class Camunda7EngineProducer {
     }
     keys.databaseSchemaUpdate().ifPresent(properties::setDatabaseSchemaUpdate);
     keys.historyTimeToLive().ifPresent(properties::setHistoryTimeToLive);
+    keys.tablePrefix().ifPresent(properties::setTablePrefix);
     return properties;
 
   }
@@ -136,11 +136,31 @@ public class Camunda7EngineProducer {
 
     // the explicit @Default literal is required: with named datasources present, an
     // unqualified select() on the @Any instance would be ambiguous
-    final Instance<AgroalDataSource> selected = dataSourceName == null
-        ? dataSources.select(jakarta.enterprise.inject.Default.Literal.INSTANCE)
-        : dataSources.select(new io.quarkus.agroal.DataSource.DataSourceLiteral(dataSourceName));
+    // several datasources declared: which one the engine runs on is not VanillaBP's
+    // guess (story 34) - not even the default datasource decides it, because an
+    // embedded engine writes its ACT_* tables into whatever database it gets. The
+    // default datasource is named explicitly by the reserved value 'default'.
+    if (dataSourceName == null) {
+      final var declaredDataSources = declaredDataSourceNames(dataSources);
+      if (declaredDataSources.size() > 1) {
+        throw new IllegalStateException(
+            """
+                Camunda 7 adapter '%s' runs embedded and needs a database, but the application \
+                declares SEVERAL datasources: %s. Name the one this adapter id runs on:
+                  vanillabp.adapters.%s.data-source-name: <datasource name>
+                Use the reserved value 'default' for the application's default datasource. \
+                (Two adapter ids may also share one datasource if each uses its own \
+                'vanillabp.adapters.<id>.table-prefix'.)"""
+                .formatted(adapterId, declaredDataSources, adapterId));
+      }
+    }
+
+    final Instance<AgroalDataSource> selected = io.vanillabp.camunda7.engine.Camunda7EngineProperties
+        .isDefaultDataSourceName(dataSourceName)
+            ? dataSources.select(jakarta.enterprise.inject.Default.Literal.INSTANCE)
+            : dataSources.select(new io.quarkus.agroal.DataSource.DataSourceLiteral(dataSourceName));
     if (!selected.isResolvable()) {
-      if (dataSourceName == null) {
+      if (io.vanillabp.camunda7.engine.Camunda7EngineProperties.isDefaultDataSourceName(dataSourceName)) {
         throw new IllegalStateException(
             """
                 Camunda 7 adapter '%s' is configured ('vanillabp.adapters.%s.type: camunda7') but no \
@@ -182,52 +202,6 @@ public class Camunda7EngineProducer {
               }
             }));
     return names;
-
-  }
-
-  /**
-   * Fails the boot if more than one {@code camunda7} adapter id resolves to the
-   * same datasource: two embedded engines on one schema are the same engine state -
-   * configuring them as two adapters is an error (validated at startup, 26c style).
-   */
-  private static void validateDistinctDataSources(
-      final List<String> camunda7AdapterIds,
-      final VanillaBpCamunda7Properties overlay) {
-
-    if (camunda7AdapterIds.size() < 2) {
-      return;
-    }
-
-    final var idsByDataSource = new LinkedHashMap<String, List<String>>();
-    camunda7AdapterIds
-        .forEach(adapterId -> {
-          final var keys = overlay.adapters().get(adapterId);
-          final var effectiveDataSource = (keys == null)
-              ? "<the application's default datasource>"
-              : keys
-                  .dataSourceName()
-                  .orElse("<the application's default datasource>");
-          idsByDataSource
-              .computeIfAbsent(effectiveDataSource, key -> new LinkedList<>())
-              .add(adapterId);
-        });
-
-    idsByDataSource
-        .forEach((
-            dataSource,
-            adapterIds) -> {
-          if (adapterIds.size() < 2) {
-            return;
-          }
-          throw new IllegalStateException(
-              """
-                  The Camunda 7 adapters '%s' would share the same datasource (%s)! Two embedded \
-                  engines on one schema are the same engine state - configuring them as separate \
-                  adapters is an error. Give each additional adapter its own datasource: declare it \
-                  via 'quarkus.datasource.<name>.*' and reference it via \
-                  'vanillabp.adapters.<id>.data-source-name', or remove all but one of these adapters."""
-                  .formatted(String.join("', '", adapterIds), dataSource));
-        });
 
   }
 

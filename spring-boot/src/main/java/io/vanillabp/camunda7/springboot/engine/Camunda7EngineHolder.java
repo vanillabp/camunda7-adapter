@@ -183,6 +183,11 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     // Provide an engine-wide default so BPMN models need not declare it individually
     // (a process may still override it via camunda:historyTimeToLive).
     configuration.setHistoryTimeToLive(properties.getHistoryTimeToLive());
+    // an own table prefix makes two adapter ids distinct engines on ONE datasource
+    // (the side-by-side migration setup on a single database, story 34)
+    if ((properties.getTablePrefix() != null) && !properties.getTablePrefix().isBlank()) {
+      configuration.setDatabaseTablePrefix(properties.getTablePrefix());
+    }
 
     this.processEngine = configuration.buildProcessEngine();
     this.jobExecutorLifecycle = new Camunda7JobExecutorLifecycle(adapterId, this.jobExecutor);
