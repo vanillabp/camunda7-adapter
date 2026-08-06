@@ -295,6 +295,13 @@ public class Camunda7AdapterBootTest {
             io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker.class,
             () -> org.mockito.Mockito
                 .mock(io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker.class))
+        // the sync model (story 28) is contributed by the platform integration,
+        // which is not part of this minimal runner either
+        .withBean(
+            io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class,
+            () -> (
+                aggregate,
+                mode) -> java.util.Map.of())
         .withConfiguration(
             AutoConfigurations.of(
                 org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,

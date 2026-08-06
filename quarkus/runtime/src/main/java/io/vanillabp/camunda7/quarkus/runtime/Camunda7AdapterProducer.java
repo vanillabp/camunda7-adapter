@@ -35,7 +35,8 @@ public class Camunda7AdapterProducer {
   @Singleton
   public List<MigratableProcessService<Object>> camunda7MigratableProcessServices(
       final MigrationAdapterProperties properties,
-      final Camunda7QuarkusEngineRegistry engineRegistry) {
+      final Camunda7QuarkusEngineRegistry engineRegistry,
+      final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync) {
 
     return camunda7AdapterIds(properties)
         .stream()
@@ -43,7 +44,7 @@ public class Camunda7AdapterProducer {
           final var engine = engineRegistry.engineFor(adapterId);
           return new Camunda7ProcessService<>(
               adapterId, engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
-                  .getHistoryService(), engine.usesSeparateDataSource());
+                  .getHistoryService(), engine.usesSeparateDataSource(), aggregateSync);
         })
         .toList();
 

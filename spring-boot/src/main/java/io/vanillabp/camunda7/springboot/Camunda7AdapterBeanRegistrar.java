@@ -93,7 +93,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 return new Camunda7ProcessService<>(
                     adapterId, engine.getRuntimeService(), engine.getTaskService(), engine
                         .getRepositoryService(), engine.getHistoryService(), engine
-                            .usesSeparateDataSource());
+                            .usesSeparateDataSource(), supplierContext
+                                .bean(io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class));
               }));
 
           registry.registerBean(

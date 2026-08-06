@@ -70,6 +70,29 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    */
   private final org.camunda.bpm.engine.HistoryService historyService;
 
+  /**
+   * The core's sync model (story 28). Camunda 7 is EMBEDDED: BPMN expressions read
+   * the aggregate LIVE (see the EL resolver of story 21b), so nothing has to be
+   * pushed - the adapter's default is therefore
+   * {@link io.vanillabp.integration.adapter.spi.AggregateSyncMode#NONE}. What the
+   * application DOES share ({@code @SyncWithBPMS}) is written as process variables
+   * for one purpose only: context information for operators in Camunda's Cockpit.
+   * VanillaBP never reads those variables back (the aggregate is the truth); the
+   * only variables read are the ones a {@code @TaskParam} asks for, which the BPMN
+   * model provides deliberately.
+   */
+  private final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync;
+
+  /**
+   * The default of this adapter: nothing is shared unless the application asks for
+   * it ({@code @SyncWithBPMS}).
+   */
+  public static final io.vanillabp.integration.adapter.spi.AggregateSyncMode SYNC_MODE = io.vanillabp.integration.adapter.spi.AggregateSyncMode.NONE;
+
+  /**
+   * Convenience constructor without the sync model (tests) - no operator context
+   * is written then.
+   */
   public Camunda7ProcessService(
       final String adapterId,
       final RuntimeService runtimeService,
@@ -78,6 +101,20 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final org.camunda.bpm.engine.HistoryService historyService,
       final boolean usesSeparateDataSource) {
 
+    this(adapterId, runtimeService, taskService, repositoryService, historyService, usesSeparateDataSource, null);
+
+  }
+
+  public Camunda7ProcessService(
+      final String adapterId,
+      final RuntimeService runtimeService,
+      final org.camunda.bpm.engine.TaskService taskService,
+      final org.camunda.bpm.engine.RepositoryService repositoryService,
+      final org.camunda.bpm.engine.HistoryService historyService,
+      final boolean usesSeparateDataSource,
+      final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync) {
+
+    this.aggregateSync = aggregateSync;
     this.adapterId = adapterId;
     this.runtimeService = runtimeService;
     this.taskService = taskService;
@@ -128,6 +165,27 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String bpmnProcessId,
       final Object workflowAggregateId) {
 
+    return startProcessInstance(workflowModuleId, bpmnProcessId, workflowAggregateId, null);
+
+  }
+
+  /**
+   * Starts a process instance, writing the aggregate's shared attributes as
+   * process variables - CONTEXT INFORMATION FOR OPERATORS only (see
+   * {@link #aggregateSync}); nothing reads them back.
+   *
+   * @param workflowModuleId The workflow module ID (the Camunda tenant ID)
+   * @param bpmnProcessId The BPMN process ID to start
+   * @param workflowAggregateId The workflow-aggregate ID (the business key)
+   * @param aggregate The workflow aggregate or <code>null</code> if unavailable
+   * @return The started process instance
+   */
+  public ProcessInstance startProcessInstance(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final Object workflowAggregateId,
+      final A aggregate) {
+
     // the aggregate id was validated (non-null, non-blank) once in the core's
     // MigrationProcessService before phase one is invoked
     final var businessKey = String.valueOf(workflowAggregateId);
@@ -136,6 +194,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         .createProcessInstanceByKey(bpmnProcessId)
         .processDefinitionTenantId(workflowModuleId)
         .businessKey(businessKey)
+        .setVariables(operatorContext(aggregate))
         .execute();
 
     log.info(
@@ -147,6 +206,43 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         processInstance.getId());
 
     return processInstance;
+
+  }
+
+  /**
+   * The aggregate's shared attributes - written as process variables for operators
+   * (Cockpit context). Empty unless the application opted in, since this adapter's
+   * default is {@code NONE}.
+   *
+   * @param aggregate The workflow aggregate or <code>null</code>
+   * @return The variables (never <code>null</code>)
+   */
+  private java.util.Map<String, Object> operatorContext(
+      final A aggregate) {
+
+    if ((aggregateSync == null) || (aggregate == null)) {
+      return java.util.Map.of();
+    }
+    return java.util.Map.copyOf(aggregateSync.syncedValues(aggregate, SYNC_MODE));
+
+  }
+
+  /**
+   * Refreshes the operator context of a running workflow (see
+   * {@link #operatorContext}) - a no-op unless the application shares attributes.
+   *
+   * @param executionId The execution to write the variables at
+   * @param aggregate The workflow aggregate or <code>null</code>
+   */
+  private void refreshOperatorContext(
+      final String executionId,
+      final A aggregate) {
+
+    final var variables = operatorContext(aggregate);
+    if (variables.isEmpty()) {
+      return;
+    }
+    runtimeService.setVariables(executionId, variables);
 
   }
 
@@ -453,6 +549,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     if (usesSeparateDataSource) {
       return;
     }
+    refreshOperatorContext(taskId, workflowAggregate);
     signalTask(taskId, bpmnErrorCode, false);
 
   }
@@ -636,7 +733,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // module ID onto the Camunda tenant ID.
     final var aggregateId = aggregatePersistence.getAggregateId(workflowAggregate);
 
-    startProcessInstance(workflowModuleId, bpmnProcessId, aggregateId);
+    startProcessInstance(workflowModuleId, bpmnProcessId, aggregateId, workflowAggregate);
 
   }
 
