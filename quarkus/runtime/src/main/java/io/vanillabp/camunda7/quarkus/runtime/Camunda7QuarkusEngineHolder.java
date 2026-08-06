@@ -145,6 +145,12 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
 
   }
 
+  public org.camunda.bpm.engine.HistoryService getHistoryService() {
+
+    return processEngine.getHistoryService();
+
+  }
+
   /**
    * @return Whether this adapter id's engine runs on a NAMED datasource (see class
    *         comment)

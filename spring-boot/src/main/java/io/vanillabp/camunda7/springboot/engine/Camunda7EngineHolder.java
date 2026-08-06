@@ -248,6 +248,12 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
   }
 
+  public org.camunda.bpm.engine.HistoryService getHistoryService() {
+
+    return processEngine.getHistoryService();
+
+  }
+
   /**
    * @return Whether this adapter id's engine runs on a named datasource (see class
    *         comment)

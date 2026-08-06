@@ -6,7 +6,6 @@ import org.camunda.bpm.engine.runtime.ProcessInstance;
 import io.vanillabp.integration.adapter.spi.MigratableProcessService;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.spi.AggregatePersistenceAware;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -36,7 +35,6 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #startProcessInstance(String, String, Object)}.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   private final String adapterId;
@@ -59,6 +57,35 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * uses the two-phase pattern.
    */
   private final boolean usesSeparateDataSource;
+
+  /**
+   * The viewer/history API (story 26) - definitions, BPMN XML and the instance
+   * timeline, served by the engine's repository and history services.
+   */
+  private final Camunda7WorkflowViewer viewer;
+
+  /**
+   * The embedded engine's history service - workflow awareness of ENDED workflows
+   * and the viewer/history API.
+   */
+  private final org.camunda.bpm.engine.HistoryService historyService;
+
+  public Camunda7ProcessService(
+      final String adapterId,
+      final RuntimeService runtimeService,
+      final org.camunda.bpm.engine.TaskService taskService,
+      final org.camunda.bpm.engine.RepositoryService repositoryService,
+      final org.camunda.bpm.engine.HistoryService historyService,
+      final boolean usesSeparateDataSource) {
+
+    this.adapterId = adapterId;
+    this.runtimeService = runtimeService;
+    this.taskService = taskService;
+    this.usesSeparateDataSource = usesSeparateDataSource;
+    this.historyService = historyService;
+    this.viewer = new Camunda7WorkflowViewer(adapterId, repositoryService, historyService, runtimeService);
+
+  }
 
   @Override
   public String getAdapterId() {
@@ -166,16 +193,30 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   public WorkflowAwareness awarenessOfWorkflow(
       final Object workflowAggregateId) {
 
-    // the business key IS the aggregate ID; without engine history an ended
-    // instance is indistinguishable from a never-existing one - both map to
-    // UNKNOWN_TO_BPMS (the guiding error of the caller explains the causes)
+    // the business key IS the aggregate ID. A running instance means ACTIVE; an
+    // ENDED one is reported as COMPLETED as long as the engine's history still
+    // holds it (history level != NONE and within 'history-time-to-live') - the
+    // honest answer the SPI asks for: it keeps a re-dispatched start from
+    // starting a second instance of a workflow which already ran to its end, and
+    // it makes the viewer/history API work for ended workflows. Once the history
+    // was cleaned up an ended instance is indistinguishable from a never-existing
+    // one - both map to UNKNOWN_TO_BPMS (the caller's guiding error explains the
+    // causes).
     try {
       final var active = runtimeService
           .createProcessInstanceQuery()
           .processInstanceBusinessKey(String.valueOf(workflowAggregateId))
           .count() > 0;
-      return active
-          ? WorkflowAwareness.ACTIVE
+      if (active) {
+        return WorkflowAwareness.ACTIVE;
+      }
+      final var ended = historyService
+          .createHistoricProcessInstanceQuery()
+          .processInstanceBusinessKey(String.valueOf(workflowAggregateId))
+          .finished()
+          .count() > 0;
+      return ended
+          ? WorkflowAwareness.COMPLETED
           : WorkflowAwareness.UNKNOWN_TO_BPMS;
     } catch (final org.camunda.bpm.engine.ProcessEngineException e) {
       log.warn(
@@ -643,6 +684,41 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     }
 
     startProcessInstance(workflowModuleId, bpmnProcessId, workflowAggregateId);
+
+  }
+
+
+  @Override
+  public java.util.List<io.vanillabp.spi.process.ProcessDefinition> getProcessDefinitions(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String historyContext) {
+
+    return viewer.getProcessDefinitions(workflowModuleId, bpmnProcessId, workflowAggregateId, historyContext);
+
+  }
+
+  @Override
+  public java.io.InputStream getBpmnXml(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String processDefinitionId) {
+
+    return viewer.getBpmnXml(processDefinitionId);
+
+  }
+
+  @Override
+  public io.vanillabp.spi.process.WorkflowHistory getWorkflowHistory(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String historyContext) {
+
+    return viewer.getWorkflowHistory(workflowModuleId, bpmnProcessId, workflowAggregateId, historyContext);
 
   }
 

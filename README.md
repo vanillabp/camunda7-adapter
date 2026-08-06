@@ -294,6 +294,32 @@ vanillabp:
 An unknown `data-source-name` and two adapter ids sharing one datasource fail the
 boot with guiding messages.
 
+## Viewing workflows (story 26)
+
+`ProcessService#getProcessDefinitions`, `#getBpmnXml` and `#getWorkflowHistory` are answered
+from the embedded engine: `RepositoryService` (every deployed version incl. its BPMN XML) and
+`HistoryService` (instance timeline, incidents). Both are cheap local queries - there is
+neither an eventual-consistency lag nor an application-version boundary.
+
+- The workflow is addressed by **business key** (aggregate ID) + **tenant** (workflow module);
+  the adapter-native process definition id is Camunda's own (`MyProcess:1:8a9c…`), so the exact
+  version an instance runs on is reported.
+- `getProcessDefinitions` additionally reports the definitions the process' **call activities**
+  would call next (latest deployed version of the called process id in the same tenant);
+  call activities addressing their process by expression are skipped (only known at runtime).
+- The history context of an executed call activity is the **called process instance id**; a
+  context not belonging to the workflow is rejected and logged.
+- Camunda's fine-grained activity types are mapped onto the SPI's `WorkflowElementType`;
+  `error` carries the message of an OPEN incident of that activity.
+- **History level matters:** with history level `none` no element history exists - the adapter
+  then reports the definition and a `null` element history instead of failing. Ended workflows
+  stay viewable until `history-time-to-live` cleanup removes them; afterwards the core raises
+  the guiding `WorkflowNotFoundException`.
+- Because history is queried, this adapter also reports ENDED workflows as `COMPLETED` to
+  VanillaBP's BPMS election (instead of "unknown") - which is what makes viewing ended
+  workflows work and keeps a re-dispatched start from starting a second instance of a workflow
+  which already ran to its end.
+
 ## Known issues
 
 - **`camunda-bpm-spring-boot-starter:7.24.0` is incompatible with the Spring Boot 4.1
