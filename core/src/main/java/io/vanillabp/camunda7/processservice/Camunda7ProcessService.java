@@ -223,7 +223,9 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     if ((aggregateSync == null) || (aggregate == null)) {
       return java.util.Map.of();
     }
-    return java.util.Map.copyOf(aggregateSync.syncedValues(aggregate, SYNC_MODE));
+    // a plain copy, NOT Map.copyOf: a shared attribute may well be null and the
+    // engine stores a null variable just fine (Map.copyOf would throw)
+    return new java.util.LinkedHashMap<>(aggregateSync.syncedValues(aggregate, SYNC_MODE));
 
   }
 

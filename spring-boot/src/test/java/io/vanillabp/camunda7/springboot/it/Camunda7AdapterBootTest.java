@@ -299,9 +299,8 @@ public class Camunda7AdapterBootTest {
         // which is not part of this minimal runner either
         .withBean(
             io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class,
-            () -> (
-                aggregate,
-                mode) -> java.util.Map.of())
+            () -> org.mockito.Mockito
+                .mock(io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class))
         .withConfiguration(
             AutoConfigurations.of(
                 org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
