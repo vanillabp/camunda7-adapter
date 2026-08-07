@@ -7,8 +7,13 @@ package io.vanillabp.camunda7.wiring;
  * &rarr; <code>processPayment</code>) - VanillaBP's Camunda 7 convention: the
  * task's implementation expression names the task definition.
  *
- * @param workflowModuleId The workflow module (= Camunda tenant) ID
- * @param bpmnProcessId The BPMN process ID
+ * @param workflowModuleId The workflow module ID (the Camunda tenant, unless the
+ *          module's name-clash-avoidance mode uses no tenant)
+ * @param bpmnProcessId The PLAIN BPMN process ID - what the core's registries are
+ *          keyed by
+ * @param scopedBpmnProcessId The BPMN process ID AS THE ENGINE KNOWS IT (equal to
+ *          {@code bpmnProcessId} unless the module's identifiers are prefixed,
+ *          story 35)
  * @param elementId The BPMN activity ID
  * @param taskDefinition The unwrapped expression text
  * @param type How the BPMN wires the task (expression vs. delegate expression)
@@ -16,9 +21,24 @@ package io.vanillabp.camunda7.wiring;
 public record Camunda7TaskConnectable(
                                       String workflowModuleId,
                                       String bpmnProcessId,
+                                      String scopedBpmnProcessId,
                                       String elementId,
                                       String taskDefinition,
                                       Type type) {
+
+  /**
+   * Convenience constructor for an unscoped process (the engine knows the plain id).
+   */
+  public Camunda7TaskConnectable(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String elementId,
+      final String taskDefinition,
+      final Type type) {
+
+    this(workflowModuleId, bpmnProcessId, bpmnProcessId, elementId, taskDefinition, type);
+
+  }
 
   public enum Type {
     /**

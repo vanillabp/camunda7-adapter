@@ -47,8 +47,13 @@ public class Camunda7TaskCancellationListener implements ExecutionListener {
     }
 
     final var processDefinition = executionEntity.getProcessDefinition();
-    final var workflowModuleId = processDefinition.getTenantId();
-    final var bpmnProcessId = processDefinition.getKey();
+    // story 35: the tenant answers the workflow module only while the module IS
+    // isolated by one - with prefixed identifiers the registry knows which module a
+    // process definition key belongs to, and what its plain id is
+    final var scopedBpmnProcessId = processDefinition.getKey();
+    final var workflowModuleId = taskRegistry
+        .resolveWorkflowModuleId(processDefinition.getTenantId(), scopedBpmnProcessId);
+    final var bpmnProcessId = taskRegistry.plainBpmnProcessId(workflowModuleId, scopedBpmnProcessId);
 
     final var connectable = taskRegistry.resolve(
         workflowModuleId,

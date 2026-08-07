@@ -36,15 +36,19 @@ public class Camunda7AdapterProducer {
   public List<MigratableProcessService<Object>> camunda7MigratableProcessServices(
       final MigrationAdapterProperties properties,
       final Camunda7QuarkusEngineRegistry engineRegistry,
-      final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync) {
+      final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync,
+      final VanillaBpCamunda7Properties overlay,
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping) {
 
     return camunda7AdapterIds(properties)
         .stream()
         .<MigratableProcessService<Object>>map(adapterId -> {
           final var engine = engineRegistry.engineFor(adapterId);
-          return new Camunda7ProcessService<>(
+          final var processService = new Camunda7ProcessService<>(
               adapterId, engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
                   .getHistoryService(), engine.usesSeparateDataSource(), aggregateSync);
+          processService.setScoping(scoping, configuredTenantIdOf(overlay, adapterId));
+          return processService;
         })
         .toList();
 
@@ -59,15 +63,19 @@ public class Camunda7AdapterProducer {
       final MigrationAdapterProperties properties,
       final Camunda7QuarkusEngineRegistry engineRegistry,
       final WorkflowTaskRegistry workflowTaskRegistry,
-      final VanillaBpCamunda7Properties overlay) {
+      final VanillaBpCamunda7Properties overlay,
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping) {
 
     return (List) camunda7AdapterIds(properties)
         .stream()
         .map(adapterId -> {
           final var engine = engineRegistry.engineFor(adapterId);
-          return new Camunda7DeploymentService(
+          final var deploymentService = new Camunda7DeploymentService(
               adapterId, engine.getRepositoryService(), engine, workflowTaskRegistry, engine
                   .getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
+          deploymentService.setScoping(scoping);
+          deploymentService.setConfiguredTenantId(configuredTenantIdOf(overlay, adapterId));
+          return deploymentService;
         })
         .toList();
 
@@ -110,6 +118,24 @@ public class Camunda7AdapterProducer {
                     : keys
                         .tablePrefix()
                         .orElse(null));
+
+  }
+
+
+  /**
+   * The tenant name configured for an adapter id or <code>null</code> - the workflow
+   * module id names the tenant then (story 35).
+   */
+  private static String configuredTenantIdOf(
+      final VanillaBpCamunda7Properties overlay,
+      final String adapterId) {
+
+    final var adapter = overlay
+        .adapters()
+        .get(adapterId);
+    return adapter != null
+        ? adapter.tenantId().orElse(null)
+        : null;
 
   }
 

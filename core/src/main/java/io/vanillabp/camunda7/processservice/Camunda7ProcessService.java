@@ -90,6 +90,117 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   public static final io.vanillabp.integration.adapter.spi.AggregateSyncMode SYNC_MODE = io.vanillabp.integration.adapter.spi.AggregateSyncMode.NONE;
 
   /**
+   * The core's name-clash-avoidance model (story 35): translates process ids, message
+   * names and error codes into what the ENGINE knows, and decides whether operations
+   * run in a Camunda tenant. May be <code>null</code> (tests): the workflow module id
+   * is the tenant then, as before.
+   */
+  private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
+
+  /**
+   * The tenant name configured for this adapter id or <code>null</code> (then the
+   * workflow module id names the tenant).
+   */
+  private String configuredTenantId;
+
+  /**
+   * Sets the name-clash-avoidance support and the configured tenant name (the
+   * platform modules construct this service and inject them afterwards).
+   *
+   * @param scoping The name-clash-avoidance support
+   * @param configuredTenantId The configured tenant name or <code>null</code>
+   */
+  public void setScoping(
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping,
+      final String configuredTenantId) {
+
+    this.scoping = scoping;
+    this.configuredTenantId = configuredTenantId;
+
+  }
+
+  /**
+   * Correlates a message which STARTS a workflow, honoring the module's tenant
+   * (story 35: there may be none).
+   */
+  private void startByMessage(
+      final String workflowModuleId,
+      final String messageName,
+      final String businessKey) {
+
+    var correlation = runtimeService
+        .createMessageCorrelation(scopedIdentifier(workflowModuleId, messageName))
+        .processInstanceBusinessKey(businessKey);
+    final var tenantId = tenantIdOf(workflowModuleId);
+    correlation = tenantId != null
+        ? correlation.tenantId(tenantId)
+        : correlation.withoutTenantId();
+    correlation.correlateStartMessage();
+
+  }
+
+  /**
+   * Whether a RUNNING instance of the given workflow exists - the idempotency check
+   * of the two-phase start. Honors the module's tenant and the scoped process id
+   * (story 35).
+   */
+  private boolean instanceExists(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String businessKey) {
+
+    var query = runtimeService
+        .createProcessInstanceQuery()
+        .processInstanceBusinessKey(businessKey)
+        .processDefinitionKey(scopedProcessId(workflowModuleId, bpmnProcessId));
+    final var tenantId = tenantIdOf(workflowModuleId);
+    query = tenantId != null
+        ? query.tenantIdIn(tenantId)
+        : query.withoutTenantId();
+    return query.count() > 0;
+
+  }
+
+  /**
+   * The BPMN process id as the engine knows it.
+   */
+  private String scopedProcessId(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    return scoping == null
+        ? bpmnProcessId
+        : scoping.scopedProcessId(workflowModuleId, bpmnProcessId, adapterId);
+
+  }
+
+  /**
+   * A message name / error code as the engine knows it.
+   */
+  private String scopedIdentifier(
+      final String workflowModuleId,
+      final String identifier) {
+
+    return scoping == null
+        ? identifier
+        : scoping.scopedIdentifier(workflowModuleId, identifier, adapterId);
+
+  }
+
+  /**
+   * The Camunda tenant an operation runs in, or <code>null</code> when the module's
+   * mode uses no tenant (story 35).
+   */
+  private String tenantIdOf(
+      final String workflowModuleId) {
+
+    return scoping == null
+        ? workflowModuleId
+        : scoping.tenantIdFor(workflowModuleId, null, adapterId, configuredTenantId);
+
+  }
+
+  /**
    * Convenience constructor without the sync model (tests) - no operator context
    * is written then.
    */
@@ -190,9 +301,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // MigrationProcessService before phase one is invoked
     final var businessKey = String.valueOf(workflowAggregateId);
 
-    final var processInstance = runtimeService
-        .createProcessInstanceByKey(bpmnProcessId)
-        .processDefinitionTenantId(workflowModuleId)
+    final var tenantId = tenantIdOf(workflowModuleId);
+    var builder = runtimeService
+        .createProcessInstanceByKey(scopedProcessId(workflowModuleId, bpmnProcessId));
+    builder = tenantId != null
+        ? builder.processDefinitionTenantId(tenantId)
+        : builder.processDefinitionWithoutTenantId();
+    final var processInstance = builder
         .businessKey(businessKey)
         .setVariables(operatorContext(aggregate))
         .execute();
@@ -491,7 +606,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     if (usesSeparateDataSource) {
       return;
     }
-    executeUserTask(taskId, bpmnErrorCode, false);
+    executeUserTask(taskId, scopedIdentifier(workflowModuleId, bpmnErrorCode), false);
 
   }
 
@@ -504,7 +619,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String taskId,
       final String bpmnErrorCode) {
 
-    executeUserTask(taskId, bpmnErrorCode, true);
+    executeUserTask(taskId, scopedIdentifier(workflowModuleId, bpmnErrorCode), true);
 
   }
 
@@ -552,7 +667,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       return;
     }
     refreshOperatorContext(taskId, workflowAggregate);
-    signalTask(taskId, bpmnErrorCode, false);
+    signalTask(taskId, scopedIdentifier(workflowModuleId, bpmnErrorCode), false);
 
   }
 
@@ -565,7 +680,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String taskId,
       final String bpmnErrorCode) {
 
-    signalTask(taskId, bpmnErrorCode, true);
+    signalTask(taskId, scopedIdentifier(workflowModuleId, bpmnErrorCode), true);
 
   }
 
@@ -594,9 +709,12 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String correlationId) {
 
     var correlation = runtimeService
-        .createMessageCorrelation(messageName)
-        .tenantId(workflowModuleId)
+        .createMessageCorrelation(scopedIdentifier(workflowModuleId, messageName))
         .processInstanceBusinessKey(businessKey);
+    final var correlationTenantId = tenantIdOf(workflowModuleId);
+    correlation = correlationTenantId != null
+        ? correlation.tenantId(correlationTenantId)
+        : correlation.withoutTenantId();
     if (correlationId != null) {
       // V1 convention: the local variable '<bpmnProcessId>-<messageName>' at the
       // subscription's execution holds the expected correlation id
@@ -672,11 +790,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       return;
     }
     final var businessKey = String.valueOf(aggregatePersistence.getAggregateId(workflowAggregate));
-    runtimeService
-        .createMessageCorrelation(messageName)
-        .tenantId(workflowModuleId)
-        .processInstanceBusinessKey(businessKey)
-        .correlateStartMessage();
+    startByMessage(workflowModuleId, messageName, businessKey);
 
   }
 
@@ -691,12 +805,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // at-least-once: skip if an instance for this aggregate already exists (the
     // same idempotency contract as startWorkflowPhaseTwo)
     final var businessKey = String.valueOf(workflowAggregateId);
-    final var alreadyStarted = runtimeService
-        .createProcessInstanceQuery()
-        .processInstanceBusinessKey(businessKey)
-        .processDefinitionKey(bpmnProcessId)
-        .tenantIdIn(workflowModuleId)
-        .count() > 0;
+    final var alreadyStarted = instanceExists(workflowModuleId, bpmnProcessId, businessKey);
     if (alreadyStarted) {
       log.info(
           "Camunda7[{}]: workflow '{}' of module '{}' was already started for aggregate '{}' - "
@@ -707,11 +816,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
           businessKey);
       return;
     }
-    runtimeService
-        .createMessageCorrelation(messageName)
-        .tenantId(workflowModuleId)
-        .processInstanceBusinessKey(businessKey)
-        .correlateStartMessage();
+    startByMessage(workflowModuleId, messageName, businessKey);
 
   }
 
@@ -765,12 +870,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // if a running instance for this aggregate already exists (idempotency key:
     // business key + tenant + process)
     final var businessKey = String.valueOf(workflowAggregateId);
-    final var alreadyStarted = runtimeService
-        .createProcessInstanceQuery()
-        .processInstanceBusinessKey(businessKey)
-        .processDefinitionKey(bpmnProcessId)
-        .tenantIdIn(workflowModuleId)
-        .count() > 0;
+    final var alreadyStarted = instanceExists(workflowModuleId, bpmnProcessId, businessKey);
     if (alreadyStarted) {
       log.info(
           "Camunda7[{}]: workflow '{}' of module '{}' was already started for aggregate '{}' - "
@@ -795,7 +895,12 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String historyContext) {
 
-    return viewer.getProcessDefinitions(workflowModuleId, bpmnProcessId, workflowAggregateId, historyContext);
+    return viewer.getProcessDefinitions(
+        workflowModuleId,
+        scopedProcessId(workflowModuleId, bpmnProcessId),
+        tenantIdOf(workflowModuleId),
+        workflowAggregateId,
+        historyContext);
 
   }
 
@@ -817,7 +922,12 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String historyContext) {
 
-    return viewer.getWorkflowHistory(workflowModuleId, bpmnProcessId, workflowAggregateId, historyContext);
+    return viewer.getWorkflowHistory(
+        workflowModuleId,
+        scopedProcessId(workflowModuleId, bpmnProcessId),
+        tenantIdOf(workflowModuleId),
+        workflowAggregateId,
+        historyContext);
 
   }
 

@@ -45,6 +45,13 @@ public class Camunda7EngineProperties {
 
   private String tablePrefix;
 
+  /**
+   * The Camunda tenant a workflow module is deployed to under the name-clash
+   * avoidance mode {@code by-adapter} (story 35). Unset (the default) means the
+   * workflow module ID is the tenant - VanillaBP 1's behavior.
+   */
+  private String tenantId;
+
   public String getDatabaseSchemaUpdate() {
     return databaseSchemaUpdate;
   }
@@ -61,6 +68,15 @@ public class Camunda7EngineProperties {
   public void setHistoryTimeToLive(
       final String historyTimeToLive) {
     this.historyTimeToLive = historyTimeToLive;
+  }
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+  public void setTenantId(
+      final String tenantId) {
+    this.tenantId = tenantId;
   }
 
   public String getTablePrefix() {

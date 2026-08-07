@@ -26,6 +26,19 @@ public class Camunda7TaskELResolver extends ELResolver {
 
   private final Camunda7TaskRegistry taskRegistry;
 
+  /**
+   * Story 35: needed to translate a {@code TaskException}'s error code into what the
+   * engine knows. Settable - the resolver is created by the engine configuration.
+   */
+  @lombok.Setter
+  private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
+
+  /**
+   * The adapter id this resolver serves (story 35).
+   */
+  @lombok.Setter
+  private String adapterId;
+
   private final WorkflowTaskInvoker workflowTaskInvoker;
 
   public Camunda7TaskELResolver(
@@ -58,10 +71,14 @@ public class Camunda7TaskELResolver extends ELResolver {
       return null;
     }
 
-    final var workflowModuleId = execution.getTenantId();
-    final var bpmnProcessId = execution
+    // story 35: without a tenant (prefixed identifiers) the registry answers which
+    // workflow module a process definition key belongs to, and its plain id
+    final var scopedBpmnProcessId = execution
         .getProcessDefinition()
         .getKey();
+    final var workflowModuleId = taskRegistry
+        .resolveWorkflowModuleId(execution.getTenantId(), scopedBpmnProcessId);
+    final var bpmnProcessId = taskRegistry.plainBpmnProcessId(workflowModuleId, scopedBpmnProcessId);
     final var currentElement = execution.getBpmnModelElementInstance();
     final var currentElementId = currentElement != null
         ? currentElement.getId()
@@ -71,7 +88,7 @@ public class Camunda7TaskELResolver extends ELResolver {
     final var connectable = taskRegistry
         .resolve(
             workflowModuleId,
-            bpmnProcessId,
+            scopedBpmnProcessId,
             currentElementId,
             propertyName)
         // user-task connectables (story 24) are served by task listeners, never
@@ -80,7 +97,8 @@ public class Camunda7TaskELResolver extends ELResolver {
         .filter(candidate -> candidate.type() != Camunda7TaskConnectable.Type.USER_TASK);
     if (connectable.isPresent()) {
       context.setPropertyResolved(true);
-      final var behavior = new Camunda7WorkflowTaskBehavior(connectable.get(), workflowTaskInvoker);
+      final var behavior = new Camunda7WorkflowTaskBehavior(
+          connectable.get(), workflowTaskInvoker, scoping, adapterId);
       if (connectable.get().type() == Camunda7TaskConnectable.Type.DELEGATE_EXPRESSION) {
         // the engine treats the resolved object as the task's activity behavior
         return behavior;

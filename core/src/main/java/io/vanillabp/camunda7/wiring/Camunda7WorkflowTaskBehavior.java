@@ -52,12 +52,44 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
   private final WorkflowTaskInvoker workflowTaskInvoker;
 
+  /**
+   * Translates the error code of a {@code TaskException} into what the engine knows
+   * (story 35: the model's error codes are prefixed too). May be <code>null</code>.
+   */
+  private final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
+
+  private final String adapterId;
+
   public Camunda7WorkflowTaskBehavior(
       final Camunda7TaskConnectable connectable,
       final WorkflowTaskInvoker workflowTaskInvoker) {
 
+    this(connectable, workflowTaskInvoker, null, null);
+
+  }
+
+  public Camunda7WorkflowTaskBehavior(
+      final Camunda7TaskConnectable connectable,
+      final WorkflowTaskInvoker workflowTaskInvoker,
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping,
+      final String adapterId) {
+
     this.connectable = connectable;
     this.workflowTaskInvoker = workflowTaskInvoker;
+    this.scoping = scoping;
+    this.adapterId = adapterId;
+
+  }
+
+  /**
+   * The BPMN error code as the engine knows it.
+   */
+  private String scopedErrorCode(
+      final String errorCode) {
+
+    return (scoping == null) || (adapterId == null)
+        ? errorCode
+        : scoping.scopedIdentifier(connectable.workflowModuleId(), errorCode, adapterId);
 
   }
 
@@ -123,8 +155,8 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
       // error-boundary routing; the aggregate changes were saved and commit
       // with the engine's transaction (the V1 contract)
       throw outcome.errorName() != null
-          ? new BpmnError(outcome.errorCode(), outcome.errorName())
-          : new BpmnError(outcome.errorCode());
+          ? new BpmnError(scopedErrorCode(outcome.errorCode()), outcome.errorName())
+          : new BpmnError(scopedErrorCode(outcome.errorCode()));
     }
     return outcome;
 

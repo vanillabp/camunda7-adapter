@@ -70,11 +70,12 @@ public class Camunda7WorkflowViewer {
   public List<ProcessDefinition> getProcessDefinitions(
       final String workflowModuleId,
       final String bpmnProcessId,
+      final String tenantId,
       final Object workflowAggregateId,
       final String historyContext) {
 
     final var processDefinitionId = resolveProcessDefinitionId(
-        workflowModuleId, bpmnProcessId, workflowAggregateId, historyContext);
+        workflowModuleId, bpmnProcessId, tenantId, workflowAggregateId, historyContext);
     if (processDefinitionId == null) {
       return List.of();
     }
@@ -88,7 +89,7 @@ public class Camunda7WorkflowViewer {
             processDefinition.getId(), processDefinition.getKey(), String
                 .valueOf(processDefinition.getVersion()), null));
     definitions.addAll(
-        calledDefinitions(workflowModuleId, processDefinitionId));
+        calledDefinitions(workflowModuleId, tenantId, processDefinitionId));
     return definitions;
 
   }
@@ -128,18 +129,19 @@ public class Camunda7WorkflowViewer {
   public WorkflowHistory getWorkflowHistory(
       final String workflowModuleId,
       final String bpmnProcessId,
+      final String tenantId,
       final Object workflowAggregateId,
       final String historyContext) {
 
     final var historicInstance = resolveHistoricInstance(
-        workflowModuleId, bpmnProcessId, workflowAggregateId, historyContext);
+        workflowModuleId, bpmnProcessId, tenantId, workflowAggregateId, historyContext);
     if (historicInstance == null) {
       // no history at all: either the engine runs with history level NONE or the
       // instance's history was already cleaned up (history-time-to-live). The
       // running instance still allows reporting the definition it runs on - the
       // element history is unavailable, which the SPI expresses as null.
       final var processDefinitionId = resolveProcessDefinitionId(
-          workflowModuleId, bpmnProcessId, workflowAggregateId, historyContext);
+          workflowModuleId, bpmnProcessId, tenantId, workflowAggregateId, historyContext);
       if (processDefinitionId == null) {
         return null;
       }
@@ -185,11 +187,12 @@ public class Camunda7WorkflowViewer {
   private String resolveProcessDefinitionId(
       final String workflowModuleId,
       final String bpmnProcessId,
+      final String tenantId,
       final Object workflowAggregateId,
       final String historyContext) {
 
     final var historicInstance = resolveHistoricInstance(
-        workflowModuleId, bpmnProcessId, workflowAggregateId, historyContext);
+        workflowModuleId, bpmnProcessId, tenantId, workflowAggregateId, historyContext);
     if (historicInstance != null) {
       return historicInstance.getProcessDefinitionId();
     }
@@ -208,7 +211,7 @@ public class Camunda7WorkflowViewer {
         .createProcessInstanceQuery()
         .processInstanceBusinessKey(String.valueOf(workflowAggregateId))
         .processDefinitionKey(bpmnProcessId)
-        .tenantIdIn(workflowModuleId)
+        .tenantIdIn(tenantId)
         .singleResult();
     return instance == null
         ? null
@@ -225,6 +228,7 @@ public class Camunda7WorkflowViewer {
   private HistoricProcessInstance resolveHistoricInstance(
       final String workflowModuleId,
       final String bpmnProcessId,
+      final String tenantId,
       final Object workflowAggregateId,
       final String historyContext) {
 
@@ -232,7 +236,7 @@ public class Camunda7WorkflowViewer {
         .createHistoricProcessInstanceQuery()
         .processInstanceBusinessKey(String.valueOf(workflowAggregateId))
         .processDefinitionKey(bpmnProcessId)
-        .tenantIdIn(workflowModuleId)
+        .tenantIdIn(tenantId)
         .orderByProcessInstanceStartTime()
         .desc()
         .list()
@@ -280,6 +284,7 @@ public class Camunda7WorkflowViewer {
    */
   private List<ProcessDefinition> calledDefinitions(
       final String workflowModuleId,
+      final String tenantId,
       final String processDefinitionId) {
 
     final var model = repositoryService
@@ -315,7 +320,7 @@ public class Camunda7WorkflowViewer {
       final var latest = repositoryService
           .createProcessDefinitionQuery()
           .processDefinitionKey(calledProcessId)
-          .tenantIdIn(workflowModuleId)
+          .tenantIdIn(tenantId)
           .latestVersion()
           .singleResult();
       if (latest == null) {

@@ -90,11 +90,15 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
               Camunda7ProcessService.class,
               spec -> spec.supplier(supplierContext -> {
                 final var engine = engineHolder(supplierContext, adapterId);
-                return new Camunda7ProcessService<>(
+                final var processService = new Camunda7ProcessService<>(
                     adapterId, engine.getRuntimeService(), engine.getTaskService(), engine
                         .getRepositoryService(), engine.getHistoryService(), engine
                             .usesSeparateDataSource(), supplierContext
                                 .bean(io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class));
+                processService.setScoping(
+                    supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class),
+                    configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
+                return processService;
               }));
 
           registry.registerBean(
@@ -102,10 +106,15 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
               Camunda7DeploymentService.class,
               spec -> spec.supplier(supplierContext -> {
                 final var engine = engineHolder(supplierContext, adapterId);
-                return new Camunda7DeploymentService(
+                final var deploymentService = new Camunda7DeploymentService(
                     adapterId, engine.getRepositoryService(), engine, supplierContext
                         .bean(WorkflowTaskInvoker.class), engine.getTaskRegistry(), id -> instanceIdentityOf(
                             environment, id));
+                deploymentService.setScoping(
+                    supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class));
+                deploymentService.setConfiguredTenantId(
+                    configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
+                return deploymentService;
               }));
 
           // named convenience beans, e.g. for tests and applications integrating
@@ -251,6 +260,25 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
     } catch (final RuntimeException e) {
       return List.of();
     }
+
+  }
+
+
+  /**
+   * The tenant name configured for an adapter id
+   * (<code>vanillabp.adapters.&lt;id&gt;.tenant-id</code>) or <code>null</code> - the
+   * workflow module id names the tenant then (story 35).
+   */
+  private static String configuredTenantIdOf(
+      final VanillaBpCamunda7Properties overlay,
+      final String adapterId) {
+
+    final var adapter = overlay
+        .getAdapters()
+        .get(adapterId);
+    return adapter != null
+        ? adapter.getTenantId()
+        : null;
 
   }
 

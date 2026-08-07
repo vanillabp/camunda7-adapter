@@ -77,6 +77,13 @@ public interface VanillaBpCamunda7Properties {
      */
     Optional<String> tablePrefix();
 
+    /**
+     * OPTIONAL name of the Camunda tenant a workflow module is deployed to under the
+     * name-clash-avoidance mode <code>by-adapter</code> (story 35). Without it the
+     * workflow module ID names the tenant - VanillaBP 1's behavior.
+     */
+    Optional<String> tenantId();
+
   }
 
 }

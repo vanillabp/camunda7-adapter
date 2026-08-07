@@ -84,6 +84,74 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   private final Camunda7TaskRegistry taskRegistry;
 
   /**
+   * The core's name-clash-avoidance model (story 35): decides whether a workflow
+   * module is isolated by the Camunda TENANT ({@code by-adapter}, the default and
+   * version 1's behavior), by PREFIXING the identifiers ({@code use-prefix} - no
+   * tenant) or not at all ({@code none}). May be <code>null</code> (tests).
+   */
+  private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
+
+  /**
+   * The tenant name configured for this adapter id
+   * (<code>vanillabp.adapters.&lt;id&gt;.tenant-id</code>) or <code>null</code> - then
+   * the workflow module ID names the tenant (VanillaBP 1's behavior).
+   */
+  private String configuredTenantId;
+
+  /**
+   * Sets the configured tenant name (the platform modules read it from the adapter's
+   * configuration).
+   *
+   * @param configuredTenantId The tenant name or <code>null</code>
+   */
+  public void setConfiguredTenantId(
+      final String configuredTenantId) {
+
+    this.configuredTenantId = configuredTenantId;
+
+  }
+
+  /**
+   * Sets the name-clash-avoidance support (the platform modules construct this
+   * service and inject it afterwards).
+   *
+   * @param scoping The name-clash-avoidance support
+   */
+  public void setScoping(
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping) {
+
+    this.scoping = scoping;
+
+  }
+
+  /**
+   * The BPMN process id as the ENGINE knows it (prefixed when the module's mode is
+   * {@code use-prefix}).
+   */
+  private String scopedProcessId(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    return scoping == null
+        ? bpmnProcessId
+        : scoping.scopedProcessId(workflowModuleId, bpmnProcessId, adapterId);
+
+  }
+
+  /**
+   * The Camunda tenant a workflow module is deployed to - the module id under
+   * {@code by-adapter}, none under {@code use-prefix}/{@code none} (story 35).
+   */
+  private String tenantIdOf(
+      final String workflowModuleId) {
+
+    return scoping == null
+        ? workflowModuleId
+        : scoping.tenantIdFor(workflowModuleId, null, adapterId, configuredTenantId);
+
+  }
+
+  /**
    * The namespace of Camunda's BPMN extension attributes. Kept as ONE constant and
    * read namespace-generically ({@code getAttributeValueNs}) - fork portability
    * (Operaton/CIB seven renamed the typed extension getters, the attribute
@@ -212,7 +280,19 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     final var context = existingContext != null
         ? existingContext
         : new Camunda7ProcessingContext(workflowModuleId);
+    // story 35: rewrite the identifiers the engine resolves across process
+    // definitions BEFORE wiring - a no-op unless the mode is 'use-prefix'. The core
+    // calls prepareBpmn once per executable PROCESS while all processes of a file
+    // share ONE model, so scoping has to happen once per FILE - otherwise a
+    // multi-process file would collect one prefix per process.
+    final var modelAlreadyScoped = context
+        .getResourcesByFilename()
+        .containsKey(filename);
+    if (!modelAlreadyScoped) {
+      io.vanillabp.camunda7.wiring.Camunda7Scoping.apply(model, workflowModuleId, adapterId, scoping);
+    }
     context.addResource(filename, model);
+    context.recordDeployedProcess(bpmnProcessId);
     return context;
 
   }
@@ -231,7 +311,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // stay open) - the unwrapped expression text is the task definition
     final var specs = new LinkedList<BpmnTaskSpec>();
     final var connectables = new LinkedList<Camunda7TaskConnectable>();
-    serviceLikeTasksOf(model, bpmnProcessId)
+    // the model carries the identifiers the ENGINE will know (prepareBpmn rewrote
+    // them), while the core is keyed by the plain ones - so the model is searched
+    // by the scoped id and the invoker is called with the plain one (story 35)
+    final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
+    serviceLikeTasksOf(model, scopedBpmnProcessId)
         .forEach(task -> {
           final var delegateExpression = task.getAttributeValueNs(CAMUNDA_NS, "delegateExpression");
           final var expression = task.getAttributeValueNs(CAMUNDA_NS, "expression");
@@ -263,7 +347,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
               rawExpression, task.getId(), bpmnProcessId, filename, workflowModuleId);
           specs.add(new BpmnTaskSpec(task.getId(), taskDefinition));
           connectables.add(new Camunda7TaskConnectable(
-              workflowModuleId, bpmnProcessId, task.getId(), taskDefinition, type));
+              workflowModuleId, bpmnProcessId, scopedBpmnProcessId, task.getId(), taskDefinition, type));
         });
 
     // user tasks (story 24): the task definition is the camunda:formKey; a
@@ -272,12 +356,13 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     model
         .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.UserTask.class)
         .stream()
-        .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
+        .filter(task -> scopedBpmnProcessId.equals(owningProcessId(task)))
         .forEach(task -> {
           final var formKey = task.getAttributeValueNs(CAMUNDA_NS, "formKey");
           specs.add(BpmnTaskSpec.userTask(task.getId(), formKey));
           connectables.add(new Camunda7TaskConnectable(
-              workflowModuleId, bpmnProcessId, task.getId(), formKey, Camunda7TaskConnectable.Type.USER_TASK));
+              workflowModuleId, bpmnProcessId, scopedBpmnProcessId, task
+                  .getId(), formKey, Camunda7TaskConnectable.Type.USER_TASK));
         });
 
     // both directions with guiding messages; throwing here honors the
@@ -363,14 +448,28 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     // one deployment per workflow module; tenant id = workflow module id isolates BPMN
     // process ids between modules; duplicate filtering avoids redeploying unchanged models
-    final var deploymentBuilder = repositoryService
+    // story 35: whether the module is isolated by a tenant is the mode's decision
+    final var tenantId = tenantIdOf(workflowModuleId);
+    if (scoping != null) {
+      scoping.validateNoCollidingProcessIds(
+          adapterId,
+          bpmsProcessingContext
+              .getDeployedProcessIds()
+              .stream()
+              .map(processId -> new io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.DeployedProcess(
+                  workflowModuleId, processId))
+              .toList());
+    }
+    var deploymentBuilder = repositoryService
         .createDeployment()
         .name(workflowModuleId)
         .source(ADAPTER_TYPE
             + ":"
             + adapterId)
-        .tenantId(workflowModuleId)
         .enableDuplicateFiltering(true);
+    if (tenantId != null) {
+      deploymentBuilder = deploymentBuilder.tenantId(tenantId);
+    }
 
     bpmsProcessingContext
         .getResourcesByFilename()
@@ -383,7 +482,9 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         adapterId,
         bpmsProcessingContext.getResourcesByFilename().size(),
         workflowModuleId,
-        workflowModuleId,
+        tenantId != null
+            ? tenantId
+            : "<none>",
         deployment.getId());
 
   }

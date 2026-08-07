@@ -82,8 +82,8 @@ public class Camunda7WorkflowViewerTest {
     withoutHistory();
     when(instanceQuery.singleResult()).thenReturn(null);
 
-    assertEquals(List.of(), viewer.getProcessDefinitions("module", "Process", "42", null));
-    assertNull(viewer.getWorkflowHistory("module", "Process", "42", null));
+    assertEquals(List.of(), viewer.getProcessDefinitions("module", "Process", "module", "42", null));
+    assertNull(viewer.getWorkflowHistory("module", "Process", "module", "42", null));
 
   }
 
@@ -112,13 +112,13 @@ public class Camunda7WorkflowViewerTest {
         .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.CallActivity.class))
         .thenReturn(List.of());
 
-    final var definitions = viewer.getProcessDefinitions("module", "Process", "42", null);
+    final var definitions = viewer.getProcessDefinitions("module", "Process", "module", "42", null);
     assertEquals(1, definitions.size());
     assertEquals("Process:1:aaa", definitions
         .getFirst()
         .id());
 
-    final var history = viewer.getWorkflowHistory("module", "Process", "42", null);
+    final var history = viewer.getWorkflowHistory("module", "Process", "module", "42", null);
     assertEquals("Process:1:aaa", history.processDefinitionId());
     assertNull(history.startTime());
     assertNull(
@@ -140,8 +140,8 @@ public class Camunda7WorkflowViewerTest {
     when(historicInstanceQuery.singleResult()).thenReturn(foreignInstance);
     when(instanceQuery.singleResult()).thenReturn(null);
 
-    assertEquals(List.of(), viewer.getProcessDefinitions("module", "Process", "42", "foreign-context"));
-    assertNull(viewer.getWorkflowHistory("module", "Process", "42", "foreign-context"));
+    assertEquals(List.of(), viewer.getProcessDefinitions("module", "Process", "module", "42", "foreign-context"));
+    assertNull(viewer.getWorkflowHistory("module", "Process", "module", "42", "foreign-context"));
 
   }
 
@@ -235,7 +235,7 @@ public class Camunda7WorkflowViewerTest {
         .thenReturn(List.of(byExpression, blank, notDeployed));
     when(definitionQuery.singleResult()).thenReturn(null);
 
-    final var definitions = viewer.getProcessDefinitions("module", "Process", "42", null);
+    final var definitions = viewer.getProcessDefinitions("module", "Process", "module", "42", null);
 
     assertEquals(1, definitions.size(), () -> "only the workflow's own definition is resolvable but got: "
         + definitions);

@@ -301,6 +301,12 @@ public class Camunda7AdapterBootTest {
             io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class,
             () -> org.mockito.Mockito
                 .mock(io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class))
+        // the name-clash-avoidance support (story 35) is contributed by the platform
+        // integration, too
+        .withBean(
+            io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class,
+            () -> org.mockito.Mockito
+                .mock(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class))
         .withConfiguration(
             AutoConfigurations.of(
                 org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
