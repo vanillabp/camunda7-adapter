@@ -24,6 +24,7 @@ import io.vanillabp.camunda7.engine.Camunda7InstanceIdentity;
 import io.vanillabp.camunda7.wiring.Camunda7TaskConnectable;
 import io.vanillabp.camunda7.wiring.Camunda7TaskRegistry;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
+import io.vanillabp.integration.adapter.spi.AdapterPlatformVersion;
 import io.vanillabp.integration.adapter.spi.BpmnParseException;
 import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
@@ -191,6 +192,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final WorkflowTaskInvoker workflowTaskInvoker,
       final Camunda7TaskRegistry taskRegistry,
       final java.util.function.Function<String, Camunda7InstanceIdentity> instanceIdentities) {
+
+    AdapterPlatformVersion.requireCompatiblePlatform(ADAPTER_TYPE, Camunda7DeploymentService.class);
 
     this.adapterId = adapterId;
     this.repositoryService = repositoryService;

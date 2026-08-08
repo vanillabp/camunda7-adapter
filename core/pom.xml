@@ -47,4 +47,14 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <resources>
+      <!-- 'adapter-camunda7.properties' carries the versions into the JAR -->
+      <resource>
+        <filtering>true</filtering>
+        <directory>src/main/resources</directory>
+      </resource>
+    </resources>
+  </build>
 </project>

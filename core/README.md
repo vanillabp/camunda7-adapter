@@ -59,3 +59,15 @@ Two deliberate exceptions exist, and both fail LOUDLY rather than silently:
 
 A method that cannot do its job throws with a message naming the reason; a silent no-op
 would hide wiring bugs.
+
+## Platform version guard
+
+`META-INF/vanillabp/adapter-camunda7.properties` carries this adapter's version and the
+version of the VanillaBP platform integration it was built against
+(`platform.version=${adapter-platform.version}`, filled by resource filtering configured
+in `pom.xml`). The `Camunda7DeploymentService` constructor passes it to
+`AdapterPlatformVersion.requireCompatiblePlatform(...)`, which aborts the startup with a
+guiding message if the platform integration on the classpath is older — Maven does not
+report that as a conflict, because a version managed by the application always wins over
+the version required transitively by this adapter, even as a downgrade. See
+`migration-adapter/README.md`, section "Adapter/platform version guard".
