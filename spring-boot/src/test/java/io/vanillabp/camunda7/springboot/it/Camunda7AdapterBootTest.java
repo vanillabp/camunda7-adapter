@@ -3,6 +3,7 @@ package io.vanillabp.camunda7.springboot.it;
 import org.camunda.bpm.engine.ProcessEngine;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -13,6 +14,7 @@ import io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder;
 import io.vanillabp.camunda7.springboot.processservice.Camunda7ProcessServiceConfiguration;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
 import io.vanillabp.integration.processservice.SpringBootMigrationAdapterAutoConfiguration;
+import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.integration.workflowmodule.WorkflowModuleAutoConfiguration;
 
 /**
@@ -29,6 +31,7 @@ import io.vanillabp.integration.workflowmodule.WorkflowModuleAutoConfiguration;
  * (workflow module x prioritized adapter); deploying real BPMN is covered by the
  * integration-tests module. This test proves discovery/registration only.
  */
+@ExtendWith(SuppressOutputExtension.class)
 public class Camunda7AdapterBootTest {
 
   private final ApplicationContextRunner contextRunner = new ApplicationContextRunner();

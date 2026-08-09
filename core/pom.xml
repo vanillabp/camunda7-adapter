@@ -30,6 +30,11 @@
 
   <dependencies>
     <dependency>
+      <groupId>io.vanillabp</groupId>
+      <artifactId>test-utils</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>io.vanillabp.adapter</groupId>
       <artifactId>migration-adapter-spi</artifactId>
     </dependency>

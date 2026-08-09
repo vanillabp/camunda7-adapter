@@ -21,15 +21,18 @@ import org.camunda.bpm.model.bpmn.instance.Signal;
 import org.camunda.bpm.model.bpmn.instance.UserTask;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
+import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Unit tests of {@link Camunda7Scoping} (story 35): which identifiers of a Camunda 7
  * model are rewritten in mode {@link NameClashAvoidance#USE_PREFIX} - and that task
  * definitions deliberately are not, because they are process-local in Camunda 7.
  */
+@ExtendWith(SuppressOutputExtension.class)
 public class Camunda7ScopingTest {
 
   private static final String ADAPTER_ID = "camunda7";
