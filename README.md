@@ -19,6 +19,16 @@ on are documented in the [VanillaBP Wiki](https://github.com/vanillabp/adapter-p
 > engine, in the caller's transaction). Remaining feature stories: viewer/history API,
 > `@SyncWithBPMS`.
 
+## Documentation and supported platforms
+
+This adapter runs on both platforms VanillaBP supports:
+
+1. **Spring Boot**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fvanillabp.github.io%2Fcamunda7-adapter%2Fspring-boot-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://vanillabp.github.io/camunda7-adapter/spring-boot-report)
+2. **Quarkus**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fvanillabp.github.io%2Fcamunda7-adapter%2Fquarkus-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://vanillabp.github.io/camunda7-adapter/quarkus-report)
+
+Coverage is measured separately per platform - a platform's tests never cover the other
+platform's code. Click a badge to open the respective report.
+
 ## Coordinates
 
 The adapter is built on top of `adapter-platform-integration` (the platform-neutral
@@ -333,16 +343,14 @@ neither an eventual-consistency lag nor an application-version boundary.
 
 ## Test coverage
 
-Coverage is measured **separately per platform**, since a platform's tests never cover the other
-platform's code. Running `mvn install verify` builds two aggregated JaCoCo reports:
+`mvn install verify` builds one aggregated JaCoCo report per platform:
 
-1. **Spring Boot** (core + Spring Boot integration)<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fvanillabp.github.io%2Fcamunda7-adapter%2Fspring-boot-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://vanillabp.github.io/camunda7-adapter/spring-boot-report)<br>
-   generated into `test-coverage-report/spring-boot/report`
-2. **Quarkus** (core + Quarkus extension)<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fvanillabp.github.io%2Fcamunda7-adapter%2Fquarkus-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://vanillabp.github.io/camunda7-adapter/quarkus-report)<br>
-   generated into `test-coverage-report/quarkus/report`
+1. **Spring Boot** (core + Spring Boot integration) - into `test-coverage-report/spring-boot/report`
+2. **Quarkus** (core + Quarkus extension) - into `test-coverage-report/quarkus/report`
 
-Both reports are published to GitHub Pages by the *Publish to GitHub Packages* workflow on every
-push to the default branch - the badges above show their current numbers and link to the reports.
+Both are published to GitHub Pages by the *Publish to GitHub Packages* workflow on every push to
+the default branch. Click the [platform's badge](#documentation-and-supported-platforms) to open
+the respective report.
 
 Baseline recorded with the hardening story (2026-07-29): **90.0% line coverage**. The feature
 stories' definition of done requires >90% - gaps are filled by the stories touching the respective
