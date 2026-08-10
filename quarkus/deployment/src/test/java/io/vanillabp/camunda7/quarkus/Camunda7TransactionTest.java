@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
-import io.quarkus.test.QuarkusUnitTest;
+import io.quarkus.test.QuarkusExtensionTest;
 import io.vanillabp.camunda7.quarkus.runtime.Camunda7QuarkusEngineRegistry;
 import io.vanillabp.camunda7.quarkus.sample.TestAggregate;
 import io.vanillabp.camunda7.quarkus.sample.TestAggregatePersistence;
@@ -36,7 +36,7 @@ public class Camunda7TransactionTest {
   private static final String BPMN_PROCESS_ID = "TestProcess";
 
   @RegisterExtension
-  static final QuarkusUnitTest unitTest = new QuarkusUnitTest()
+  static final QuarkusExtensionTest extensionTest = new QuarkusExtensionTest()
       .setArchiveProducer(() -> ShrinkWrap
           .create(JavaArchive.class)
           .addClass(TestAggregate.class)

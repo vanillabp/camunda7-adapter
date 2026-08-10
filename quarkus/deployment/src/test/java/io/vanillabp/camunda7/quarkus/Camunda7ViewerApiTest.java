@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
-import io.quarkus.test.QuarkusUnitTest;
+import io.quarkus.test.QuarkusExtensionTest;
 import io.vanillabp.camunda7.quarkus.sample.TestAggregate;
 import io.vanillabp.camunda7.quarkus.sample.TestWorkflowService;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
@@ -32,7 +32,7 @@ import jakarta.transaction.UserTransaction;
 public class Camunda7ViewerApiTest {
 
   @RegisterExtension
-  static final QuarkusUnitTest unitTest = new QuarkusUnitTest()
+  static final QuarkusExtensionTest extensionTest = new QuarkusExtensionTest()
       .setArchiveProducer(() -> ShrinkWrap
           .create(JavaArchive.class)
           .addClass(TestAggregate.class)
