@@ -191,6 +191,45 @@ public class Camunda7TaskProcessingIT {
   }
 
   @Test
+  @DisplayName("A transaction annotation in the handler's call chain fails the job with VanillaBP's message")
+  public void nestedTransactionAnnotationIsReportedAtTheEngine() throws Exception {
+
+    // the handler carries no annotation itself (that would fail the boot since story
+    // 40b), it calls a bean that does - and the engine shares the transaction the
+    // bean's interceptor marks rollback-only
+    final var aggregateId = startSecondaryProcess("RollbackOnlyProcess", true, null);
+
+    final var instanceId = instanceIdOf(aggregateId);
+
+    awaitUntil(
+        () -> processEngine.getManagementService()
+            .createJobQuery()
+            .processInstanceId(instanceId)
+            .list()
+            .stream()
+            .anyMatch(job -> (job.getExceptionMessage() != null) && job
+                .getExceptionMessage()
+                .contains("marked rollback-only")),
+        "the job to fail with VanillaBP's message");
+
+    final var failure = processEngine.getManagementService()
+        .createJobQuery()
+        .processInstanceId(instanceId)
+        .singleResult()
+        .getExceptionMessage();
+    // the message names the task, the process and the workflow module, so the
+    // developer reading an incident does not have to guess where it came from
+    assertTrue(failure.contains("nestedTransaction"), failure);
+    assertTrue(failure.contains("RollbackOnlyProcess"), failure);
+    assertTrue(failure.contains(MODULE_ID), failure);
+
+    // and the workflow did NOT take the error path: nothing was committed, which is
+    // exactly the data loss the check makes visible
+    assertNull(repository.findById(aggregateId).orElseThrow().getResults());
+
+  }
+
+  @Test
   @DisplayName("@TaskId: the task stays open, its aggregate changes commit, the job executor does not redeliver")
   public void asyncTaskStaysOpen() throws Exception {
 

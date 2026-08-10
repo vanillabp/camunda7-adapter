@@ -29,16 +29,22 @@ import io.vanillabp.spi.service.WorkflowTask;
                 bpmnProcessId = "AsyncCancelProcess"), @BpmnProcess(bpmnProcessId = "CancelEventProcess"), @BpmnProcess(
                     bpmnProcessId = "MixedProcess"), @BpmnProcess(bpmnProcessId = "UserTaskProcess"), @BpmnProcess(
                         bpmnProcessId = "SilentUserTaskProcess"), @BpmnProcess(
-                            bpmnProcessId = "MessageProcess"), @BpmnProcess(bpmnProcessId = "MessageStartProcess")
+                            bpmnProcessId = "MessageProcess"), @BpmnProcess(
+                                bpmnProcessId = "MessageStartProcess"), @BpmnProcess(
+                                    bpmnProcessId = "RollbackOnlyProcess")
     })
 public class TaskTestWorkflowService {
 
   private final ProcessService<TaskTestAggregate> processService;
 
+  private final NestedTransactionalBean nestedTransactionalBean;
+
   public TaskTestWorkflowService(
-      final ProcessService<TaskTestAggregate> processService) {
+      final ProcessService<TaskTestAggregate> processService,
+      final NestedTransactionalBean nestedTransactionalBean) {
 
     this.processService = processService;
+    this.nestedTransactionalBean = nestedTransactionalBean;
 
   }
 
@@ -255,6 +261,20 @@ public class TaskTestWorkflowService {
       final TaskTestAggregate aggregate) {
 
     aggregate.appendResult("order-placed");
+
+  }
+
+  /**
+   * Calls a bean carrying a transaction annotation of the application. The handler
+   * itself has none, so the startup check cannot see it and the runtime check has to
+   * catch the rollback-only transaction (story 40b).
+   */
+  @WorkflowTask
+  public void nestedTransaction(
+      final TaskTestAggregate aggregate) {
+
+    aggregate.appendResult("about-to-fail");
+    nestedTransactionalBean.raiseTaskException();
 
   }
 

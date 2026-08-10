@@ -256,4 +256,31 @@
       <bpmn:incoming>MS_f2</bpmn:incoming>
     </bpmn:endEvent>
   </bpmn:process>
+  <bpmn:process id="RollbackOnlyProcess" isExecutable="true">
+    <bpmn:startEvent id="RO_Start">
+      <bpmn:outgoing>RO_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="RO_f1" sourceRef="RO_Start" targetRef="RO_Task" />
+    <bpmn:serviceTask id="RO_Task" camunda:expression="${nestedTransaction}">
+      <bpmn:incoming>RO_f1</bpmn:incoming>
+      <bpmn:outgoing>RO_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RO_f2" sourceRef="RO_Task" targetRef="RO_End" />
+    <bpmn:boundaryEvent id="RO_Error" attachedToRef="RO_Task">
+      <bpmn:outgoing>RO_f3</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="RO_ErrDef" errorRef="Error_Payment" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="RO_f3" sourceRef="RO_Error" targetRef="RO_Handled" />
+    <bpmn:serviceTask id="RO_Handled" camunda:expression="${errorHandled}">
+      <bpmn:incoming>RO_f3</bpmn:incoming>
+      <bpmn:outgoing>RO_f4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RO_f4" sourceRef="RO_Handled" targetRef="RO_ErrorEnd" />
+    <bpmn:endEvent id="RO_ErrorEnd">
+      <bpmn:incoming>RO_f4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="RO_End">
+      <bpmn:incoming>RO_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
 </bpmn:definitions>
