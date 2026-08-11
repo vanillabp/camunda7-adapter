@@ -217,6 +217,45 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
   }
 
+  /**
+   * Names what Camunda 7 offers instead of {@code none}: a tenant per workflow module
+   * (the engine is multi-tenant out of the box, which is why {@code by-adapter} stays
+   * this adapter's default), prefixing, or an engine per workflow module - an own
+   * datasource respectively an own table prefix on a shared one.
+   */
+  @Override
+  public void warnAboutUnscopedIdentifiers(
+      final String workflowModuleId,
+      final boolean fromDefault) {
+
+    log.warn(
+        """
+            Workflow module '{}' is deployed to Camunda 7 (adapter '{}') with name-clash-avoidance \
+            'none'{}. Its identifiers reach the engine as they are - BPMN process ids, message and \
+            signal names, error codes and task definitions - so a second workflow module using the \
+            same identifier addresses the very same process definitions and tasks, and neither \
+            VanillaBP nor the engine can tell. Keep 'none' only as long as your identifiers are \
+            unique across ALL workflow modules of this application. Otherwise choose:
+              vanillabp.adapters.{}.name-clash-avoidance: by-adapter   # a tenant per workflow module, Camunda 7's own isolation
+              vanillabp.adapters.{}.name-clash-avoidance: use-prefix   # VanillaBP prefixes the identifiers, no tenant needed
+            A third option is an engine per workflow module, configured as one adapter id per engine \
+            with its own database ('vanillabp.adapters.<id>.data-source-name') respectively its own \
+            tables in a shared one ('vanillabp.adapters.<id>.table-prefix'). The same key may be set \
+            per workflow module (vanillabp.workflow-modules.{}.adapters.{}.name-clash-avoidance). The \
+            mode is not a runtime switch - changing it once workflows are running is a BPMS \
+            migration.""",
+        workflowModuleId,
+        adapterId,
+        fromDefault
+            ? " (nothing is configured, so the adapter's default applies)"
+            : "",
+        adapterId,
+        adapterId,
+        workflowModuleId,
+        adapterId);
+
+  }
+
   @Override
   public String getAdapterId() {
 
