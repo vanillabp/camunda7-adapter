@@ -26,6 +26,10 @@ package io.vanillabp.camunda7.engine;
  *       embedded engines must never share one schema) - and starting workflows
  *       uses VanillaBP's two-phase pattern (see
  *       <code>Camunda7ProcessService</code>).</li>
+ *   <li><code>accept-unscoped-identifiers</code> - OPTIONAL acknowledgement that the
+ *       application's identifiers are unique across all of its workflow modules, which
+ *       silences the WARN logged while the name-clash-avoidance mode <code>none</code>
+ *       applies (this adapter's default mode); default <code>false</code>;</li>
  *   <li><code>table-prefix</code> - OPTIONAL prefix of the engine's database tables
  *       (engine setting <code>databaseTablePrefix</code>). It lets two adapter ids
  *       share ONE datasource while running separate engines - exactly the
@@ -51,6 +55,25 @@ public class Camunda7EngineProperties {
    * workflow module ID is the tenant - VanillaBP 1's behavior.
    */
   private String tenantId;
+
+  /**
+   * Whether the application states that its identifiers are unique across all of its
+   * workflow modules, which is what the name-clash-avoidance mode {@code none} relies
+   * on. It silences the WARN the adapter logs per workflow module while that mode
+   * applies - a deliberate acknowledgement, not a log-level setting: with a wrong one,
+   * two workflow modules address the same process definitions and tasks. Default
+   * {@code false}.
+   */
+  private boolean acceptUnscopedIdentifiers = false;
+
+  public boolean isAcceptUnscopedIdentifiers() {
+    return acceptUnscopedIdentifiers;
+  }
+
+  public void setAcceptUnscopedIdentifiers(
+      final boolean acceptUnscopedIdentifiers) {
+    this.acceptUnscopedIdentifiers = acceptUnscopedIdentifiers;
+  }
 
   public String getDatabaseSchemaUpdate() {
     return databaseSchemaUpdate;

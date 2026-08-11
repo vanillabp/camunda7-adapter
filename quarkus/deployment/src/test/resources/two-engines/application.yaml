@@ -15,9 +15,11 @@ vanillabp:
     c7:
       type: camunda7
       data-source-name: default
+      name-clash-avoidance: by-adapter
     c7b:
       type: camunda7
       data-source-name: c7b
+      name-clash-avoidance: by-adapter
   prioritized-adapters:
     - c7
     - c7b

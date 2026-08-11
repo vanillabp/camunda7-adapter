@@ -35,6 +35,42 @@ public final class Camunda7Scoping {
   }
 
   /**
+   * The Camunda TENANT a workflow module is deployed to, respectively an operation of
+   * it runs in: the workflow module id unless the adapter configured a name, and
+   * <code>null</code> wherever the mode is not {@link NameClashAvoidance#BY_ADAPTER}
+   * ({@code none} uses no tenant, and under {@code use-prefix} the prefixed
+   * identifiers ARE the isolation).
+   * <p>
+   * That a tenant is what {@code by-adapter} means here is CAMUNDA 7 knowledge, so it
+   * lives in the adapter: the core answers the mode and nothing else.
+   *
+   * @param scoping The core's name-clash-avoidance support, or <code>null</code>
+   *          (tests): version 1's behavior applies then
+   * @param workflowModuleId The workflow module ID
+   * @param adapterId The adapter ID
+   * @param configuredTenantId The tenant name configured for the adapter, or
+   *          <code>null</code>
+   * @return The tenant ID, or <code>null</code> if the mode uses none
+   */
+  public static String tenantIdFor(
+      final NameClashAvoidanceSupport scoping,
+      final String workflowModuleId,
+      final String adapterId,
+      final String configuredTenantId) {
+
+    final var configured = (configuredTenantId != null) && !configuredTenantId.isBlank()
+        ? configuredTenantId
+        : null;
+    if ((scoping != null) && (scoping.modeFor(workflowModuleId, null, adapterId) != NameClashAvoidance.BY_ADAPTER)) {
+      return null;
+    }
+    return configured != null
+        ? configured
+        : workflowModuleId;
+
+  }
+
+  /**
    * Whether the given workflow module's identifiers are prefixed for this adapter.
    *
    * @param workflowModuleId The workflow module ID

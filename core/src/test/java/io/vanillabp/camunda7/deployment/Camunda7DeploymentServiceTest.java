@@ -32,13 +32,13 @@ public class Camunda7DeploymentServiceTest {
   }
 
   @Test
-  @DisplayName("Without configuration the mode is BY_ADAPTER - the engine is multi-tenant out of the box")
-  public void defaultsToByAdapter() {
+  @DisplayName("Without configuration the mode is NONE - Camunda 7 has more than one way to isolate")
+  public void defaultsToNone() {
 
     assertEquals(
-        NameClashAvoidance.BY_ADAPTER,
+        NameClashAvoidance.NONE,
         serviceOfAdapterId("camunda7").defaultNameClashAvoidance(),
-        "version 1's behavior: a tenant per workflow module");
+        "a tenant, prefixes or an own engine are all possible, so none of them is presumed");
 
   }
 
@@ -93,6 +93,24 @@ public class Camunda7DeploymentServiceTest {
     // nothing, so they may not know the mode at all
     final var byDefault = warningsOf(() -> service.warnAboutUnscopedIdentifiers(MODULE, true));
     assertTrue(byDefault.getFirst().contains("nothing is configured"), () -> byDefault.toString());
+    // ... and the way out of the warning is part of it
+    assertTrue(
+        byDefault.getFirst().contains("vanillabp.adapters.myengine.accept-unscoped-identifiers: true"),
+        () -> byDefault.toString());
+
+  }
+
+  @Test
+  @DisplayName("Accepting unscoped identifiers deliberately silences the warning")
+  public void acceptedUnscopedIdentifiersStaySilent() {
+
+    final var service = serviceOfAdapterId("myengine");
+    service.setAcceptUnscopedIdentifiers(true);
+
+    assertEquals(
+        List.of(),
+        warningsOf(() -> service.warnAboutUnscopedIdentifiers(MODULE, true)),
+        "the decision is on record, so there is nothing left to ask");
 
   }
 
