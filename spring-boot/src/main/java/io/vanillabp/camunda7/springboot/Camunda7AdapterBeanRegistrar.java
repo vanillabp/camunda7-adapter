@@ -82,7 +82,10 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                             ? null
                             : applicationBean(supplierContext, PlatformTransactionManager.class,
                                 adapterId), supplierContext
-                                    .bean(WorkflowTaskInvoker.class));
+                                    .bean(WorkflowTaskInvoker.class), supplierContext
+                                        .beanProvider(
+                                            io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker.class)
+                                        .getIfAvailable());
               }));
 
           registry.registerBean(
@@ -110,6 +113,11 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                     adapterId, engine.getRepositoryService(), engine, supplierContext
                         .bean(WorkflowTaskInvoker.class), engine.getTaskRegistry(), id -> instanceIdentityOf(
                             environment, id));
+                deploymentService.setBpmsInitiatedStartInvoker(
+                    supplierContext
+                        .beanProvider(
+                            io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker.class)
+                        .getIfAvailable());
                 deploymentService.setScoping(
                     supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class));
                 deploymentService.setConfiguredTenantId(

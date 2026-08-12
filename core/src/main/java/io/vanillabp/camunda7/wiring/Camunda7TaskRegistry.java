@@ -28,6 +28,19 @@ public class Camunda7TaskRegistry {
    */
   private final Map<String, String> workflowModuleIdsByScopedProcessId = new ConcurrentHashMap<>();
 
+  /**
+   * The plain BPMN process id per (workflow module, scoped process id) - filled for
+   * every wired process, so a process without tasks is found as well.
+   */
+  private final Map<RegistryKey, String> plainProcessIdsByScopedProcessId = new ConcurrentHashMap<>();
+
+  /**
+   * The PLAIN signal name per signal start event, keyed by (workflow module, scoped
+   * process id, start event id): the engine's parser cannot resolve a signalRef, and
+   * the name the application is told has to be the modelled one (story 35).
+   */
+  private final Map<String, String> signalNamesOfStartEvents = new ConcurrentHashMap<>();
+
   public void register(
       final Camunda7TaskConnectable connectable) {
 
@@ -40,6 +53,78 @@ public class Camunda7TaskRegistry {
         .add(connectable);
     workflowModuleIdsByScopedProcessId
         .putIfAbsent(connectable.scopedBpmnProcessId(), connectable.workflowModuleId());
+    plainProcessIdsByScopedProcessId
+        .putIfAbsent(
+            new RegistryKey(connectable.workflowModuleId(), connectable.scopedBpmnProcessId()),
+            connectable.bpmnProcessId());
+
+  }
+
+  /**
+   * Registers what a process is called on both sides, without any task being
+   * involved: a process the BPMS starts on its own (timer, signal or conditional
+   * start event) may have no tasks at all, and the start listener still has to find
+   * its way back from the engine's process-definition key to the workflow module and
+   * the plain BPMN process id.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param scopedBpmnProcessId The process definition key the engine knows
+   */
+  public void registerProcess(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String scopedBpmnProcessId) {
+
+    plainProcessIdsByScopedProcessId
+        .putIfAbsent(new RegistryKey(workflowModuleId, scopedBpmnProcessId), bpmnProcessId);
+    workflowModuleIdsByScopedProcessId.putIfAbsent(scopedBpmnProcessId, workflowModuleId);
+
+  }
+
+  /**
+   * Registers the plain signal name of a signal start event.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param scopedBpmnProcessId The process definition key the engine knows
+   * @param startEventId The BPMN id of the start event
+   * @param signalName The PLAIN signal name
+   */
+  public void registerSignalStartEvent(
+      final String workflowModuleId,
+      final String scopedBpmnProcessId,
+      final String startEventId,
+      final String signalName) {
+
+    if (signalName == null) {
+      return;
+    }
+    signalNamesOfStartEvents
+        .putIfAbsent(signalKey(workflowModuleId, scopedBpmnProcessId, startEventId), signalName);
+
+  }
+
+  /**
+   * @param workflowModuleId The workflow module ID
+   * @param scopedBpmnProcessId The process definition key the engine reported
+   * @param startEventId The BPMN id of the start event which fired
+   * @return The plain signal name or <code>null</code>
+   */
+  public String signalNameOfStartEvent(
+      final String workflowModuleId,
+      final String scopedBpmnProcessId,
+      final String startEventId) {
+
+    return signalNamesOfStartEvents.get(signalKey(workflowModuleId, scopedBpmnProcessId, startEventId));
+
+  }
+
+  private static String signalKey(
+      final String workflowModuleId,
+      final String scopedBpmnProcessId,
+      final String startEventId) {
+
+    return "%s|%s|%s".formatted(workflowModuleId, scopedBpmnProcessId, startEventId);
 
   }
 
@@ -75,6 +160,11 @@ public class Camunda7TaskRegistry {
       final String workflowModuleId,
       final String processDefinitionKey) {
 
+    final var registered = plainProcessIdsByScopedProcessId
+        .get(new RegistryKey(workflowModuleId, processDefinitionKey));
+    if (registered != null) {
+      return registered;
+    }
     return connectables
         .getOrDefault(new RegistryKey(workflowModuleId, processDefinitionKey), List.of())
         .stream()

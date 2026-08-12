@@ -105,6 +105,13 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    *        (unused - may be <code>null</code> - if <code>data-source-name</code> is
    *        configured)
    */
+  /**
+   * The core's entry point for workflows the engine starts on its own (timer, signal
+   * or conditional start events). May be <code>null</code> - the engine then attaches
+   * no start listener, and such processes never obtain a workflow aggregate.
+   */
+  private io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker;
+
   public Camunda7EngineHolder(
       final String adapterId,
       final Camunda7EngineProperties properties,
@@ -112,11 +119,40 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       final PlatformTransactionManager applicationTransactionManager,
       final WorkflowTaskInvoker workflowTaskInvoker) {
 
+    this(adapterId, properties, applicationDataSource, applicationTransactionManager, workflowTaskInvoker, null);
+
+  }
+
+  public Camunda7EngineHolder(
+      final String adapterId,
+      final Camunda7EngineProperties properties,
+      final DataSource applicationDataSource,
+      final PlatformTransactionManager applicationTransactionManager,
+      final WorkflowTaskInvoker workflowTaskInvoker,
+      final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker) {
+
     this.adapterId = adapterId;
     this.workflowTaskInvoker = workflowTaskInvoker;
+    this.bpmsInitiatedStartInvoker = bpmsInitiatedStartInvoker;
     this.properties = properties;
     this.applicationDataSource = applicationDataSource;
     this.applicationTransactionManager = applicationTransactionManager;
+
+  }
+
+  /**
+   * Builds the listener attached to every start event the engine fires on its own -
+   * <code>null</code> where the core's entry point was not handed over (tests).
+   *
+   * @return The factory or <code>null</code>
+   */
+  private java.util.function.Function<io.vanillabp.spi.service.BpmsStartTrigger.Kind, org.camunda.bpm.engine.delegate.ExecutionListener> startListenerFactory() {
+
+    if (bpmsInitiatedStartInvoker == null) {
+      return null;
+    }
+    return kind -> new io.vanillabp.camunda7.wiring.Camunda7BpmsInitiatedStartListener(
+        bpmsInitiatedStartInvoker, taskRegistry, kind);
 
   }
 
@@ -171,7 +207,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
         java.util.List.of(new io.vanillabp.camunda7.wiring.Camunda7AsyncBpmnParseListener(
             new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
                 workflowTaskInvoker, taskRegistry), new io.vanillabp.camunda7.wiring.Camunda7UserTaskEventListener(
-                    workflowTaskInvoker, taskRegistry)))));
+                    workflowTaskInvoker, taskRegistry), startListenerFactory()))));
     configuration.setProcessEngineName("vanillabp-camunda7-%s".formatted(adapterId));
     configuration.setDataSource(dataSource);
     configuration.setTransactionManager(transactionManager);

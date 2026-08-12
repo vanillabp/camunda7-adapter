@@ -32,12 +32,53 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
    */
   private final Camunda7UserTaskEventListener userTaskEventListener;
 
+  /**
+   * Builds the workflow aggregate of a workflow the engine started on its own -
+   * attached to timer, signal and conditional start events (story 41). May be
+   * <code>null</code>: an engine built without it simply does not serve such
+   * processes.
+   */
+  private final java.util.function.Function<io.vanillabp.spi.service.BpmsStartTrigger.Kind, org.camunda.bpm.engine.delegate.ExecutionListener> bpmsInitiatedStartListenerFactory;
+
   public Camunda7AsyncBpmnParseListener(
       final Camunda7TaskCancellationListener cancellationListener,
       final Camunda7UserTaskEventListener userTaskEventListener) {
 
+    this(cancellationListener, userTaskEventListener, null);
+
+  }
+
+  public Camunda7AsyncBpmnParseListener(
+      final Camunda7TaskCancellationListener cancellationListener,
+      final Camunda7UserTaskEventListener userTaskEventListener,
+      final java.util.function.Function<io.vanillabp.spi.service.BpmsStartTrigger.Kind, org.camunda.bpm.engine.delegate.ExecutionListener> bpmsInitiatedStartListenerFactory) {
+
     this.cancellationListener = cancellationListener;
     this.userTaskEventListener = userTaskEventListener;
+    this.bpmsInitiatedStartListenerFactory = bpmsInitiatedStartListenerFactory;
+
+  }
+
+  @Override
+  public void parseStartEvent(
+      final Element startEventElement,
+      final ScopeImpl scope,
+      final ActivityImpl activity) {
+
+    if (bpmsInitiatedStartListenerFactory == null) {
+      return;
+    }
+    // only the start events the ENGINE fires on its own need an aggregate built for
+    // them; a none start event is the application's business, a message start event
+    // arrives through ProcessService#startWorkflowByMessage carrying its aggregate
+    final var kind = Camunda7StartEvents.kindOf(startEventElement);
+    if (kind == null) {
+      return;
+    }
+    activity
+        .addListener(
+            org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_START,
+            bpmsInitiatedStartListenerFactory.apply(kind));
 
   }
 

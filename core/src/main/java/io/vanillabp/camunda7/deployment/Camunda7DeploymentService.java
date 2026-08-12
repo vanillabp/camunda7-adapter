@@ -86,6 +86,25 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   private final Camunda7TaskRegistry taskRegistry;
 
   /**
+   * The core's entry point for workflows the engine starts on its own (story 41):
+   * the start events of a process are reported here while wiring. May be
+   * <code>null</code> (tests) - nothing is reported then.
+   */
+  private io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker;
+
+  /**
+   * Hands over the core's entry point for workflows the engine starts on its own.
+   *
+   * @param bpmsInitiatedStartInvoker The core's invoker
+   */
+  public void setBpmsInitiatedStartInvoker(
+      final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker) {
+
+    this.bpmsInitiatedStartInvoker = bpmsInitiatedStartInvoker;
+
+  }
+
+  /**
    * The core's name-clash-avoidance model (story 35): decides whether a workflow
    * module is isolated by the Camunda TENANT ({@code by-adapter}, version 1's
    * behavior), by PREFIXING the identifiers ({@code use-prefix} - no tenant) or not at
@@ -509,6 +528,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     connectables.forEach(taskRegistry::register);
 
+    // a process the engine starts on its own may have no tasks at all, so the way
+    // back from the engine's process-definition key is registered explicitly
+    taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
+    wireBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
+
     log.info(
         "Camunda7[{}]: wired {} task(s) of BPMN process '{}' (file '{}', workflow module '{}')",
         adapterId,
@@ -566,6 +590,109 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
               .formatted(rawExpression, elementId, bpmnProcessId, filename, workflowModuleId));
     }
     return matcher.group(1).trim();
+
+  }
+
+  /**
+   * Reports the start events the engine fires on its own (timer, signal,
+   * conditional) to the core, which validates the application's
+   * <code>&#64;WorkflowStartedByBpms</code> methods against them, and remembers the
+   * PLAIN signal names for the listener attached at parse time.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The plain BPMN process ID
+   * @param scopedBpmnProcessId The process definition key the engine will know
+   * @param model The BPMN model
+   */
+  private void wireBpmsInitiatedStarts(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String scopedBpmnProcessId,
+      final BpmnModelInstance model) {
+
+    if (bpmsInitiatedStartInvoker == null) {
+      return;
+    }
+
+    final var startEvents = new LinkedList<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec>();
+    model
+        .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.StartEvent.class)
+        .stream()
+        .filter(startEvent -> scopedBpmnProcessId.equals(owningProcessId(startEvent)))
+        .forEach(startEvent -> {
+          final var definitions = startEvent.getEventDefinitions();
+          definitions
+              .stream()
+              .filter(org.camunda.bpm.model.bpmn.instance.TimerEventDefinition.class::isInstance)
+              .findFirst()
+              .ifPresent(definition -> startEvents
+                  .add(
+                      new io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec(
+                          startEvent.getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.TIMER, null, "timer")));
+          definitions
+              .stream()
+              .filter(org.camunda.bpm.model.bpmn.instance.SignalEventDefinition.class::isInstance)
+              .map(org.camunda.bpm.model.bpmn.instance.SignalEventDefinition.class::cast)
+              .findFirst()
+              .ifPresent(definition -> {
+                // the model carries the SCOPED signal name where identifiers are
+                // prefixed (story 35) - the application is told the plain one
+                final var scopedSignalName = definition.getSignal() == null
+                    ? null
+                    : definition.getSignal().getName();
+                final var signalName = plainIdentifier(workflowModuleId, scopedSignalName);
+                startEvents
+                    .add(
+                        new io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec(
+                            startEvent
+                                .getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.SIGNAL, signalName, "signal"));
+                taskRegistry
+                    .registerSignalStartEvent(
+                        workflowModuleId, scopedBpmnProcessId, startEvent.getId(), signalName);
+              });
+          definitions
+              .stream()
+              .filter(org.camunda.bpm.model.bpmn.instance.ConditionalEventDefinition.class::isInstance)
+              .findFirst()
+              .ifPresent(definition -> startEvents
+                  .add(
+                      new io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec(
+                          startEvent
+                              .getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.CONDITIONAL, null, "conditional")));
+        });
+
+    // throwing here honors the deployment-failure policy, like the task wiring
+    bpmsInitiatedStartInvoker.validateBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, startEvents);
+
+    if (!startEvents.isEmpty()) {
+      log
+          .info(
+              "Camunda7[{}]: BPMN process '{}' (workflow module '{}') is started by the BPMS itself: {}",
+              adapterId,
+              bpmnProcessId,
+              workflowModuleId,
+              startEvents);
+    }
+
+  }
+
+  /**
+   * Removes the workflow module's prefix from an identifier the model carries, so
+   * the application sees what it modelled (story 35). Without scoping, or without a
+   * prefix, the identifier is returned unchanged.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param scopedIdentifier The identifier as the model carries it
+   * @return The plain identifier
+   */
+  private String plainIdentifier(
+      final String workflowModuleId,
+      final String scopedIdentifier) {
+
+    if ((scoping == null) || (scopedIdentifier == null)) {
+      return scopedIdentifier;
+    }
+    return scoping.plainIdentifier(workflowModuleId, scopedIdentifier, adapterId);
 
   }
 

@@ -77,7 +77,8 @@ public class Camunda7EngineProducer {
             engines.put(adapterId, new Camunda7QuarkusEngineHolder(
                 adapterId, toEngineProperties(
                     keys), dataSource, !io.vanillabp.camunda7.engine.Camunda7EngineProperties
-                        .isDefaultDataSourceName(dataSourceName), transactionManager, workflowTaskRegistry));
+                        .isDefaultDataSourceName(
+                            dataSourceName), transactionManager, workflowTaskRegistry, workflowTaskRegistry));
           } catch (final RuntimeException e) {
             throw new IllegalStateException(
                 """

@@ -77,6 +77,19 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
       final TransactionManager transactionManager,
       final WorkflowTaskInvoker workflowTaskInvoker) {
 
+    this(adapterId, properties, dataSource, usesSeparateDataSource, transactionManager, workflowTaskInvoker, null);
+
+  }
+
+  public Camunda7QuarkusEngineHolder(
+      final String adapterId,
+      final Camunda7EngineProperties properties,
+      final AgroalDataSource dataSource,
+      final boolean usesSeparateDataSource,
+      final TransactionManager transactionManager,
+      final WorkflowTaskInvoker workflowTaskInvoker,
+      final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker) {
+
     this.adapterId = adapterId;
     this.usesSeparateDataSource = usesSeparateDataSource;
 
@@ -89,7 +102,10 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
         java.util.List.of(new Camunda7AsyncBpmnParseListener(
             new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
                 workflowTaskInvoker, taskRegistry), new io.vanillabp.camunda7.wiring.Camunda7UserTaskEventListener(
-                    workflowTaskInvoker, taskRegistry)))));
+                    workflowTaskInvoker, taskRegistry), bpmsInitiatedStartInvoker == null
+                        ? null
+                        : kind -> new io.vanillabp.camunda7.wiring.Camunda7BpmsInitiatedStartListener(
+                            bpmsInitiatedStartInvoker, taskRegistry, kind)))));
     configuration.setProcessEngineName("vanillabp-camunda7-%s".formatted(adapterId));
     configuration.setDataSource(dataSource);
     configuration.setDatabaseSchemaUpdate(properties.getDatabaseSchemaUpdate());
