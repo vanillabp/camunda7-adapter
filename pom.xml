@@ -28,6 +28,7 @@
   <modules>
     <module>core</module>
     <module>spring-boot</module>
+    <module>spring-boot-webapps</module>
     <module>quarkus/runtime</module>
     <module>quarkus/deployment</module>
     <module>integration-tests</module>

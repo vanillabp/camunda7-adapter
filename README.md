@@ -42,10 +42,11 @@ migration adapter plus the Spring Boot integration).
 </dependency>
 ```
 
-|    Module     |            Artifact            |                        Contents                         |
-|---------------|--------------------------------|---------------------------------------------------------|
-| `core`        | `camunda7-adapter`             | Platform-neutral SPI implementations + engine wiring.   |
-| `spring-boot` | `camunda7-adapter-spring-boot` | Spring Boot auto-configuration registering the adapter. |
+|        Module         |                Artifact                |                                                   Contents                                                   |
+|-----------------------|----------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| `core`                | `camunda7-adapter`                     | Platform-neutral SPI implementations + engine wiring.                                                        |
+| `spring-boot`         | `camunda7-adapter-spring-boot`         | Spring Boot auto-configuration registering the adapter.                                                      |
+| `spring-boot-webapps` | `camunda7-adapter-spring-boot-webapps` | Optional: serves Camunda's Cockpit, Tasklist and Admin at `/camunda` against the engines this adapter built. |
 
 ## Configuration
 

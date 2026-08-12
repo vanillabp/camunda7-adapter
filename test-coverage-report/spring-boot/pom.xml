@@ -26,6 +26,11 @@
     </dependency>
     <dependency>
       <groupId>org.camunda.community.vanillabp</groupId>
+      <artifactId>camunda7-adapter-spring-boot-webapps</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.camunda.community.vanillabp</groupId>
       <artifactId>camunda7-adapter-integration-tests</artifactId>
       <version>${project.version}</version>
       <!-- test-only module without main sources: it produces no jar, so depend on
