@@ -8,6 +8,7 @@ vanillabp:
   adapters:
     c7:
       type: camunda7
+      name-clash-avoidance: by-adapter
   prioritized-adapters:
     - c7
   workflow-modules:

@@ -194,9 +194,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private String tenantIdOf(
       final String workflowModuleId) {
 
-    return scoping == null
-        ? workflowModuleId
-        : scoping.tenantIdFor(workflowModuleId, null, adapterId, configuredTenantId);
+    return io.vanillabp.camunda7.wiring.Camunda7Scoping
+        .tenantIdFor(scoping, workflowModuleId, adapterId, configuredTenantId);
 
   }
 

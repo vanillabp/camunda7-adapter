@@ -75,6 +75,11 @@ public class Camunda7AdapterProducer {
                   .getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
           deploymentService.setScoping(scoping);
           deploymentService.setConfiguredTenantId(configuredTenantIdOf(overlay, adapterId));
+          deploymentService.setIdentityService(
+              engine
+                  .getProcessEngine()
+                  .getIdentityService());
+          deploymentService.setAcceptUnscopedIdentifiers(acceptUnscopedIdentifiersOf(overlay, adapterId));
           return deploymentService;
         })
         .toList();
@@ -126,6 +131,24 @@ public class Camunda7AdapterProducer {
    * The tenant name configured for an adapter id or <code>null</code> - the workflow
    * module id names the tenant then (story 35).
    */
+  /**
+   * The acknowledgement that identifiers are unique across workflow modules
+   * (<code>accept-unscoped-identifiers</code>), <code>false</code> if unset.
+   */
+  private static boolean acceptUnscopedIdentifiersOf(
+      final VanillaBpCamunda7Properties overlay,
+      final String adapterId) {
+
+    final var adapter = overlay
+        .adapters()
+        .get(adapterId);
+    return (adapter != null) && adapter
+        .acceptUnscopedIdentifiers()
+        .orElse(Boolean.FALSE)
+        .booleanValue();
+
+  }
+
   private static String configuredTenantIdOf(
       final VanillaBpCamunda7Properties overlay,
       final String adapterId) {

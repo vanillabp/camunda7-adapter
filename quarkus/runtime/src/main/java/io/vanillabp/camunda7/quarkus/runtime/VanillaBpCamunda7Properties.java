@@ -84,6 +84,14 @@ public interface VanillaBpCamunda7Properties {
      */
     Optional<String> tenantId();
 
+    /**
+     * OPTIONAL acknowledgement that the application's identifiers are unique across all
+     * of its workflow modules - it silences the WARN logged while the
+     * name-clash-avoidance mode <code>none</code> applies (this adapter's default
+     * mode). Default <code>false</code>.
+     */
+    Optional<Boolean> acceptUnscopedIdentifiers();
+
   }
 
 }

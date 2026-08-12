@@ -114,6 +114,15 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                     supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class));
                 deploymentService.setConfiguredTenantId(
                     configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
+                deploymentService.setIdentityService(
+                    engine
+                        .getProcessEngine()
+                        .getIdentityService());
+                deploymentService.setAcceptUnscopedIdentifiers(
+                    supplierContext
+                        .bean(VanillaBpCamunda7Properties.class)
+                        .enginePropertiesFor(adapterId)
+                        .isAcceptUnscopedIdentifiers());
                 return deploymentService;
               }));
 

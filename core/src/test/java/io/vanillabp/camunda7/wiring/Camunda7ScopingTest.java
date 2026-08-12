@@ -302,16 +302,9 @@ public class Camunda7ScopingTest {
     }
 
     @Override
-    public String tenantIdFor(
-        final String workflowModuleId,
-        final String bpmnProcessId,
+    public void validateNoneNameClashStrategy(
         final String adapterId,
-        final String configuredTenantId) {
-
-      if (mode != NameClashAvoidance.BY_ADAPTER) {
-        return null;
-      }
-      return configuredTenantId != null ? configuredTenantId : workflowModuleId;
+        final String byAdapterOnlyPropertyKey) {
 
     }
 

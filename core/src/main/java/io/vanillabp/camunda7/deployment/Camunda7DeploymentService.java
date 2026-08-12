@@ -36,9 +36,10 @@ import lombok.extern.slf4j.Slf4j;
  * <p>
  * The BPMN files of a workflow module are read into Camunda's own
  * {@link BpmnModelInstance} model, accumulated in a {@link Camunda7ProcessingContext} and
- * finally deployed as a single Camunda deployment. The <b>workflow module ID is used as
- * the Camunda tenant ID</b> (Version-1 behavior) so BPMN process ids are isolated between
- * modules; duplicate filtering is enabled so unchanged models are not redeployed on every
+ * finally deployed as a single Camunda deployment. Whether a module is isolated by a
+ * Camunda TENANT named after it (version 1's behavior), by prefixed identifiers or not at
+ * all is the name-clash-avoidance mode's decision, {@code none} being this adapter's
+ * default; duplicate filtering is enabled so unchanged models are not redeployed on every
  * boot.
  * <p>
  * Task wiring ({@link #wireBpmn}) extracts the service-like tasks from the model, validates
@@ -86,11 +87,44 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * The core's name-clash-avoidance model (story 35): decides whether a workflow
-   * module is isolated by the Camunda TENANT ({@code by-adapter}, the default and
-   * version 1's behavior), by PREFIXING the identifiers ({@code use-prefix} - no
-   * tenant) or not at all ({@code none}). May be <code>null</code> (tests).
+   * module is isolated by the Camunda TENANT ({@code by-adapter}, version 1's
+   * behavior), by PREFIXING the identifiers ({@code use-prefix} - no tenant) or not at
+   * all ({@code none}, this adapter's default). May be <code>null</code> (tests).
    */
   private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
+
+  /**
+   * The engine's identity service, used to tell whether a tenant deployed into is
+   * REGISTERED there (see {@link Camunda7TenantCheck}). May be <code>null</code> (tests,
+   * or a platform not handing it over): the check is skipped then.
+   */
+  private org.camunda.bpm.engine.IdentityService identityService;
+
+  /**
+   * Whether the configured tenant was already checked against the mode (once per
+   * adapter instance, the check is adapter-wide).
+   */
+  private boolean tenantConfigurationValidated;
+
+  /**
+   * Whether the application accepted unscoped identifiers deliberately
+   * (<code>vanillabp.adapters.&lt;id&gt;.accept-unscoped-identifiers</code>), which
+   * silences {@link #warnAboutUnscopedIdentifiers(String, boolean)}.
+   */
+  private boolean acceptUnscopedIdentifiers;
+
+  /**
+   * Sets the acknowledgement that identifiers are unique across workflow modules (the
+   * platform modules read it from the adapter's configuration).
+   *
+   * @param acceptUnscopedIdentifiers Whether unscoped identifiers are accepted
+   */
+  public void setAcceptUnscopedIdentifiers(
+      final boolean acceptUnscopedIdentifiers) {
+
+    this.acceptUnscopedIdentifiers = acceptUnscopedIdentifiers;
+
+  }
 
   /**
    * The tenant name configured for this adapter id
@@ -126,6 +160,19 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * Sets the engine's identity service (the platform modules take it from this adapter
+   * id's engine).
+   *
+   * @param identityService The identity service or <code>null</code>
+   */
+  public void setIdentityService(
+      final org.camunda.bpm.engine.IdentityService identityService) {
+
+    this.identityService = identityService;
+
+  }
+
+  /**
    * The BPMN process id as the ENGINE knows it (prefixed when the module's mode is
    * {@code use-prefix}).
    */
@@ -140,15 +187,36 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * Fails the boot if a tenant is configured for this adapter id although no workflow
+   * module is deployed into one, i.e. the mode says {@code none} or {@code use-prefix}
+   * everywhere. Whether a tenant is what only {@code by-adapter} can use is this
+   * adapter's knowledge; the core answers which modes apply. Checked once per adapter
+   * instance while deploying, before anything reaches the engine.
+   */
+  private void validateTenantConfiguration() {
+
+    if (tenantConfigurationValidated || (scoping == null)) {
+      return;
+    }
+    tenantConfigurationValidated = true;
+    if ((configuredTenantId == null) || configuredTenantId.isBlank()) {
+      return;
+    }
+    scoping.validateNoneNameClashStrategy(
+        adapterId,
+        "vanillabp.adapters.%s.tenant-id".formatted(adapterId));
+
+  }
+
+  /**
    * The Camunda tenant a workflow module is deployed to - the module id under
    * {@code by-adapter}, none under {@code use-prefix}/{@code none} (story 35).
    */
   private String tenantIdOf(
       final String workflowModuleId) {
 
-    return scoping == null
-        ? workflowModuleId
-        : scoping.tenantIdFor(workflowModuleId, null, adapterId, configuredTenantId);
+    return io.vanillabp.camunda7.wiring.Camunda7Scoping
+        .tenantIdFor(scoping, workflowModuleId, adapterId, configuredTenantId);
 
   }
 
@@ -214,6 +282,73 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final List<String> adapterIdsOfThisType) {
 
     Camunda7InstanceIdentity.validateDistinct(adapterIdsOfThisType, instanceIdentities);
+
+  }
+
+  /**
+   * Camunda 7 defaults to {@code none} although its engine is multi-tenant: it keeps
+   * workflow modules apart in more than one way (a tenant, prefixed identifiers, or an
+   * engine of its own per module), and which one an application wants is not something
+   * to presume. The choice is asked for by
+   * {@link #warnAboutUnscopedIdentifiers(String, boolean)} instead.
+   */
+  @Override
+  public io.vanillabp.integration.adapter.spi.NameClashAvoidance defaultNameClashAvoidance() {
+
+    return io.vanillabp.integration.adapter.spi.NameClashAvoidance.NONE;
+
+  }
+
+  /**
+   * Names what Camunda 7 offers instead of {@code none}: a tenant per workflow module
+   * (the engine is multi-tenant out of the box), prefixing, or an engine per workflow
+   * module - an own datasource respectively an own table prefix on a shared one.
+   * <p>
+   * Silent if the application accepted unscoped identifiers deliberately
+   * ({@code vanillabp.adapters.<id>.accept-unscoped-identifiers}) - the point of the
+   * warning is the DECISION, and once it is on record there is nothing left to ask.
+   */
+  @Override
+  public void warnAboutUnscopedIdentifiers(
+      final String workflowModuleId,
+      final boolean fromDefault) {
+
+    if (acceptUnscopedIdentifiers) {
+      log.debug(
+          "Camunda7[{}]: workflow module '{}' is deployed with name-clash-avoidance 'none', accepted by "
+              + "'vanillabp.adapters.{}.accept-unscoped-identifiers'",
+          adapterId,
+          workflowModuleId,
+          adapterId);
+      return;
+    }
+    log.warn(
+        """
+            Workflow module '{}' is deployed to Camunda 7 (adapter '{}') with name-clash-avoidance \
+            'none'{}. Its identifiers reach the engine as they are - BPMN process ids, message and \
+            signal names, error codes and task definitions - so a second workflow module using the \
+            same identifier addresses the very same process definitions and tasks, and neither \
+            VanillaBP nor the engine can tell. Keep 'none' only as long as your identifiers are \
+            unique across ALL workflow modules of this application. Otherwise choose:
+              vanillabp.adapters.{}.name-clash-avoidance: by-adapter   # a tenant per workflow module, Camunda 7's own isolation
+              vanillabp.adapters.{}.name-clash-avoidance: use-prefix   # VanillaBP prefixes the identifiers, no tenant needed
+            A third option is an engine per workflow module, configured as one adapter id per engine \
+            with its own database ('vanillabp.adapters.<id>.data-source-name') respectively its own \
+            tables in a shared one ('vanillabp.adapters.<id>.table-prefix'). The same key may be set \
+            per workflow module (vanillabp.workflow-modules.{}.adapters.{}.name-clash-avoidance). The \
+            mode is not a runtime switch - changing it once workflows are running is a BPMS \
+            migration. If the identifiers ARE unique, say so once and this warning is gone:
+              vanillabp.adapters.{}.accept-unscoped-identifiers: true""",
+        workflowModuleId,
+        adapterId,
+        fromDefault
+            ? " (nothing is configured, so the adapter's default applies)"
+            : "",
+        adapterId,
+        adapterId,
+        workflowModuleId,
+        adapterId,
+        adapterId);
 
   }
 
@@ -452,7 +587,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // one deployment per workflow module; tenant id = workflow module id isolates BPMN
     // process ids between modules; duplicate filtering avoids redeploying unchanged models
     // story 35: whether the module is isolated by a tenant is the mode's decision
+    validateTenantConfiguration();
     final var tenantId = tenantIdOf(workflowModuleId);
+    if (tenantId != null) {
+      Camunda7TenantCheck.warnAboutUnregisteredTenant(adapterId, tenantId, identityService);
+    }
     if (scoping != null) {
       scoping.validateNoCollidingProcessIds(
           adapterId,
