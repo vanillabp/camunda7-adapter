@@ -725,6 +725,55 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   }
 
+  /**
+   * Broadcasts the signal inside the caller's transaction: the embedded engine
+   * shares it, so a rollback takes the broadcast with it. An engine on its OWN
+   * datasource cannot join that transaction - it broadcasts in phase two, like a
+   * remote BPMS (see {@link #needsTwoPhaseCommitForStartingWorkflows()}).
+   */
+  @Override
+  public void sendSignalPhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String signalName) {
+
+    if (usesSeparateDataSource) {
+      return;
+    }
+    broadcastSignal(workflowModuleId, signalName);
+
+  }
+
+  @Override
+  public void sendSignalPhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String signalName) {
+
+    broadcastSignal(workflowModuleId, signalName);
+
+  }
+
+  /**
+   * A signal reaches every subscription of the workflow module's scope - the
+   * tenant it is deployed into, respectively no tenant where the module prefixes
+   * its identifiers (story 35). No variables travel: a signal transports its name,
+   * the workflow aggregate stays the source of truth.
+   */
+  private void broadcastSignal(
+      final String workflowModuleId,
+      final String signalName) {
+
+    var signal = runtimeService
+        .createSignalEvent(scopedIdentifier(workflowModuleId, signalName));
+    final var signalTenantId = tenantIdOf(workflowModuleId);
+    signal = signalTenantId != null
+        ? signal.tenantId(signalTenantId)
+        : signal.withoutTenantId();
+    signal.send();
+
+  }
+
   @Override
   public void correlateMessagePhaseOne(
       final String workflowModuleId,
