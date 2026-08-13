@@ -73,6 +73,7 @@ public class Camunda7AdapterProducer {
           final var deploymentService = new Camunda7DeploymentService(
               adapterId, engine.getRepositoryService(), engine, workflowTaskRegistry, engine
                   .getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
+          deploymentService.setBpmsInitiatedStartInvoker(workflowTaskRegistry);
           deploymentService.setScoping(scoping);
           deploymentService.setConfiguredTenantId(configuredTenantIdOf(overlay, adapterId));
           deploymentService.setIdentityService(

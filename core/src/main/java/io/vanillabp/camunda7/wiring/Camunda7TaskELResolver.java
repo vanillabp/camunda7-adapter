@@ -94,11 +94,20 @@ public class Camunda7TaskELResolver extends ELResolver {
         // user-task connectables (story 24) are served by task listeners, never
         // by EL names - a formKey colliding with an aggregate attribute must not
         // shadow the attribute
-        .filter(candidate -> candidate.type() != Camunda7TaskConnectable.Type.USER_TASK);
+        .filter(candidate -> candidate.type() != Camunda7TaskConnectable.Type.USER_TASK)
+        // a connectable matched by ELEMENT catches EVERY name evaluated while an
+        // execution sits at its activity, including the condition of a conditional
+        // event reading the workflow aggregate. Where the aggregate has an attribute
+        // of that name, the attribute is what the model means - the task is served by
+        // its own name, or by the element while no attribute is in the way
+        .filter(
+            candidate -> taskRegistry
+                .isTaskDefinitionName(workflowModuleId, scopedBpmnProcessId, propertyName) || !workflowTaskInvoker
+                    .workflowAggregateHasProperty(workflowModuleId, bpmnProcessId, propertyName));
     if (connectable.isPresent()) {
       context.setPropertyResolved(true);
       final var behavior = new Camunda7WorkflowTaskBehavior(
-          connectable.get(), workflowTaskInvoker, scoping, adapterId);
+          connectable.get(), workflowTaskInvoker, scoping, adapterId, taskRegistry);
       if (connectable.get().type() == Camunda7TaskConnectable.Type.DELEGATE_EXPRESSION) {
         // the engine treats the resolved object as the task's activity behavior
         return behavior;

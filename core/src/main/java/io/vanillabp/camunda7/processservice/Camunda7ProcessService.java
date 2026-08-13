@@ -71,6 +71,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private final org.camunda.bpm.engine.HistoryService historyService;
 
   /**
+   * The engine's repository service - the deployed BPMN model tells an activity
+   * which creates a scope of its own (boundary events, multi-instance) from one
+   * which does not, which decides where a task-scoped push has to write.
+   */
+  private final org.camunda.bpm.engine.RepositoryService repositoryService;
+
+  /**
    * The core's sync model (story 28). Camunda 7 is EMBEDDED: BPMN expressions read
    * the aggregate LIVE (see the EL resolver of story 21b), so nothing has to be
    * pushed - the adapter's default is therefore
@@ -87,6 +94,14 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * The default of this adapter: nothing is shared unless the application asks for
    * it ({@code @SyncWithBPMS}).
    */
+  /**
+   * The technical variable written when the application shares nothing: Camunda 7
+   * evaluates conditional events on variable changes, so SOMETHING has to change for
+   * the engine to look. Its value is the time of the push - only there to make every
+   * write a change.
+   */
+  public static final String AGGREGATE_CHANGED_MARKER = "vanillabpAggregateChanged";
+
   public static final io.vanillabp.integration.adapter.spi.AggregateSyncMode SYNC_MODE = io.vanillabp.integration.adapter.spi.AggregateSyncMode.NONE;
 
   /**
@@ -230,6 +245,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     this.taskService = taskService;
     this.usesSeparateDataSource = usesSeparateDataSource;
     this.historyService = historyService;
+    this.repositoryService = repositoryService;
     this.viewer = new Camunda7WorkflowViewer(adapterId, repositoryService, historyService, runtimeService);
 
   }
@@ -725,6 +741,55 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   }
 
+  /**
+   * Broadcasts the signal inside the caller's transaction: the embedded engine
+   * shares it, so a rollback takes the broadcast with it. An engine on its OWN
+   * datasource cannot join that transaction - it broadcasts in phase two, like a
+   * remote BPMS (see {@link #needsTwoPhaseCommitForStartingWorkflows()}).
+   */
+  @Override
+  public void sendSignalPhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String signalName) {
+
+    if (usesSeparateDataSource) {
+      return;
+    }
+    broadcastSignal(workflowModuleId, signalName);
+
+  }
+
+  @Override
+  public void sendSignalPhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String signalName) {
+
+    broadcastSignal(workflowModuleId, signalName);
+
+  }
+
+  /**
+   * A signal reaches every subscription of the workflow module's scope - the
+   * tenant it is deployed into, respectively no tenant where the module prefixes
+   * its identifiers (story 35). No variables travel: a signal transports its name,
+   * the workflow aggregate stays the source of truth.
+   */
+  private void broadcastSignal(
+      final String workflowModuleId,
+      final String signalName) {
+
+    var signal = runtimeService
+        .createSignalEvent(scopedIdentifier(workflowModuleId, signalName));
+    final var signalTenantId = tenantIdOf(workflowModuleId);
+    signal = signalTenantId != null
+        ? signal.tenantId(signalTenantId)
+        : signal.withoutTenantId();
+    signal.send();
+
+  }
+
   @Override
   public void correlateMessagePhaseOne(
       final String workflowModuleId,
@@ -774,6 +839,243 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     }
     messageCorrelation(workflowModuleId, bpmnProcessId, messageName, businessKey, correlationId)
         .correlateWithResult();
+
+  }
+
+  @Override
+  public void aggregateChangedPhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final A workflowAggregate,
+      final String taskId) {
+
+    if (usesSeparateDataSource) {
+      // the engine cannot join the caller's transaction - writing here would show
+      // values of a transaction which may still roll back
+      return;
+    }
+    pushAggregate(
+        String.valueOf(aggregatePersistence.getAggregateId(workflowAggregate)), workflowAggregate, taskId, false);
+
+  }
+
+  @Override
+  public void aggregateChangedPhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String taskId) {
+
+    final var aggregate = aggregatePersistence.loadById(workflowAggregateId);
+    pushAggregate(String.valueOf(workflowAggregateId), aggregate, taskId, true);
+
+  }
+
+  /**
+   * Writes the aggregate's shared values into the workflow (see
+   * {@link #operatorContext}) and lets the engine re-evaluate what waits for a
+   * change.
+   * <p>
+   * Camunda 7 evaluates conditional events when a variable of their scope changes,
+   * so the write itself is the trigger - and it has to happen even when the
+   * application shares nothing ({@code @SyncWithBPMS} is opt-in here), which is why
+   * a technical marker variable is written alongside. Camunda 7 reads the aggregate
+   * LIVE through the EL resolver, so a condition sees the current state either way;
+   * without the write nothing would look.
+   *
+   * @param businessKey The aggregate's ID
+   * @param aggregate The workflow aggregate or <code>null</code>
+   * @param taskId The parked execution whose scope receives the values, or
+   *        <code>null</code> for the workflow's global scope
+   * @param tolerateGoneWorkflow Whether a workflow gone by now is tolerated (phase
+   *        two is at-least-once) instead of failing
+   */
+  private void pushAggregate(
+      final String businessKey,
+      final A aggregate,
+      final String taskId,
+      final boolean tolerateGoneWorkflow) {
+
+    final var variables = new java.util.LinkedHashMap<String, Object>(operatorContext(aggregate));
+    if (variables.isEmpty()) {
+      // nothing is shared (this adapter's default) - without a variable event the
+      // engine would not look at its conditional events at all, so a technical
+      // marker is written instead
+      variables.put(AGGREGATE_CHANGED_MARKER, System.currentTimeMillis());
+    }
+
+    if (taskId != null) {
+      // check BEFORE writing (rollback-only pitfall, see signalTask)
+      final var execution = runtimeService
+          .createExecutionQuery()
+          .executionId(taskId)
+          .singleResult();
+      if (execution == null) {
+        if (!tolerateGoneWorkflow) {
+          throw new io.vanillabp.spi.process.TaskNotFoundException(
+              ("The task '%s' of the workflow of aggregate '%s' is not active in Camunda 7 (adapter "
+                  + "'%s')! Either the task was completed meanwhile or the id is not the one reported "
+                  + "to the @TaskId parameter.")
+                  .formatted(taskId, businessKey, adapterId));
+        }
+        log.warn(
+            "Camunda7[{}]: task '{}' of workflow aggregate '{}' is gone - skipping the redelivered "
+                + "phase-two push of the aggregate",
+            adapterId,
+            taskId,
+            businessKey);
+        return;
+      }
+      // the scope the task RUNS IN - the process, an embedded subprocess, or the one
+      // iteration of a multi-instance embedded subprocess it belongs to. Writing on
+      // the task's own execution would reach a boundary conditional event and nothing
+      // else, while the scope is what an event subprocess with a conditional start
+      // event listens on
+      runtimeService
+          .setVariablesLocal(
+              flowScopeExecutionIdOf(execution.getProcessInstanceId(), taskId),
+              variables);
+      return;
+    }
+
+    final var processInstance = runtimeService
+        .createProcessInstanceQuery()
+        .processInstanceBusinessKey(businessKey)
+        .singleResult();
+    if (processInstance == null) {
+      if (!tolerateGoneWorkflow) {
+        throw new io.vanillabp.spi.process.WorkflowNotFoundException(
+            ("The workflow of aggregate '%s' is not active in Camunda 7 (adapter '%s') - its changed "
+                + "aggregate cannot be pushed!")
+                .formatted(businessKey, adapterId));
+      }
+      log.warn(
+          "Camunda7[{}]: the workflow of aggregate '{}' is gone - skipping the redelivered phase-two "
+              + "push of the aggregate",
+          adapterId,
+          businessKey);
+      return;
+    }
+    runtimeService.setVariables(processInstance.getId(), variables);
+
+  }
+
+  /**
+   * The execution of the scope the task with the given ID RUNS IN: the process
+   * instance, an embedded subprocess, or the one iteration of a multi-instance
+   * embedded subprocess it belongs to.
+   * <p>
+   * Not the task's own context: an activity with boundary events (and every instance
+   * of a multi-instance activity) gets a scope of its own in the engine, and writing
+   * there would serve a boundary conditional event and nothing else. The scope AROUND
+   * the task is what an event subprocess with a conditional start event listens on,
+   * and what the rest of that scope reads.
+   * <p>
+   * The walk goes up the execution tree: from the task's execution to the closest
+   * SCOPE execution, skipping the execution of the task's own activity scope and the
+   * technical wrapper around the instances of a multi-instance activity.
+   *
+   * @param processInstanceId The workflow's process instance
+   * @param taskId The parked execution of the task
+   * @return The execution to write the local variables at (the process instance if
+   *         the task cannot be located)
+   */
+  private String flowScopeExecutionIdOf(
+      final String processInstanceId,
+      final String taskId) {
+
+    final var executions = runtimeService
+        .createExecutionQuery()
+        .processInstanceId(processInstanceId)
+        .list()
+        .stream()
+        .filter(org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity.class::isInstance)
+        .map(org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity.class::cast)
+        .collect(
+            java.util.stream.Collectors
+                .toMap(
+                    org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity::getId,
+                    execution -> execution));
+
+    var current = executions.get(taskId);
+    if (current == null) {
+      return processInstanceId;
+    }
+    final var processDefinitionId = current.getProcessDefinitionId();
+    if (current.isScope() && activityHasAScopeOfItsOwn(processDefinitionId, current.getActivityId())) {
+      // the scope of the task itself - the task runs in the scope around it
+      current = executions.get(current.getParentId());
+    }
+    while (current != null) {
+      if (current.isScope() && !isMultiInstanceBody(current)) {
+        return current.getId();
+      }
+      current = executions.get(current.getParentId());
+    }
+    return processInstanceId;
+
+  }
+
+  /**
+   * Whether the BPMN activity creates a scope of its own in the engine: an activity
+   * with boundary events attached, or a multi-instance activity (whose instances each
+   * get one).
+   *
+   * @param processDefinitionId The definition the workflow runs on
+   * @param activityId The activity to look at
+   * @return Whether the engine gives that activity a scope
+   */
+  private boolean activityHasAScopeOfItsOwn(
+      final String processDefinitionId,
+      final String activityId) {
+
+    if (activityId == null) {
+      return false;
+    }
+    try {
+      final var model = repositoryService.getBpmnModelInstance(processDefinitionId);
+      final var element = model.getModelElementById(activityId);
+      if (element instanceof org.camunda.bpm.model.bpmn.instance.Activity activity) {
+        if (activity.getLoopCharacteristics() != null) {
+          return true;
+        }
+        return model
+            .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.BoundaryEvent.class)
+            .stream()
+            .anyMatch(boundaryEvent -> activityId.equals(boundaryEvent.getAttachedTo().getId()));
+      }
+      return false;
+    } catch (final RuntimeException e) {
+      log
+          .debug(
+              "Camunda7[{}]: could not read the model of process definition '{}' - assuming activity '{}' "
+                  + "has no scope of its own",
+              adapterId,
+              processDefinitionId,
+              activityId,
+              e);
+      return false;
+    }
+
+  }
+
+  /**
+   * Whether the execution is the technical wrapper around the instances of a
+   * multi-instance activity. Its variables would be shared by all of them, so it is
+   * never the scope a push is meant for.
+   *
+   * @param execution The execution to look at
+   * @return Whether it is a multi-instance body
+   */
+  private boolean isMultiInstanceBody(
+      final org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity execution) {
+
+    final var activityId = execution.getActivityId();
+    // the engine names it "<activity id>#multiInstanceBody"
+    return (activityId != null) && activityId.endsWith("#"
+        + org.camunda.bpm.engine.ActivityTypes.MULTI_INSTANCE_BODY);
 
   }
 

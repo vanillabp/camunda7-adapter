@@ -60,11 +60,17 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
   private final String adapterId;
 
+  /**
+   * Answers the version of the process definition an execution runs on (story 48).
+   * May be <code>null</code> (tests): no version is reported then.
+   */
+  private final Camunda7TaskRegistry taskRegistry;
+
   public Camunda7WorkflowTaskBehavior(
       final Camunda7TaskConnectable connectable,
       final WorkflowTaskInvoker workflowTaskInvoker) {
 
-    this(connectable, workflowTaskInvoker, null, null);
+    this(connectable, workflowTaskInvoker, null, null, null);
 
   }
 
@@ -72,12 +78,14 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
       final Camunda7TaskConnectable connectable,
       final WorkflowTaskInvoker workflowTaskInvoker,
       final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping,
-      final String adapterId) {
+      final String adapterId,
+      final Camunda7TaskRegistry taskRegistry) {
 
     this.connectable = connectable;
     this.workflowTaskInvoker = workflowTaskInvoker;
     this.scoping = scoping;
     this.adapterId = adapterId;
+    this.taskRegistry = taskRegistry;
 
   }
 
@@ -150,7 +158,7 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
     final var outcome = workflowTaskInvoker.invokeWorkflowTask(
         connectable.workflowModuleId(),
         connectable.bpmnProcessId(),
-        new Camunda7TaskInvocationContext(connectable, execution));
+        new Camunda7TaskInvocationContext(connectable, execution, taskRegistry));
     if (outcome.kind() == WorkflowTaskOutcome.Kind.BPMN_ERROR) {
       // error-boundary routing; the aggregate changes were saved and commit
       // with the engine's transaction (the V1 contract)
@@ -173,24 +181,44 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
     private final io.vanillabp.spi.service.TaskEvent.Event taskEvent;
 
+    /**
+     * Answers the version of the execution's process definition. May be
+     * <code>null</code>: no version is reported then, which matches every method.
+     */
+    private final Camunda7TaskRegistry taskRegistry;
+
     private Map<String, MultiInstanceValue> multiInstances;
 
     Camunda7TaskInvocationContext(
         final Camunda7TaskConnectable connectable,
-        final DelegateExecution execution) {
+        final DelegateExecution execution,
+        final Camunda7TaskRegistry taskRegistry) {
 
-      this(connectable, execution, io.vanillabp.spi.service.TaskEvent.Event.CREATED);
+      this(connectable, execution, io.vanillabp.spi.service.TaskEvent.Event.CREATED, taskRegistry);
 
     }
 
     Camunda7TaskInvocationContext(
         final Camunda7TaskConnectable connectable,
         final DelegateExecution execution,
-        final io.vanillabp.spi.service.TaskEvent.Event taskEvent) {
+        final io.vanillabp.spi.service.TaskEvent.Event taskEvent,
+        final Camunda7TaskRegistry taskRegistry) {
 
       this.connectable = connectable;
       this.execution = execution;
       this.taskEvent = taskEvent;
+      this.taskRegistry = taskRegistry;
+
+    }
+
+    @Override
+    public String getProcessVersion() {
+
+      // resolved once per process definition id and then answered from memory - a
+      // query per task execution would be paid by every workflow
+      return taskRegistry == null
+          ? null
+          : taskRegistry.versionOfDefinition(execution.getProcessDefinitionId());
 
     }
 

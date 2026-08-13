@@ -79,7 +79,8 @@ public class Camunda7UserTaskEventListener implements TaskListener {
         workflowModuleId);
 
     // user-task handlers are OPTIONAL by design - skip silently without one
-    final var context = new Camunda7UserTaskInvocationContext(connectable.get(), delegateTask, event);
+    final var context = new Camunda7UserTaskInvocationContext(
+        connectable.get(), delegateTask, event, taskRegistry.versionOfDefinition(processDefinition.getId()));
     if (!workflowTaskInvoker.workflowTaskHandlerExists(
         workflowModuleId, bpmnProcessId, context.getTaskDefinition())) {
       log.trace(
@@ -120,14 +121,29 @@ public class Camunda7UserTaskEventListener implements TaskListener {
 
     private final TaskEvent.Event event;
 
+    /**
+     * The version of the deployed process definition this user task belongs to
+     * (story 48) or <code>null</code>.
+     */
+    private final String processVersion;
+
     Camunda7UserTaskInvocationContext(
         final Camunda7TaskConnectable connectable,
         final DelegateTask delegateTask,
-        final TaskEvent.Event event) {
+        final TaskEvent.Event event,
+        final String processVersion) {
 
       this.connectable = connectable;
       this.delegateTask = delegateTask;
       this.event = event;
+      this.processVersion = processVersion;
+
+    }
+
+    @Override
+    public String getProcessVersion() {
+
+      return processVersion;
 
     }
 

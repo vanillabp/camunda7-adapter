@@ -32,12 +32,100 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
    */
   private final Camunda7UserTaskEventListener userTaskEventListener;
 
+  /**
+   * Builds the workflow aggregate of a workflow the engine started on its own -
+   * attached to timer, signal and conditional start events (story 41). May be
+   * <code>null</code>: an engine built without it simply does not serve such
+   * processes.
+   */
+  private final java.util.function.Function<io.vanillabp.spi.service.BpmsStartTrigger.Kind, org.camunda.bpm.engine.delegate.ExecutionListener> bpmsInitiatedStartListenerFactory;
+
+  /**
+   * Tells the application that a workflow ended (story 43) - attached to the PROCESS
+   * scope, but only where a <code>&#64;WorkflowEnded</code> method exists. May be
+   * <code>null</code>: an engine built without it never notifies.
+   */
+  private io.vanillabp.camunda7.wiring.Camunda7WorkflowEndedListener workflowEndedListener;
+
+  /**
+   * Decides whether a process definition needs the end listener - the pair of
+   * (tenant, process definition key) is what the engine reports at parse time.
+   */
+  private java.util.function.BiPredicate<String, String> workflowEndedHandlerExists;
+
+  /**
+   * Hands over the end-of-workflow notification (story 43).
+   *
+   * @param workflowEndedListener The listener to attach
+   * @param workflowEndedHandlerExists Whether a process definition needs it
+   */
+  public void setWorkflowEnded(
+      final io.vanillabp.camunda7.wiring.Camunda7WorkflowEndedListener workflowEndedListener,
+      final java.util.function.BiPredicate<String, String> workflowEndedHandlerExists) {
+
+    this.workflowEndedListener = workflowEndedListener;
+    this.workflowEndedHandlerExists = workflowEndedHandlerExists;
+
+  }
+
+  @Override
+  public void parseProcess(
+      final Element processElement,
+      final org.camunda.bpm.engine.impl.persistence.entity.ProcessDefinitionEntity processDefinition) {
+
+    if ((workflowEndedListener == null) || (workflowEndedHandlerExists == null)) {
+      return;
+    }
+    // a model must not pay for a notification the application did not ask for
+    if (!workflowEndedHandlerExists.test(processDefinition.getTenantId(), processDefinition.getKey())) {
+      return;
+    }
+    processDefinition
+        .addExecutionListener(
+            org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_END,
+            workflowEndedListener);
+
+  }
+
   public Camunda7AsyncBpmnParseListener(
       final Camunda7TaskCancellationListener cancellationListener,
       final Camunda7UserTaskEventListener userTaskEventListener) {
 
+    this(cancellationListener, userTaskEventListener, null);
+
+  }
+
+  public Camunda7AsyncBpmnParseListener(
+      final Camunda7TaskCancellationListener cancellationListener,
+      final Camunda7UserTaskEventListener userTaskEventListener,
+      final java.util.function.Function<io.vanillabp.spi.service.BpmsStartTrigger.Kind, org.camunda.bpm.engine.delegate.ExecutionListener> bpmsInitiatedStartListenerFactory) {
+
     this.cancellationListener = cancellationListener;
     this.userTaskEventListener = userTaskEventListener;
+    this.bpmsInitiatedStartListenerFactory = bpmsInitiatedStartListenerFactory;
+
+  }
+
+  @Override
+  public void parseStartEvent(
+      final Element startEventElement,
+      final ScopeImpl scope,
+      final ActivityImpl activity) {
+
+    if (bpmsInitiatedStartListenerFactory == null) {
+      return;
+    }
+    // only the start events the ENGINE fires on its own need an aggregate built for
+    // them; a none start event is the application's business, a message start event
+    // arrives through ProcessService#startWorkflowByMessage carrying its aggregate
+    final var kind = Camunda7StartEvents.kindOf(startEventElement);
+    if (kind == null) {
+      return;
+    }
+    activity
+        .addListener(
+            org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_START,
+            bpmsInitiatedStartListenerFactory.apply(kind));
 
   }
 

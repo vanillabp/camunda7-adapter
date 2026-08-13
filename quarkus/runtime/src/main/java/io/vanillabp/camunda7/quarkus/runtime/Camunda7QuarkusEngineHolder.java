@@ -69,6 +69,31 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
    *        process service)
    * @param transactionManager The CDI (Narayana) transaction manager
    */
+  /**
+   * Whether the application asked to be told about the end of workflows of the
+   * process definition the engine is parsing (story 43).
+   *
+   * @param workflowEndedInvoker The core's invoker
+   * @param tenantId The tenant of the deployment (may be <code>null</code>)
+   * @param processDefinitionKey The process definition key the engine parses
+   * @return Whether an end listener has to be attached
+   */
+  private boolean workflowEndedHandlerExists(
+      final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker,
+      final String tenantId,
+      final String processDefinitionKey) {
+
+    final var workflowModuleId = taskRegistry.resolveWorkflowModuleId(tenantId, processDefinitionKey);
+    if (workflowModuleId == null) {
+      return false;
+    }
+    return workflowEndedInvoker
+        .workflowEndedHandlerExists(
+            workflowModuleId,
+            taskRegistry.plainBpmnProcessId(workflowModuleId, processDefinitionKey));
+
+  }
+
   public Camunda7QuarkusEngineHolder(
       final String adapterId,
       final Camunda7EngineProperties properties,
@@ -77,8 +102,54 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
       final TransactionManager transactionManager,
       final WorkflowTaskInvoker workflowTaskInvoker) {
 
+    this(adapterId, properties, dataSource, usesSeparateDataSource, transactionManager, workflowTaskInvoker, null);
+
+  }
+
+  public Camunda7QuarkusEngineHolder(
+      final String adapterId,
+      final Camunda7EngineProperties properties,
+      final AgroalDataSource dataSource,
+      final boolean usesSeparateDataSource,
+      final TransactionManager transactionManager,
+      final WorkflowTaskInvoker workflowTaskInvoker,
+      final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker) {
+
+    this(
+        adapterId, properties, dataSource, usesSeparateDataSource, transactionManager, workflowTaskInvoker, bpmsInitiatedStartInvoker, null);
+
+  }
+
+  public Camunda7QuarkusEngineHolder(
+      final String adapterId,
+      final Camunda7EngineProperties properties,
+      final AgroalDataSource dataSource,
+      final boolean usesSeparateDataSource,
+      final TransactionManager transactionManager,
+      final WorkflowTaskInvoker workflowTaskInvoker,
+      final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker,
+      final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker) {
+
     this.adapterId = adapterId;
     this.usesSeparateDataSource = usesSeparateDataSource;
+
+    final var parseListener = new Camunda7AsyncBpmnParseListener(
+        new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
+            workflowTaskInvoker, taskRegistry), new io.vanillabp.camunda7.wiring.Camunda7UserTaskEventListener(
+                workflowTaskInvoker, taskRegistry), bpmsInitiatedStartInvoker == null
+                    ? null
+                    : kind -> new io.vanillabp.camunda7.wiring.Camunda7BpmsInitiatedStartListener(
+                        bpmsInitiatedStartInvoker, taskRegistry, kind));
+    if (workflowEndedInvoker != null) {
+      parseListener
+          .setWorkflowEnded(
+              new io.vanillabp.camunda7.wiring.Camunda7WorkflowEndedListener(
+                  workflowEndedInvoker, taskRegistry),
+              (
+                  tenantId,
+                  processDefinitionKey) -> workflowEndedHandlerExists(
+                      workflowEndedInvoker, tenantId, processDefinitionKey));
+    }
 
     final var configuration = new Camunda7QuarkusProcessEngineConfiguration(transactionManager);
     // VanillaBP task wiring: top-level EL names resolve @WorkflowTask methods and
@@ -86,10 +157,7 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     // boundaries with remote BPMS (async before/after)
     configuration.setExpressionManager(new Camunda7TaskExpressionManager(taskRegistry, workflowTaskInvoker));
     configuration.setCustomPreBPMNParseListeners(new java.util.ArrayList<>(
-        java.util.List.of(new Camunda7AsyncBpmnParseListener(
-            new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
-                workflowTaskInvoker, taskRegistry), new io.vanillabp.camunda7.wiring.Camunda7UserTaskEventListener(
-                    workflowTaskInvoker, taskRegistry)))));
+        java.util.List.of(parseListener)));
     configuration.setProcessEngineName("vanillabp-camunda7-%s".formatted(adapterId));
     configuration.setDataSource(dataSource);
     configuration.setDatabaseSchemaUpdate(properties.getDatabaseSchemaUpdate());
