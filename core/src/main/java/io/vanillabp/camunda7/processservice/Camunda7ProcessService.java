@@ -87,6 +87,14 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * The default of this adapter: nothing is shared unless the application asks for
    * it ({@code @SyncWithBPMS}).
    */
+  /**
+   * The technical variable written when the application shares nothing: Camunda 7
+   * evaluates conditional events on variable changes, so SOMETHING has to change for
+   * the engine to look. Its value is the time of the push - only there to make every
+   * write a change.
+   */
+  public static final String AGGREGATE_CHANGED_MARKER = "vanillabpAggregateChanged";
+
   public static final io.vanillabp.integration.adapter.spi.AggregateSyncMode SYNC_MODE = io.vanillabp.integration.adapter.spi.AggregateSyncMode.NONE;
 
   /**
@@ -823,6 +831,120 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     }
     messageCorrelation(workflowModuleId, bpmnProcessId, messageName, businessKey, correlationId)
         .correlateWithResult();
+
+  }
+
+  @Override
+  public void aggregateChangedPhaseOne(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final A workflowAggregate,
+      final String taskId) {
+
+    if (usesSeparateDataSource) {
+      // the engine cannot join the caller's transaction - writing here would show
+      // values of a transaction which may still roll back
+      return;
+    }
+    pushAggregate(
+        String.valueOf(aggregatePersistence.getAggregateId(workflowAggregate)), workflowAggregate, taskId, false);
+
+  }
+
+  @Override
+  public void aggregateChangedPhaseTwo(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String taskId) {
+
+    final var aggregate = aggregatePersistence.loadById(workflowAggregateId);
+    pushAggregate(String.valueOf(workflowAggregateId), aggregate, taskId, true);
+
+  }
+
+  /**
+   * Writes the aggregate's shared values into the workflow (see
+   * {@link #operatorContext}) and lets the engine re-evaluate what waits for a
+   * change.
+   * <p>
+   * Camunda 7 evaluates conditional events when a variable of their scope changes,
+   * so the write itself is the trigger - and it has to happen even when the
+   * application shares nothing ({@code @SyncWithBPMS} is opt-in here), which is why
+   * a technical marker variable is written alongside. Camunda 7 reads the aggregate
+   * LIVE through the EL resolver, so a condition sees the current state either way;
+   * without the write nothing would look.
+   *
+   * @param businessKey The aggregate's ID
+   * @param aggregate The workflow aggregate or <code>null</code>
+   * @param taskId The parked execution whose scope receives the values, or
+   *        <code>null</code> for the workflow's global scope
+   * @param tolerateGoneWorkflow Whether a workflow gone by now is tolerated (phase
+   *        two is at-least-once) instead of failing
+   */
+  private void pushAggregate(
+      final String businessKey,
+      final A aggregate,
+      final String taskId,
+      final boolean tolerateGoneWorkflow) {
+
+    final var variables = new java.util.LinkedHashMap<String, Object>(operatorContext(aggregate));
+    if (variables.isEmpty()) {
+      // nothing is shared (this adapter's default) - without a variable event the
+      // engine would not look at its conditional events at all, so a technical
+      // marker is written instead
+      variables.put(AGGREGATE_CHANGED_MARKER, System.currentTimeMillis());
+    }
+
+    if (taskId != null) {
+      // check BEFORE writing (rollback-only pitfall, see signalTask)
+      final var execution = runtimeService
+          .createExecutionQuery()
+          .executionId(taskId)
+          .singleResult();
+      if (execution == null) {
+        if (!tolerateGoneWorkflow) {
+          throw new io.vanillabp.spi.process.TaskNotFoundException(
+              ("The task '%s' of the workflow of aggregate '%s' is not active in Camunda 7 (adapter "
+                  + "'%s')! Either the task was completed meanwhile or the id is not the one reported "
+                  + "to the @TaskId parameter.")
+                  .formatted(taskId, businessKey, adapterId));
+        }
+        log.warn(
+            "Camunda7[{}]: task '{}' of workflow aggregate '{}' is gone - skipping the redelivered "
+                + "phase-two push of the aggregate",
+            adapterId,
+            taskId,
+            businessKey);
+        return;
+      }
+      // the scope of THIS task instance only: a workflow-wide write would be a lost
+      // update between the instances of a multi-instance activity
+      runtimeService.setVariablesLocal(taskId, variables);
+      return;
+    }
+
+    final var processInstance = runtimeService
+        .createProcessInstanceQuery()
+        .processInstanceBusinessKey(businessKey)
+        .singleResult();
+    if (processInstance == null) {
+      if (!tolerateGoneWorkflow) {
+        throw new io.vanillabp.spi.process.WorkflowNotFoundException(
+            ("The workflow of aggregate '%s' is not active in Camunda 7 (adapter '%s') - its changed "
+                + "aggregate cannot be pushed!")
+                .formatted(businessKey, adapterId));
+      }
+      log.warn(
+          "Camunda7[{}]: the workflow of aggregate '{}' is gone - skipping the redelivered phase-two "
+              + "push of the aggregate",
+          adapterId,
+          businessKey);
+      return;
+    }
+    runtimeService.setVariables(processInstance.getId(), variables);
 
   }
 
