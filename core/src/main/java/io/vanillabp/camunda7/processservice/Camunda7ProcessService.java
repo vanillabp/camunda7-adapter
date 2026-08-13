@@ -419,6 +419,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   @Override
   public WorkflowAwareness awarenessOfWorkflow(
+      final io.vanillabp.integration.spi.AggregatePersistenceAware<A> aggregatePersistence,
       final Object workflowAggregateId) {
 
     // the business key IS the aggregate ID. A running instance means ACTIVE; an

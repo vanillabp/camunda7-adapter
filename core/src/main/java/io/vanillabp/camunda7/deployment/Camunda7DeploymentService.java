@@ -294,6 +294,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         repositoryService, this::scopedProcessId, this::tenantIdOf);
     if (taskRegistry != null) {
       taskRegistry.setProcessVersions(processVersions);
+      // every inbound delivery reports which adapter it came from (story 54)
+      taskRegistry.setAdapterId(adapterId);
     }
 
   }

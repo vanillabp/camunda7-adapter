@@ -442,7 +442,7 @@ public class Camunda7TaskProcessingIT {
     // workflow awareness edge: unknown aggregate
     assertEquals(
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
-        c7ProcessService.awarenessOfWorkflow(-1L));
+        c7ProcessService.awarenessOfWorkflow(null, -1L));
 
     // cleanup: complete the still-open task
     transactionTemplate.executeWithoutResult(status -> {

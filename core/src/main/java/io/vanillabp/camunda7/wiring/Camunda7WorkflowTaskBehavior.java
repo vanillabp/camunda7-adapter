@@ -189,6 +189,15 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
     private Map<String, MultiInstanceValue> multiInstances;
 
+    @Override
+    public String getAdapterId() {
+
+      return taskRegistry == null
+          ? null
+          : taskRegistry.getAdapterId();
+
+    }
+
     Camunda7TaskInvocationContext(
         final Camunda7TaskConnectable connectable,
         final DelegateExecution execution,

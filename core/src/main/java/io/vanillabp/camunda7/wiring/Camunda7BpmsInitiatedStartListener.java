@@ -118,6 +118,11 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
     return new BpmsInitiatedStartContext() {
 
       @Override
+      public String getAdapterId() {
+        return taskRegistry.getAdapterId();
+      }
+
+      @Override
       public String getStartEventId() {
         return startEventId;
       }

@@ -80,7 +80,8 @@ public class Camunda7UserTaskEventListener implements TaskListener {
 
     // user-task handlers are OPTIONAL by design - skip silently without one
     final var context = new Camunda7UserTaskInvocationContext(
-        connectable.get(), delegateTask, event, taskRegistry.versionOfDefinition(processDefinition.getId()));
+        connectable.get(), delegateTask, event, taskRegistry
+            .versionOfDefinition(processDefinition.getId()), taskRegistry.getAdapterId());
     if (!workflowTaskInvoker.workflowTaskHandlerExists(
         workflowModuleId, bpmnProcessId, context.getTaskDefinition())) {
       log.trace(
@@ -127,16 +128,31 @@ public class Camunda7UserTaskEventListener implements TaskListener {
      */
     private final String processVersion;
 
+    /**
+     * The adapter delivering this notification (story 54) or <code>null</code>.
+     */
+    private final String adapterId;
+
     Camunda7UserTaskInvocationContext(
         final Camunda7TaskConnectable connectable,
         final DelegateTask delegateTask,
         final TaskEvent.Event event,
-        final String processVersion) {
+        final String processVersion,
+        final String adapterId) {
+
+      this.adapterId = adapterId;
 
       this.connectable = connectable;
       this.delegateTask = delegateTask;
       this.event = event;
       this.processVersion = processVersion;
+
+    }
+
+    @Override
+    public String getAdapterId() {
+
+      return adapterId;
 
     }
 

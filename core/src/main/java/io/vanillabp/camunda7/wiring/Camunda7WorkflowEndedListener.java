@@ -89,6 +89,11 @@ public class Camunda7WorkflowEndedListener implements ExecutionListener {
             new WorkflowEndedContext() {
 
               @Override
+              public String getAdapterId() {
+                return taskRegistry.getAdapterId();
+              }
+
+              @Override
               public String getWorkflowAggregateId() {
                 return businessKey;
               }

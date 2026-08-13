@@ -32,6 +32,32 @@ public class Camunda7TaskRegistry {
   private Camunda7ProcessVersions processVersions;
 
   /**
+   * The id of the adapter owning this engine. Reported with every inbound delivery,
+   * so VanillaBP can record which BPMS holds a workflow (story 54). May be
+   * <code>null</code> (tests): nothing is recorded then.
+   */
+  private String adapterId;
+
+  /**
+   * @param adapterId The id of the adapter owning this engine
+   */
+  public void setAdapterId(
+      final String adapterId) {
+
+    this.adapterId = adapterId;
+
+  }
+
+  /**
+   * @return The id of the adapter owning this engine or <code>null</code>
+   */
+  public String getAdapterId() {
+
+    return adapterId;
+
+  }
+
+  /**
    * @param processVersions The versions of the engine's process definitions
    */
   public void setProcessVersions(
