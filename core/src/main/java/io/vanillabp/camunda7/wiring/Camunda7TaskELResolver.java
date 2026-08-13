@@ -107,7 +107,7 @@ public class Camunda7TaskELResolver extends ELResolver {
     if (connectable.isPresent()) {
       context.setPropertyResolved(true);
       final var behavior = new Camunda7WorkflowTaskBehavior(
-          connectable.get(), workflowTaskInvoker, scoping, adapterId);
+          connectable.get(), workflowTaskInvoker, scoping, adapterId, taskRegistry);
       if (connectable.get().type() == Camunda7TaskConnectable.Type.DELEGATE_EXPRESSION) {
         // the engine treats the resolved object as the task's activity behavior
         return behavior;

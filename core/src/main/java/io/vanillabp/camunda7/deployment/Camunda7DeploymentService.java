@@ -288,8 +288,22 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     this.workflowTaskInvoker = workflowTaskInvoker;
     this.taskRegistry = taskRegistry;
     this.instanceIdentities = instanceIdentities;
+    // story 48: what the engine's process definitions are versioned as - the
+    // registry hands it to every listener building an invocation context
+    this.processVersions = new io.vanillabp.camunda7.wiring.Camunda7ProcessVersions(
+        repositoryService, this::scopedProcessId, this::tenantIdOf);
+    if (taskRegistry != null) {
+      taskRegistry.setProcessVersions(processVersions);
+    }
 
   }
+
+  /**
+   * The versions of this engine's process definitions (story 48): the source of the
+   * version reported with every task, start and end, and the catalog the core resolves
+   * version TAGS through.
+   */
+  private final io.vanillabp.camunda7.wiring.Camunda7ProcessVersions processVersions;
 
   /**
    * Two <code>camunda7</code> adapter ids are only distinct engines if they run on
@@ -531,6 +545,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // a process the engine starts on its own may have no tasks at all, so the way
     // back from the engine's process-definition key is registered explicitly
     taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
+
+    // story 48: the engine can be asked which versions of this process it has, which
+    // is what a version specification naming a version TAG needs
+    workflowTaskInvoker
+        .registerProcessVersions(adapterId, workflowModuleId, bpmnProcessId, processVersions);
     wireBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
 
     log.info(
@@ -744,7 +763,21 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         .getResourcesByFilename()
         .forEach(deploymentBuilder::addModelInstance);
 
-    final var deployment = deploymentBuilder.deploy();
+    // deployWithResult reports the definitions the engine created, i.e. the version
+    // it assigned to every model deployed now - story 48 feeds them into the version
+    // catalog, so the version deployed by THIS boot needs no query at all
+    final var deployment = deploymentBuilder.deployWithResult();
+    final var deployedDefinitions = deployment.getDeployedProcessDefinitions();
+    if (deployedDefinitions != null) {
+      deployedDefinitions
+          .forEach(definition -> processVersions
+              .recordDeployed(
+                  workflowModuleId,
+                  taskRegistry.plainBpmnProcessId(workflowModuleId, definition.getKey()),
+                  definition.getId(),
+                  definition.getVersion(),
+                  definition.getVersionTag()));
+    }
 
     log.info(
         "Camunda7[{}]: deployed {} BPMN resource(s) of workflow module '{}' (tenant '{}') as deployment '{}'",
@@ -755,6 +788,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             ? tenantId
             : "<none>",
         deployment.getId());
+
+    // story 48: the deployment is done, so the version tags the application's
+    // annotations name can be resolved against what the engine has now
+    workflowTaskInvoker.resolveProcessVersions(workflowModuleId);
 
   }
 

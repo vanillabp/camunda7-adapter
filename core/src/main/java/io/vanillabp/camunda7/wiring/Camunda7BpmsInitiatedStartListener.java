@@ -80,11 +80,12 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
 
     final var signalName = taskRegistry
         .signalNameOfStartEvent(workflowModuleId, processDefinitionKey, execution.getCurrentActivityId());
+    final var processVersion = taskRegistry.versionOfDefinition(execution.getProcessDefinitionId());
     final var result = bpmsInitiatedStartInvoker
         .startWorkflowByBpms(
             workflowModuleId,
             bpmnProcessId,
-            contextOf(execution, signalName));
+            contextOf(execution, signalName, processVersion));
 
     // the aggregate's ID is this adapter's handle on the workflow (business key) -
     // set within the same transaction which created the instance
@@ -106,7 +107,8 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
 
   private BpmsInitiatedStartContext contextOf(
       final DelegateExecution execution,
-      final String signalName) {
+      final String signalName,
+      final String processVersion) {
 
     // what the model set before the start event completed: expressions, input
     // mappings, and for a signal the payload the broadcast carried
@@ -123,6 +125,11 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
       @Override
       public BpmsStartTrigger.Kind getKind() {
         return kind;
+      }
+
+      @Override
+      public String getProcessVersion() {
+        return processVersion;
       }
 
       @Override

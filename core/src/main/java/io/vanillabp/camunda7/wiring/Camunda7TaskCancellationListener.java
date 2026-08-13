@@ -79,7 +79,7 @@ public class Camunda7TaskCancellationListener implements ExecutionListener {
         workflowModuleId,
         bpmnProcessId,
         new Camunda7WorkflowTaskBehavior.Camunda7TaskInvocationContext(
-            connectable.get(), execution, TaskEvent.Event.CANCELED));
+            connectable.get(), execution, TaskEvent.Event.CANCELED, taskRegistry));
 
   }
 

@@ -23,6 +23,41 @@ public class Camunda7TaskRegistry {
   private final Map<RegistryKey, List<Camunda7TaskConnectable>> connectables = new ConcurrentHashMap<>();
 
   /**
+   * The versions of the engine's process definitions (story 48) - handed over by the
+   * deployment service, which owns the engine's {@code RepositoryService}. Every
+   * listener building an invocation context reaches it through this registry. May be
+   * <code>null</code> (tests): no version is reported then, which matches every
+   * method.
+   */
+  private Camunda7ProcessVersions processVersions;
+
+  /**
+   * @param processVersions The versions of the engine's process definitions
+   */
+  public void setProcessVersions(
+      final Camunda7ProcessVersions processVersions) {
+
+    this.processVersions = processVersions;
+
+  }
+
+  /**
+   * The version of a running execution's process definition, matched against the
+   * <code>version</code> attribute of the application's annotations.
+   *
+   * @param processDefinitionId The engine's process definition id
+   * @return The version or <code>null</code> if it cannot be determined
+   */
+  public String versionOfDefinition(
+      final String processDefinitionId) {
+
+    return processVersions == null
+        ? null
+        : processVersions.versionOfDefinition(processDefinitionId);
+
+  }
+
+  /**
    * Which workflow module a process definition key belongs to - the way back when
    * there is no tenant to ask (prefixed identifiers, story 35).
    */

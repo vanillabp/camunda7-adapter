@@ -80,6 +80,7 @@ public class Camunda7WorkflowEndedListener implements ExecutionListener {
     final var endEventId = kind == WorkflowEnd.Kind.COMPLETED
         ? execution.getCurrentActivityId()
         : null;
+    final var processVersion = taskRegistry.versionOfDefinition(execution.getProcessDefinitionId());
 
     workflowEndedInvoker
         .workflowEnded(
@@ -107,6 +108,11 @@ public class Camunda7WorkflowEndedListener implements ExecutionListener {
               @Override
               public String getEndEventId() {
                 return endEventId;
+              }
+
+              @Override
+              public String getProcessVersion() {
+                return processVersion;
               }
 
               @Override
