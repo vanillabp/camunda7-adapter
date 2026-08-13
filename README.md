@@ -13,11 +13,13 @@ Developers who want to **use** this adapter should refer to the
 on are documented in the [VanillaBP Wiki](https://github.com/vanillabp/adapter-platform-integration/wiki). This
 `README.md` is aimed at contributors.
 
-> **Status: Version 2, in development.** BPMN deployment, starting workflows, task
-> processing (`@WorkflowTask`), completing/canceling asynchronous tasks, user tasks,
-> message correlation and the BPMS-election awareness probes are implemented (embedded
-> engine, in the caller's transaction). Remaining feature stories: viewer/history API,
-> `@SyncWithBPMS`.
+> **Status: Version 2, in development.** BPMN deployment, starting workflows (including
+> the starts the engine performs on its own), task processing (`@WorkflowTask`),
+> completing/canceling asynchronous tasks, user tasks, message correlation, signals, the
+> end-of-workflow notification, the aggregate sync (`@SyncWithBPMS`, `aggregateChanged`),
+> the viewer/history API, process versions and the BPMS-election awareness probes are
+> implemented, all of it on the embedded engine and in the caller's transaction. What this
+> adapter does NOT deliver is listed under [Known deviations](#known-deviations).
 
 ## Documentation and supported platforms
 
@@ -111,15 +113,16 @@ deployed to the embedded engine of every prioritized adapter.
 
 - **BPMN deployment.** On boot the adapter reads every executable BPMN process
   (`<bpmn:process isExecutable="true">`; a file may contain several) of each workflow
-  module and deploys them as a single Camunda deployment. The **workflow module ID is
-  used as the Camunda tenant ID** (Version-1 behaviour) so BPMN process ids are isolated
-  between modules. Duplicate filtering is enabled, so unchanged models are not
-  redeployed on every boot.
+  module and deploys them as a single Camunda deployment. Where the deployment lands is
+  decided by the name-clash-avoidance mode, see
+  [Keeping workflow modules apart](#keeping-workflow-modules-apart). Duplicate filtering
+  is enabled, so unchanged models are not redeployed on every boot.
 - **Starting a workflow (in the local transaction).** The embedded engine shares the
   application's data source and transaction manager, so a started process instance is
   committed or rolled back **together with the workflow aggregate**. The
-  workflow-aggregate ID becomes the Camunda **business key**, the workflow module ID the
-  **tenant ID**. There is no two-phase commit and no transaction outbox
+  workflow-aggregate ID becomes the Camunda **business key**, and the tenant is whatever
+  the [name-clash-avoidance mode](#keeping-workflow-modules-apart) says. There is no
+  two-phase commit and no transaction outbox
   (`needsTwoPhaseCommitForStartingWorkflows()` is `false`).
 - **Asynchronous continuations (job executor).** Each engine runs an idiomatic
   `SpringJobExecutor` on a managed thread pool (thread names contain the adapter id).
@@ -240,6 +243,136 @@ identified by the business key (getter, boolean getter or field - Spring beans
 remain resolvable on Spring Boot). External tasks (`camunda:topic`) are not
 supported yet.
 
+## Keeping workflow modules apart
+
+The [name-clash-avoidance mode](https://github.com/vanillabp/adapter-platform-integration/wiki/Workflow-modules#how-name-clashes-are-avoided)
+decides how a workflow module's identifiers are scoped. `by-adapter` deploys into a
+Camunda tenant named after the workflow module (`tenant-id` overrides the name), which is
+the Version-1 behaviour; `use-prefix` deploys without a tenant and the adapter rewrites
+process ids, `camunda:calledElement` references, message and signal names, escalation and
+error codes; `none`, the default of THIS adapter, scopes nothing.
+
+Two decisions worth recording:
+
+- **The default is `none`, although the engine is multi-tenant.** Camunda 7 offers three
+  ways of keeping modules apart (a tenant, prefixed identifiers, an engine per module),
+  and picking one for the application would presume its operating model. The adapter WARNs
+  per workflow module instead, naming all three, until `accept-unscoped-identifiers`
+  acknowledges that the identifiers are unique. The acknowledgement is a statement about
+  the application, not a log level, which is why it is not simply a logger configuration.
+- **Task definitions are NOT prefixed**, unlike on Camunda 8. A Camunda 7 task definition
+  is the expression text of the task (`camunda:expression`/`camunda:delegateExpression`)
+  respectively the `camunda:formKey`, and it is resolved WITHIN the process by VanillaBP's
+  EL resolver. Nothing subscribes to it engine-wide, so there is nothing to clash with.
+
+A tenant id is an ATTRIBUTE of the deployment and of the process definitions, instances
+and tasks below it: any name is accepted, no tenant has to exist and none is created.
+Registered tenants (`ACT_ID_TENANT`, written by `IdentityService#newTenant`) exist for
+tenant memberships and the authorizations built on them, and most applications have none.
+Where an application registers tenants but not the one VanillaBP deploys into, the adapter
+WARNs, because the deployment works while nobody is authorized for those workflows.
+
+Without a tenant the engine cannot answer which workflow module a running instance belongs
+to. The adapter resolves it from the process definition key it registered while wiring,
+which keeps everything working that depends on it, including the live evaluation of
+workflow-aggregate attributes in BPMN expressions.
+
+## Sharing the workflow aggregate
+
+The engine is embedded, so BPMN expressions are evaluated against the workflow aggregate
+ITSELF: the adapter's EL resolver reads it live, and a gateway may use any attribute. The
+default of this adapter is therefore that **nothing is shared**, and what an application
+does share with `@SyncWithBPMS` is written as Camunda process variables for operator
+context in Cockpit only. VanillaBP never reads those variables back.
+
+They are written when the workflow is started and refreshed when an asynchronous task is
+completed or canceled, deliberately not after every `@WorkflowTask` method: an expression
+never depends on them, so refreshing on the hot path would cost without buying anything.
+The one place variables ARE read is `@TaskParam`, which takes the value from the task's
+input mapping, a hand-over the model asks for on purpose.
+
+`aggregateChanged(aggregate)` writes the shared values with `setVariables` at the process
+instance, `aggregateChanged(aggregate, taskId)` with `setVariablesLocal` at the execution
+of the scope the task RUNS in, which the adapter resolves by walking around two scopes:
+
+- the scope Camunda gives an activity of its own where the model asks for one (a task with
+  a boundary event attached, one instance of a multi-instance activity), because variables
+  written there serve that activity's boundary events and vanish when it ends, and
+- the multi-instance BODY, whose variables all instances would share.
+
+This is what makes conditional events usable on Camunda 7: the engine evaluates the
+condition of a waiting conditional event when a variable of its scope or of a parent scope
+changes, and nothing else. Writing at the scope the task runs in is therefore what reaches
+an event subprocess with a conditional start event sitting in that same scope. Where the
+application shares nothing at all, a push would carry no values and thus be no change, so
+the adapter writes the technical variable `vanillabpAggregateChanged` holding the time of
+the push.
+
+Resolving an attribute in an expression is the EL resolver's job, and it answers only for
+names the aggregate really carries (`workflowAggregateHasProperty`). Before that check
+existed, every name evaluated at a wired task resolved to the task behavior instead of the
+aggregate's attribute.
+
+## Signals
+
+`ProcessService.sendSignal(name)` broadcasts through `RuntimeService.createSignalEvent`
+inside the caller's transaction, so a rollback takes the broadcast with it. The signal is
+scoped like every other identifier of the workflow module: sent for the module's tenant,
+or tenant-free where identifiers are prefixed. An engine on its own datasource cannot join
+that transaction and broadcasts after the commit through the outbox, like a remote BPMS.
+
+## Workflows the engine starts itself and workflows which ended
+
+A process with a timer, signal or conditional start event runs without anybody calling
+`startWorkflow`. The adapter attaches an execution listener to such a start event; it
+builds the workflow aggregate and stores the aggregate's ID as the process instance's
+business key, which is how this adapter addresses workflows everywhere else. The listener
+runs inside the engine's own transaction, so aggregate and process instance commit
+together and a failure rolls both back for the engine to retry. Instances started by the
+application are skipped, since they already carry a business key. The engine does not tell
+a listener the timer's scheduled time, so the aggregate's ID is derived from the moment the
+instance is created, which costs nothing when both are written in one transaction.
+
+Where a workflow service declares a `@WorkflowEnded` method, the adapter attaches an END
+execution listener to the PROCESS scope, again inside the engine's transaction. Camunda 7
+tells the two kinds apart: an execution carrying a delete reason was cancelled, deleted or
+terminated (`TERMINATED`), everything else reached an end event (`COMPLETED`, with the id
+of that end event). Processes without such a method get no listener.
+
+## Versions of a process
+
+The engine counts a process definition's version upwards per BPMN process id and a running
+instance stays on the version it was started with. The adapter reports that version with
+every task, user-task event, engine-performed start and workflow end, resolved ONCE per
+process definition id and then answered from memory: tasks are delivered inside the
+engine's transaction, so a repository query per execution would be paid by every workflow.
+
+A version boundary may also name the model's `camunda:versionTag`. Placing a tag in the
+deployment order needs the engine's definition query, which the adapter runs once per
+process while the application starts (right after the deployment, so a tag deployed by this
+very start is included) and again only for a version it has never seen, which is what a
+rolling deployment produces. What the deployment itself reported costs no query at all: the
+deploy command names the version the engine assigned to every model, tag included.
+
+## Camunda's web applications
+
+The optional module `camunda7-adapter-spring-boot-webapps` serves Cockpit, Tasklist and
+Admin at `/camunda` against the engines this adapter built. They normally arrive with
+Camunda's own Spring Boot starter, which brings an engine along, and VanillaBP builds and
+owns the engines, so the module does two things:
+
+1. **Camunda's engine auto-configuration is switched off** (`camunda.bpm.enabled` defaults
+   to `false` here). It builds a process engine unconditionally, so an application would
+   run two engines on one datasource and the second one's job executor would acquire the
+   jobs of the first. Setting the property to `true` fails the start with a message saying
+   this.
+2. **VanillaBP's engines are registered with the runtime container**, because that is where
+   the web applications look for engines rather than in the Spring context. When the
+   application stops they are removed again.
+
+The web applications are a servlet application built on Spring. There is no Quarkus
+equivalent and none is planned, so this module is Spring Boot only.
+
 ## Supported Camunda version
 
 Camunda **7.24** is the final feature release of Camunda 7 (October 2025, LTS). The
@@ -330,6 +463,50 @@ neither an eventual-consistency lag nor an application-version boundary.
   VanillaBP's BPMS election (instead of "unknown") - which is what makes viewing ended
   workflows work and keeps a re-dispatched start from starting a second instance of a workflow
   which already ran to its end.
+
+## Known deviations
+
+What this adapter does not deliver, mirrored in one sentence each on the wiki's
+[Deviations](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Deviations)
+page. An engine on its own datasource is NOT one of them: it is the documented mode
+described under [Transaction caveat](#behaviour) above.
+
+### External tasks
+
+A service task wired by `camunda:topic` is not served. The adapter delivers tasks through
+the engine's own execution (`camunda:expression`/`camunda:delegateExpression`, see
+[Task processing](#task-processing-execution-model)), and the external-task API is a
+second delivery mechanism with its own lock, retry and completion model. Nobody asked for
+it yet, so there is no timeline.
+
+### `table-prefix`
+
+`vanillabp.adapters.<id>.table-prefix` is meant to let two adapter ids share one datasource
+while running separate engines, and it does not start an engine today: with a prefix
+configured, `database-schema-update: true` creates no tables and the boot fails on the
+engine's own query against the prefixed `ACT_GE_PROPERTY`. The failure comes from a QUERY,
+not from a rejected `CREATE`, which points at the engine's schema check rather than at the
+DDL. Story 47 verifies what Camunda supports here and then delivers either the schema
+creation for prefixed engines or a guiding startup check plus documentation saying so.
+Until then, keep several adapter ids apart by their datasource
+([Embedded-engine wiring](#embedded-engine-wiring)).
+
+### Asynchronous task wiring is checked at runtime
+
+A `@WorkflowTask` method declaring `@TaskId` leaves its task open, which only a task wired
+by *Delegate expression* can do. The guard sits in `Camunda7TaskELResolver` and therefore
+fires when the task executes, as an incident on a running workflow, although the adapter
+knows the wiring at `wireBpmn` time. What is missing is the question to the core whether a
+method completes asynchronously (`BpmnTaskSpec` and `WorkflowTaskInvoker` do not carry it),
+which story 50 adds so the check moves into the deployment. The runtime guard stays as a
+backstop.
+
+### New jobs wait for the next acquisition cycle
+
+Version 1 woke the job executor up when a transaction creating a job committed
+(`WakeupJobExecutor`), so an asynchronous continuation started right away. This adapter
+does not, so such a job waits for the executor's regular acquisition cycle. Planned as a
+follow-up of the engine-idiomatics story, no date yet.
 
 ## Known issues
 
