@@ -35,6 +35,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 @SuppressOutputExtension.SuppressBackgroundOutput
 public class Camunda7AggregateChangedIT {
 
+  private static final String MODULE_ID = "c7-it";
+
   @Autowired
   private AggregateChangedTestWorkflowService workflowService;
 
@@ -52,6 +54,15 @@ public class Camunda7AggregateChangedIT {
 
   @Autowired
   private TransactionTemplate transactionTemplate;
+
+  /**
+   * Lets the test PARK the engine's job executor. What a push lands in is asserted by
+   * reading the variables of an execution, and an interrupting event subprocess ends
+   * exactly that execution as soon as its task ran - which is an async job. With the
+   * executor parked, nothing moves while the test looks.
+   */
+  @Autowired
+  private io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder engineHolder;
 
   @Test
   @DisplayName("a task with a scope of its own is not the scope meant - the push goes around it")
@@ -190,23 +201,18 @@ public class Camunda7AggregateChangedIT {
   @DisplayName("a task-scoped push lands in the scope the task runs in, not in the task itself")
   public void aTaskScopedPushReachesTheEnclosingScope() throws Exception {
 
-    final var aggregateId = transactionTemplate
-        .execute(status -> multiInstanceWorkflowService.startWorkflow().getId());
-    assertNotNull(aggregateId);
-
-    awaitUntil(
-        () -> multiInstanceRepository
-            .findById(aggregateId)
-            .map(MultiInstancePushTestAggregate::getTaskIds)
-            .filter(taskIds -> taskIds.split(",").length == 2)
-            .isPresent(),
-        "both iterations of the multi-instance subprocess to park");
+    final var aggregateId = startedMultiInstanceWorkflow();
 
     // "item=taskId" per iteration - the test has to know WHICH iteration it pushed into
     final var parked = multiInstanceRepository.findById(aggregateId).orElseThrow().getTaskIds().split(",");
     final var pushedItem = parked[0].split("=")[0];
     final var pushedTaskId = parked[0].split("=")[1];
     final var siblingItem = parked[1].split("=")[0];
+
+    // park the executor: the conditional start event of the event subprocess fires
+    // within the push's transaction and INTERRUPTS its iteration once the task behind
+    // it ran - which would take the very execution this test reads
+    engineHolder.stopWorkflowProcessing(MODULE_ID);
 
     transactionTemplate
         .executeWithoutResult(status -> multiInstanceWorkflowService.escalateAt(aggregateId, pushedTaskId));
@@ -227,6 +233,16 @@ public class Camunda7AggregateChangedIT {
             .containsKey(marker),
         "the sibling iteration's scope stays as it was");
 
+    // deliberately NOT asserted: that the sibling iteration stays untouched afterwards.
+    // Camunda 7 evaluates the conditional events of a scope whenever a variable of a
+    // PARENT scope changes, and the first iteration ending updates the counters of the
+    // multi-instance body - which is a parent of the sibling. Where the values land is
+    // what this adapter decides; which conditions the engine then re-evaluates is the
+    // engine's business.
+
+    // let the engine run again: the escalation was recognized, the rest is jobs
+    engineHolder.startWorkflowProcessing(MODULE_ID);
+
     // the payoff: the event subprocess of that iteration has a conditional start
     // event, and the write in its scope is what makes the engine look at it
     awaitUntil(
@@ -239,19 +255,47 @@ public class Camunda7AggregateChangedIT {
         },
         "the event subprocess of the iteration '%s' to run".formatted(pushedItem));
 
-    // deliberately NOT asserted: that the sibling iteration stays untouched. Camunda 7
-    // evaluates the conditional events of a scope whenever a variable of a PARENT
-    // scope changes, and the first iteration ending updates the counters of the
-    // multi-instance body - which is a parent of the sibling. Where the values land is
-    // what this adapter decides; which conditions the engine then re-evaluates is the
-    // engine's business.
+  }
 
-    // the global push does what the other overload promises
+  @Test
+  @DisplayName("a global push lands at the workflow's scope")
+  public void aGlobalPushReachesTheWorkflowScope() throws Exception {
+
+    // an own workflow: the escalation of the test above interrupts an iteration and
+    // may take the whole instance with it, and a push needs a workflow which is there
+    final var aggregateId = startedMultiInstanceWorkflow();
+
     transactionTemplate.executeWithoutResult(status -> multiInstanceWorkflowService.pushGlobally(aggregateId));
 
     assertTrue(
-        runtimeService.getVariablesLocal(processInstanceIdOf(aggregateId)).containsKey(marker),
+        runtimeService
+            .getVariablesLocal(processInstanceIdOf(aggregateId))
+            .containsKey(Camunda7ProcessService.AGGREGATE_CHANGED_MARKER),
         "the global push has to land at the workflow's scope");
+
+  }
+
+  /**
+   * Starts the multi-instance workflow and waits until both iterations park at their
+   * task, which is where a push can be observed.
+   *
+   * @return The aggregate's id
+   */
+  private Long startedMultiInstanceWorkflow() throws Exception {
+
+    final var aggregateId = transactionTemplate
+        .execute(status -> multiInstanceWorkflowService.startWorkflow().getId());
+    assertNotNull(aggregateId);
+
+    awaitUntil(
+        () -> multiInstanceRepository
+            .findById(aggregateId)
+            .map(MultiInstancePushTestAggregate::getTaskIds)
+            .filter(taskIds -> taskIds.split(",").length == 2)
+            .isPresent(),
+        "both iterations of the multi-instance subprocess to park");
+
+    return aggregateId;
 
   }
 
