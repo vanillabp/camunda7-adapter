@@ -92,6 +92,17 @@ public class Camunda7BpmsInitiatedStartIT {
             .count() == 0,
         "the workflow started by the timer to run to its end");
 
+    // story 43: the end is reported to the application, in the transaction which
+    // ended the workflow - so it is visible as soon as the instance is gone
+    awaitUntil(
+        () -> repository
+            .findById(aggregate.getId())
+            .map(TimerStartTestAggregate::getEndedAs)
+            .filter(endedAs -> endedAs.startsWith("COMPLETED/"))
+            .isPresent(),
+        "the end of the workflow to be reported: "
+            + repository.findById(aggregate.getId()).map(TimerStartTestAggregate::getEndedAs).orElse(null));
+
   }
 
 }

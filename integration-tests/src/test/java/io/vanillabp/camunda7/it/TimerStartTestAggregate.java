@@ -23,4 +23,9 @@ public class TimerStartTestAggregate {
 
   private String processedBy;
 
+  /**
+   * Set by the <code>@WorkflowEnded</code> method (story 43).
+   */
+  private String endedAs;
+
 }

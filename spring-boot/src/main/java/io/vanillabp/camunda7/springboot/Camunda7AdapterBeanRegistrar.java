@@ -75,7 +75,7 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 // are only needed (and only required to exist) if the id references
                 // no named datasource bean (data-source-name)
                 final var usesNamedDataSource = engineProperties.usesSeparateDataSource();
-                return new Camunda7EngineHolder(
+                final var holder = new Camunda7EngineHolder(
                     adapterId, engineProperties, usesNamedDataSource
                         ? null
                         : applicationBean(supplierContext, DataSource.class, adapterId), usesNamedDataSource
@@ -86,6 +86,12 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                                         .beanProvider(
                                             io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker.class)
                                         .getIfAvailable());
+                holder.setWorkflowEndedInvoker(
+                    supplierContext
+                        .beanProvider(
+                            io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker.class)
+                        .getIfAvailable());
+                return holder;
               }));
 
           registry.registerBean(

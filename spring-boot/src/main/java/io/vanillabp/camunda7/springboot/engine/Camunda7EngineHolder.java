@@ -112,6 +112,24 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    */
   private io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker;
 
+  /**
+   * The core's entry point for workflows which ended (story 43). May be
+   * <code>null</code> - the engine then attaches no end listener.
+   */
+  private io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker;
+
+  /**
+   * Hands over the core's entry point for workflows which ended.
+   *
+   * @param workflowEndedInvoker The core's invoker
+   */
+  public void setWorkflowEndedInvoker(
+      final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker) {
+
+    this.workflowEndedInvoker = workflowEndedInvoker;
+
+  }
+
   public Camunda7EngineHolder(
       final String adapterId,
       final Camunda7EngineProperties properties,
@@ -153,6 +171,30 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     }
     return kind -> new io.vanillabp.camunda7.wiring.Camunda7BpmsInitiatedStartListener(
         bpmsInitiatedStartInvoker, taskRegistry, kind);
+
+  }
+
+  /**
+   * Whether the application asked to be told about the end of workflows of the
+   * process definition the engine is parsing. The wiring already registered which
+   * workflow module and plain process id the definition key belongs to.
+   *
+   * @param tenantId The tenant of the deployment (may be <code>null</code>)
+   * @param processDefinitionKey The process definition key the engine parses
+   * @return Whether an end listener has to be attached
+   */
+  private boolean workflowEndedHandlerExists(
+      final String tenantId,
+      final String processDefinitionKey) {
+
+    final var workflowModuleId = taskRegistry.resolveWorkflowModuleId(tenantId, processDefinitionKey);
+    if (workflowModuleId == null) {
+      return false;
+    }
+    return workflowEndedInvoker
+        .workflowEndedHandlerExists(
+            workflowModuleId,
+            taskRegistry.plainBpmnProcessId(workflowModuleId, processDefinitionKey));
 
   }
 
@@ -203,11 +245,18 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     // listener aligns transaction boundaries with remote BPMS (async before/after)
     configuration.setExpressionManager(new Camunda7SpringExpressionManager(
         applicationContext, taskRegistry, workflowTaskInvoker));
-    configuration.setCustomPreBPMNParseListeners(new java.util.ArrayList<>(
-        java.util.List.of(new io.vanillabp.camunda7.wiring.Camunda7AsyncBpmnParseListener(
-            new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
-                workflowTaskInvoker, taskRegistry), new io.vanillabp.camunda7.wiring.Camunda7UserTaskEventListener(
-                    workflowTaskInvoker, taskRegistry), startListenerFactory()))));
+    final var parseListener = new io.vanillabp.camunda7.wiring.Camunda7AsyncBpmnParseListener(
+        new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
+            workflowTaskInvoker, taskRegistry), new io.vanillabp.camunda7.wiring.Camunda7UserTaskEventListener(
+                workflowTaskInvoker, taskRegistry), startListenerFactory());
+    if (workflowEndedInvoker != null) {
+      parseListener.setWorkflowEnded(
+          new io.vanillabp.camunda7.wiring.Camunda7WorkflowEndedListener(workflowEndedInvoker, taskRegistry),
+          (
+              tenantId,
+              processDefinitionKey) -> workflowEndedHandlerExists(tenantId, processDefinitionKey));
+    }
+    configuration.setCustomPreBPMNParseListeners(new java.util.ArrayList<>(java.util.List.of(parseListener)));
     configuration.setProcessEngineName("vanillabp-camunda7-%s".formatted(adapterId));
     configuration.setDataSource(dataSource);
     configuration.setTransactionManager(transactionManager);
