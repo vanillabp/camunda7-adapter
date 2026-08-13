@@ -64,13 +64,39 @@ public record Camunda7TaskConnectable(
 
   /**
    * Whether this connectable serves the given EL name evaluated at the given BPMN
-   * element.
+   * element - by NAME (the model's delegate expression is the task definition) or by
+   * ELEMENT (a method wired to the activity, whatever the model calls the
+   * expression).
    */
   public boolean applies(
       final String currentElementId,
       final String propertyName) {
 
-    return elementId.equals(currentElementId) || ((taskDefinition != null) && taskDefinition.equals(propertyName));
+    return appliesByElement(currentElementId) || appliesByName(propertyName);
+
+  }
+
+  /**
+   * Whether the EL name IS this connectable's task definition. Such a name means the
+   * task and nothing else.
+   */
+  public boolean appliesByName(
+      final String propertyName) {
+
+    return (taskDefinition != null) && taskDefinition.equals(propertyName);
+
+  }
+
+  /**
+   * Whether this connectable is wired to the BPMN element the expression is
+   * evaluated at. That alone says nothing about the NAME: every expression evaluated
+   * while an execution sits at this element arrives here, including conditions
+   * reading the workflow aggregate.
+   */
+  public boolean appliesByElement(
+      final String currentElementId) {
+
+    return elementId.equals(currentElementId);
 
   }
 

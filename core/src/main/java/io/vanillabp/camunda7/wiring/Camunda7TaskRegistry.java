@@ -193,11 +193,42 @@ public class Camunda7TaskRegistry {
       final String currentElementId,
       final String propertyName) {
 
+    // by NAME first: a name which IS a task definition means that task, wherever it
+    // is evaluated. Only then by element, which matches any name evaluated there
+    final var byName = connectables
+        .getOrDefault(new RegistryKey(workflowModuleId, bpmnProcessId), List.of())
+        .stream()
+        .filter(connectable -> connectable.appliesByName(propertyName))
+        .findFirst();
+    if (byName.isPresent()) {
+      return byName;
+    }
     return connectables
         .getOrDefault(new RegistryKey(workflowModuleId, bpmnProcessId), List.of())
         .stream()
-        .filter(connectable -> connectable.applies(currentElementId, propertyName))
+        .filter(connectable -> connectable.appliesByElement(currentElementId))
         .findFirst();
+
+  }
+
+  /**
+   * Whether a connectable serves this EL name by NAME (its task definition), as
+   * opposed to serving whatever is evaluated at its BPMN element.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The SCOPED BPMN process ID
+   * @param propertyName The EL name
+   * @return Whether a connectable is named like this
+   */
+  public boolean isTaskDefinitionName(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String propertyName) {
+
+    return connectables
+        .getOrDefault(new RegistryKey(workflowModuleId, bpmnProcessId), List.of())
+        .stream()
+        .anyMatch(connectable -> connectable.appliesByName(propertyName));
 
   }
 

@@ -22,8 +22,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * End-to-end test of pushing a changed aggregate (story 44) against a real embedded
  * Camunda 7 engine. Two things are worth an engine: a conditional event only ever
  * looks at its condition when a variable of its scope changes - so the push is what
- * makes it fire - and a task-scoped push has to stay inside that one instance of a
- * multi-instance activity.
+ * makes it fire - and a task-scoped push has to land in the scope the task RUNS IN
+ * (here: one iteration of a multi-instance embedded subprocess), because that is the
+ * scope an event subprocess with a conditional start event listens on.
  */
 @SpringBootTest(classes = TestApplication.class, properties = {
     // own database: contexts are cached and live in parallel - a foreign engine
@@ -52,6 +53,45 @@ public class Camunda7AggregateChangedIT {
   @Autowired
   private TransactionTemplate transactionTemplate;
 
+  @Test
+  @DisplayName("a task with a scope of its own is not the scope meant - the push goes around it")
+  public void aTaskScopeIsSkipped() throws Exception {
+
+    final var aggregateId = transactionTemplate
+        .execute(status -> multiInstanceWorkflowService.saveAggregate().getId());
+    assertNotNull(aggregateId);
+
+    // the secondary process is started against the engine: the injectable process
+    // service starts the primary process of its workflow service only. The business
+    // key IS the aggregate's id, which is how VanillaBP finds it again
+    transactionTemplate
+        .executeWithoutResult(status -> runtimeService
+            .startProcessInstanceByKey("AggregateChangedBoundaryProcess", String.valueOf(aggregateId)));
+
+    awaitUntil(
+        () -> multiInstanceRepository
+            .findById(aggregateId)
+            .map(MultiInstancePushTestAggregate::getTaskIds)
+            .isPresent(),
+        "the workflow to park at the task carrying a boundary event");
+
+    final var taskId = multiInstanceRepository.findById(aggregateId).orElseThrow().getTaskIds();
+
+    transactionTemplate
+        .executeWithoutResult(status -> multiInstanceWorkflowService.escalateAt(aggregateId, taskId));
+
+    final var marker = Camunda7ProcessService.AGGREGATE_CHANGED_MARKER;
+    // the boundary event makes the engine give the activity a scope of its own, and
+    // that scope is the task's context - not the scope the task RUNS in
+    assertFalse(
+        runtimeService.getVariablesLocal(taskId).containsKey(marker),
+        "the activity's own scope may not be written at");
+    assertTrue(
+        runtimeService.getVariablesLocal(processInstanceIdOf(aggregateId)).containsKey(marker),
+        "the scope around the task is the workflow itself here");
+
+  }
+
   private void awaitUntil(
       final Supplier<Boolean> condition,
       final String description) throws InterruptedException {
@@ -77,6 +117,37 @@ public class Camunda7AggregateChangedIT {
     return instance == null
         ? null
         : instance.getId();
+
+  }
+
+  /**
+   * The SCOPE execution of the iteration working on the given item. Camunda 7 keeps
+   * the multi-instance element variable on the concurrent execution ABOVE that scope,
+   * so the scope is found as its child.
+   */
+  private String executionIdOfIteration(
+      final Long aggregateId,
+      final String item) {
+
+    final var executions = runtimeService
+        .createExecutionQuery()
+        .processInstanceId(processInstanceIdOf(aggregateId))
+        .list()
+        .stream()
+        .map(org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity.class::cast)
+        .toList();
+    final var itemHolder = executions
+        .stream()
+        .filter(execution -> item.equals(runtimeService.getVariablesLocal(execution.getId()).get("item")))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("no iteration found working on '%s'".formatted(item)));
+    return executions
+        .stream()
+        .filter(execution -> itemHolder.getId().equals(execution.getParentId()))
+        .filter(org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity::isScope)
+        .map(org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity::getId)
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("no scope execution below the iteration '%s'".formatted(item)));
 
   }
 
@@ -116,8 +187,8 @@ public class Camunda7AggregateChangedIT {
   }
 
   @Test
-  @DisplayName("a task-scoped push stays in that instance of a multi-instance activity")
-  public void aTaskScopedPushDoesNotDisturbTheSiblings() throws Exception {
+  @DisplayName("a task-scoped push lands in the scope the task runs in, not in the task itself")
+  public void aTaskScopedPushReachesTheEnclosingScope() throws Exception {
 
     final var aggregateId = transactionTemplate
         .execute(status -> multiInstanceWorkflowService.startWorkflow().getId());
@@ -129,27 +200,53 @@ public class Camunda7AggregateChangedIT {
             .map(MultiInstancePushTestAggregate::getTaskIds)
             .filter(taskIds -> taskIds.split(",").length == 2)
             .isPresent(),
-        "both instances of the multi-instance activity to park");
+        "both iterations of the multi-instance subprocess to park");
 
-    final var taskIds = multiInstanceRepository.findById(aggregateId).orElseThrow().getTaskIds().split(",");
-    final var pushed = taskIds[0];
-    final var sibling = taskIds[1];
+    // "item=taskId" per iteration - the test has to know WHICH iteration it pushed into
+    final var parked = multiInstanceRepository.findById(aggregateId).orElseThrow().getTaskIds().split(",");
+    final var pushedItem = parked[0].split("=")[0];
+    final var pushedTaskId = parked[0].split("=")[1];
+    final var siblingItem = parked[1].split("=")[0];
 
     transactionTemplate
-        .executeWithoutResult(status -> multiInstanceWorkflowService.pushInto(aggregateId, pushed));
+        .executeWithoutResult(status -> multiInstanceWorkflowService.escalateAt(aggregateId, pushedTaskId));
 
+    // the values land in the scope the task RUNS IN - the iteration of the
+    // multi-instance subprocess, recognizable by its own 'item' variable
     final var marker = Camunda7ProcessService.AGGREGATE_CHANGED_MARKER;
+    final var iterationExecutionId = executionIdOfIteration(aggregateId, pushedItem);
     assertTrue(
-        runtimeService.getVariablesLocal(pushed).containsKey(marker),
-        "the push has to land in the scope of the task it named");
-    assertFalse(
-        runtimeService.getVariablesLocal(sibling).containsKey(marker),
-        "a sibling instance may never see what another instance pushed");
+        runtimeService.getVariablesLocal(iterationExecutionId).containsKey(marker),
+        "the push has to land in the scope of the iteration the task runs in");
     assertFalse(
         runtimeService.getVariablesLocal(processInstanceIdOf(aggregateId)).containsKey(marker),
-        "a task-scoped push deliberately leaves the workflow's global scope as it was");
+        "and not at the workflow's global scope, which the sibling iterations read");
+    assertFalse(
+        runtimeService
+            .getVariablesLocal(executionIdOfIteration(aggregateId, siblingItem))
+            .containsKey(marker),
+        "the sibling iteration's scope stays as it was");
 
-    // and the global push does what the other overload promises
+    // the payoff: the event subprocess of that iteration has a conditional start
+    // event, and the write in its scope is what makes the engine look at it
+    awaitUntil(
+        () -> {
+          final var escalated = multiInstanceRepository
+              .findById(aggregateId)
+              .map(MultiInstancePushTestAggregate::getEscalatedItems)
+              .orElse("");
+          return escalated.contains(pushedItem);
+        },
+        "the event subprocess of the iteration '%s' to run".formatted(pushedItem));
+
+    // deliberately NOT asserted: that the sibling iteration stays untouched. Camunda 7
+    // evaluates the conditional events of a scope whenever a variable of a PARENT
+    // scope changes, and the first iteration ending updates the counters of the
+    // multi-instance body - which is a parent of the sibling. Where the values land is
+    // what this adapter decides; which conditions the engine then re-evaluates is the
+    // engine's business.
+
+    // the global push does what the other overload promises
     transactionTemplate.executeWithoutResult(status -> multiInstanceWorkflowService.pushGlobally(aggregateId));
 
     assertTrue(

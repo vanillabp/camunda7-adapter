@@ -14,8 +14,9 @@ import lombok.Setter;
 
 /**
  * The aggregate of the multi-instance half of the aggregateChanged integration test
- * (story 44): the workflow parks in every instance of a multi-instance activity, so
- * the test can push into the scope of ONE of them.
+ * (story 44): the workflow parks in every iteration of a multi-instance
+ * embedded subprocess, so the test can push into the scope of ONE iteration and see
+ * that only that iteration's event subprocess reacts.
  */
 @Entity
 @Table(name = "C7_MI_PUSH_TEST")
@@ -32,10 +33,22 @@ public class MultiInstancePushTestAggregate {
   private Long id;
 
   /**
-   * The parked executions of the multi-instance activity, comma-separated - a list
-   * attribute would need a table of its own for what two strings do here.
+   * The parked executions of the iterations as "item=taskId", comma-separated - a
+   * list attribute would need a table of its own for what two strings do here.
    */
   private String taskIds;
+
+  /**
+   * What the conditional start event of the event subprocess waits for. Not shared
+   * with the BPMS: Camunda 7 reads the aggregate live, so the condition sees it
+   * either way.
+   */
+  private boolean escalate;
+
+  /**
+   * The items whose iteration reached the event subprocess, comma-separated.
+   */
+  private String escalatedItems;
 
   /**
    * The collection of the multi-instance activity, read live by the engine.

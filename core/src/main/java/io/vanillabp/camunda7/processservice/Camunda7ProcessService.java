@@ -71,6 +71,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private final org.camunda.bpm.engine.HistoryService historyService;
 
   /**
+   * The engine's repository service - the deployed BPMN model tells an activity
+   * which creates a scope of its own (boundary events, multi-instance) from one
+   * which does not, which decides where a task-scoped push has to write.
+   */
+  private final org.camunda.bpm.engine.RepositoryService repositoryService;
+
+  /**
    * The core's sync model (story 28). Camunda 7 is EMBEDDED: BPMN expressions read
    * the aggregate LIVE (see the EL resolver of story 21b), so nothing has to be
    * pushed - the adapter's default is therefore
@@ -238,6 +245,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     this.taskService = taskService;
     this.usesSeparateDataSource = usesSeparateDataSource;
     this.historyService = historyService;
+    this.repositoryService = repositoryService;
     this.viewer = new Camunda7WorkflowViewer(adapterId, repositoryService, historyService, runtimeService);
 
   }
@@ -920,9 +928,15 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
             businessKey);
         return;
       }
-      // the scope of THIS task instance only: a workflow-wide write would be a lost
-      // update between the instances of a multi-instance activity
-      runtimeService.setVariablesLocal(taskId, variables);
+      // the scope the task RUNS IN - the process, an embedded subprocess, or the one
+      // iteration of a multi-instance embedded subprocess it belongs to. Writing on
+      // the task's own execution would reach a boundary conditional event and nothing
+      // else, while the scope is what an event subprocess with a conditional start
+      // event listens on
+      runtimeService
+          .setVariablesLocal(
+              flowScopeExecutionIdOf(execution.getProcessInstanceId(), taskId),
+              variables);
       return;
     }
 
@@ -945,6 +959,123 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       return;
     }
     runtimeService.setVariables(processInstance.getId(), variables);
+
+  }
+
+  /**
+   * The execution of the scope the task with the given ID RUNS IN: the process
+   * instance, an embedded subprocess, or the one iteration of a multi-instance
+   * embedded subprocess it belongs to.
+   * <p>
+   * Not the task's own context: an activity with boundary events (and every instance
+   * of a multi-instance activity) gets a scope of its own in the engine, and writing
+   * there would serve a boundary conditional event and nothing else. The scope AROUND
+   * the task is what an event subprocess with a conditional start event listens on,
+   * and what the rest of that scope reads.
+   * <p>
+   * The walk goes up the execution tree: from the task's execution to the closest
+   * SCOPE execution, skipping the execution of the task's own activity scope and the
+   * technical wrapper around the instances of a multi-instance activity.
+   *
+   * @param processInstanceId The workflow's process instance
+   * @param taskId The parked execution of the task
+   * @return The execution to write the local variables at (the process instance if
+   *         the task cannot be located)
+   */
+  private String flowScopeExecutionIdOf(
+      final String processInstanceId,
+      final String taskId) {
+
+    final var executions = runtimeService
+        .createExecutionQuery()
+        .processInstanceId(processInstanceId)
+        .list()
+        .stream()
+        .filter(org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity.class::isInstance)
+        .map(org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity.class::cast)
+        .collect(
+            java.util.stream.Collectors
+                .toMap(
+                    org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity::getId,
+                    execution -> execution));
+
+    var current = executions.get(taskId);
+    if (current == null) {
+      return processInstanceId;
+    }
+    final var processDefinitionId = current.getProcessDefinitionId();
+    if (current.isScope() && activityHasAScopeOfItsOwn(processDefinitionId, current.getActivityId())) {
+      // the scope of the task itself - the task runs in the scope around it
+      current = executions.get(current.getParentId());
+    }
+    while (current != null) {
+      if (current.isScope() && !isMultiInstanceBody(current)) {
+        return current.getId();
+      }
+      current = executions.get(current.getParentId());
+    }
+    return processInstanceId;
+
+  }
+
+  /**
+   * Whether the BPMN activity creates a scope of its own in the engine: an activity
+   * with boundary events attached, or a multi-instance activity (whose instances each
+   * get one).
+   *
+   * @param processDefinitionId The definition the workflow runs on
+   * @param activityId The activity to look at
+   * @return Whether the engine gives that activity a scope
+   */
+  private boolean activityHasAScopeOfItsOwn(
+      final String processDefinitionId,
+      final String activityId) {
+
+    if (activityId == null) {
+      return false;
+    }
+    try {
+      final var model = repositoryService.getBpmnModelInstance(processDefinitionId);
+      final var element = model.getModelElementById(activityId);
+      if (element instanceof org.camunda.bpm.model.bpmn.instance.Activity activity) {
+        if (activity.getLoopCharacteristics() != null) {
+          return true;
+        }
+        return model
+            .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.BoundaryEvent.class)
+            .stream()
+            .anyMatch(boundaryEvent -> activityId.equals(boundaryEvent.getAttachedTo().getId()));
+      }
+      return false;
+    } catch (final RuntimeException e) {
+      log
+          .debug(
+              "Camunda7[{}]: could not read the model of process definition '{}' - assuming activity '{}' "
+                  + "has no scope of its own",
+              adapterId,
+              processDefinitionId,
+              activityId,
+              e);
+      return false;
+    }
+
+  }
+
+  /**
+   * Whether the execution is the technical wrapper around the instances of a
+   * multi-instance activity. Its variables would be shared by all of them, so it is
+   * never the scope a push is meant for.
+   *
+   * @param execution The execution to look at
+   * @return Whether it is a multi-instance body
+   */
+  private boolean isMultiInstanceBody(
+      final org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity execution) {
+
+    final var activityId = execution.getActivityId();
+    // the engine names it "<activity id>#multiInstanceBody"
+    return (activityId != null) && activityId.endsWith("#"
+        + org.camunda.bpm.engine.ActivityTypes.MULTI_INSTANCE_BODY);
 
   }
 
