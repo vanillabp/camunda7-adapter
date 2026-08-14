@@ -116,13 +116,12 @@ public class Camunda7TaskELResolver extends ELResolver {
       // the task completes when the evaluation returns
       final var outcome = behavior.invokeHandler(execution);
       if (outcome.kind() == WorkflowTaskOutcome.Kind.COMPLETION_PENDING) {
+        // the backstop: the deployment check (story 50) reports this while the
+        // application starts, so reaching this line means the model got to the
+        // engine another way
         throw new ProcessEngineException(
-            """
-                The @WorkflowTask method serving task definition '%s' of BPMN process '%s' \
-                (workflow module '%s') declares a @TaskId parameter but the BPMN wires the task by \
-                'camunda:expression' - such a task completes when the expression returns and can \
-                never stay open! Wire the task by 'camunda:delegateExpression' instead."""
-                .formatted(propertyName, bpmnProcessId, workflowModuleId));
+            Camunda7TaskConnectable.asynchronousTaskWiredByExpression(
+                propertyName, bpmnProcessId, workflowModuleId));
       }
       return null;
     }
