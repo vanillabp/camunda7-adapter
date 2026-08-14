@@ -269,6 +269,24 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   }
 
+  @Override
+  public boolean deliversTasksAtLeastOnce() {
+
+    // Camunda 7 hands a task to the handler INSIDE its own (job) transaction
+    // (TaskInvocationContext#runInCurrentTransaction), so aggregate changes and engine
+    // state commit or roll back together: a redelivered job proves that NOTHING was
+    // committed, and there is nothing a delivery record could remember (story 51).
+    // Deduplicating would cost a store access per task and buy nothing.
+    //
+    // With an OWN engine datasource the two commits are no longer one, so the window
+    // the remote adapters have exists here as well. It is deliberately not covered:
+    // the identity of a delivery would have to be invented from the execution's
+    // activity instance, and the rule which held before this feature - key business
+    // decisions on the state of the workflow aggregate - carries that setup.
+    return false;
+
+  }
+
   /**
    * Starts a Camunda 7 process instance inside the caller's transaction. The
    * <b>business key</b> is the workflow-aggregate ID as a string, the <b>tenant ID</b> is
