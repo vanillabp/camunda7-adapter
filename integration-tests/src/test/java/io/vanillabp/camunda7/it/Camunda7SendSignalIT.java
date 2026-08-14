@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
@@ -31,6 +32,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 })
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
+// closed when the class is done: this IT has a database (and therefore a context) of its
+// own, Spring would keep every context until the JVM exits, and an engine outliving its
+// test keeps its job executor running against a database the next classes work on
+@DirtiesContext
 public class Camunda7SendSignalIT {
 
   @Autowired
