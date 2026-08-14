@@ -203,6 +203,18 @@ Outcomes:
   *Delegate expression* (an *Expression* task completes when the expression
   returns and could never stay open).
 
+**The application does not start on that last defect (story 50).** While wiring,
+the adapter asks the core whether the method serving a task completes
+asynchronously (`WorkflowTaskInvoker#workflowTaskCompletesAsynchronously`,
+answered by the `WorkflowTaskRegistry` from the method's `@TaskId` parameter) and
+aborts the deployment for every task wired by *Expression* whose method wants to
+keep it open. `Camunda7TaskELResolver` keeps the same guard for a model that
+reached the engine another way, and both report the identical message, which lives
+once in `Camunda7TaskConnectable#asynchronousTaskWiredByExpression`. The reverse
+case is deliberately silent: *Delegate expression* serves a method without
+`@TaskId` just as well, because the behavior leaves the activity when the handler
+returns.
+
 **Completing/canceling async tasks (`ProcessService#completeTask`/`#cancelTask`,
 story 22):** the `@TaskId` value is the parked execution's ID; completing signals
 that execution, canceling signals it with the adapter's cancel marker and the
@@ -490,16 +502,6 @@ DDL. Story 47 verifies what Camunda supports here and then delivers either the s
 creation for prefixed engines or a guiding startup check plus documentation saying so.
 Until then, keep several adapter ids apart by their datasource
 ([Embedded-engine wiring](#embedded-engine-wiring)).
-
-### Asynchronous task wiring is checked at runtime
-
-A `@WorkflowTask` method declaring `@TaskId` leaves its task open, which only a task wired
-by *Delegate expression* can do. The guard sits in `Camunda7TaskELResolver` and therefore
-fires when the task executes, as an incident on a running workflow, although the adapter
-knows the wiring at `wireBpmn` time. What is missing is the question to the core whether a
-method completes asynchronously (`BpmnTaskSpec` and `WorkflowTaskInvoker` do not carry it),
-which story 50 adds so the check moves into the deployment. The runtime guard stays as a
-backstop.
 
 ### New jobs wait for the next acquisition cycle
 

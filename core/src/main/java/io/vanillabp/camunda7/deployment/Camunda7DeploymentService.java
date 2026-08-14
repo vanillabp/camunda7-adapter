@@ -542,6 +542,29 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // deployment-failure policy for non-first-priority adapter ids
     workflowTaskInvoker.validateTaskWiring(workflowModuleId, bpmnProcessId, specs);
 
+    // story 50: a task wired by 'camunda:expression' completes as soon as the
+    // expression returns, so a method declaring @TaskId can never keep it open.
+    // The engine's EL resolver says the same at runtime, but only once a workflow
+    // reaches the task - asking the core here moves the verdict to the boot. The
+    // reverse case needs no message: 'camunda:delegateExpression' serves a method
+    // without @TaskId just as well, the behavior leaves the activity when the
+    // handler returns.
+    connectables
+        .stream()
+        .filter(connectable -> connectable.type() == Camunda7TaskConnectable.Type.EXPRESSION)
+        .filter(connectable -> workflowTaskInvoker.workflowTaskCompletesAsynchronously(
+            workflowModuleId,
+            bpmnProcessId,
+            connectable.taskDefinition()))
+        .findFirst()
+        .ifPresent(connectable -> {
+          throw new IllegalStateException(
+              Camunda7TaskConnectable.asynchronousTaskWiredByExpression(
+                  connectable.taskDefinition(),
+                  bpmnProcessId,
+                  workflowModuleId));
+        });
+
     connectables.forEach(taskRegistry::register);
 
     // a process the engine starts on its own may have no tasks at all, so the way

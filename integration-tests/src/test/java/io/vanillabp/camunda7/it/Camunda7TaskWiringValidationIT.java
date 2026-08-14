@@ -11,9 +11,10 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Guiding wiring validation on a real engine boot (story 21b): a BPMN task whose
- * expression matches no {@code @WorkflowTask} method aborts the boot naming the
- * task and the fix.
+ * Guiding wiring validation on a real engine boot: a BPMN task whose expression
+ * matches no {@code @WorkflowTask} method aborts the boot naming the task and the fix
+ * (story 21b), and so does a task which has to stay open but is wired in a way that
+ * completes it on return (story 50).
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -42,6 +43,35 @@ public class Camunda7TaskWiringValidationIT {
         + message);
     assertTrue(
         message.contains("@WorkflowTask(taskDefinition = \"notImplemented\")"),
+        "unexpected message: "
+            + message);
+  }
+
+  @Test
+  @DisplayName("An asynchronous task wired by 'camunda:expression' aborts the boot naming the fix")
+  public void asynchronousTaskWiredByExpressionAbortsBoot() {
+
+    final var failure = assertThrows(
+        RuntimeException.class,
+        () -> new SpringApplicationBuilder(TestApplication.class)
+            .run(
+                // AsyncProcess, whose handler declares @TaskId, wired by an
+                // expression which completes the task when it returns
+                "--vanillabp.workflow-modules.c7-it.adapters.c7.resources-location=classpath*:c7-it/async-by-expression",
+                "--spring.datasource.url=jdbc:h2:mem:c7-async-wiring-validation;DB_CLOSE_DELAY=-1")
+            .close());
+
+    final var message = rootMessage(failure);
+    assertTrue(message.contains("'asyncTask'"), "unexpected message: "
+        + message);
+    assertTrue(message.contains("'AsyncProcess'"), "unexpected message: "
+        + message);
+    assertTrue(message.contains("'c7-it'"), "unexpected message: "
+        + message);
+    assertTrue(message.contains("@TaskId"), "unexpected message: "
+        + message);
+    assertTrue(
+        message.contains("'camunda:delegateExpression'"),
         "unexpected message: "
             + message);
   }

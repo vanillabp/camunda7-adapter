@@ -63,6 +63,34 @@ public record Camunda7TaskConnectable(
   }
 
   /**
+   * The verdict about a task which has to stay open but is wired by
+   * <code>camunda:expression</code> (story 50). It is reported twice, and therefore
+   * lives once: while the application starts, where
+   * {@code Camunda7DeploymentService#wireBpmn} asks the core whether the serving
+   * method completes asynchronously, and at runtime in
+   * {@link Camunda7TaskELResolver}, which stays as the backstop for a model that
+   * reached the engine another way.
+   *
+   * @param taskDefinition The task definition (the unwrapped expression text)
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param workflowModuleId The workflow module ID
+   * @return The message, naming the task, the process, the module and the fix
+   */
+  public static String asynchronousTaskWiredByExpression(
+      final String taskDefinition,
+      final String bpmnProcessId,
+      final String workflowModuleId) {
+
+    return """
+        The @WorkflowTask method serving task definition '%s' of BPMN process '%s' \
+        (workflow module '%s') declares a @TaskId parameter but the BPMN wires the task by \
+        'camunda:expression' - such a task completes when the expression returns and can \
+        never stay open! Wire the task by 'camunda:delegateExpression' instead."""
+        .formatted(taskDefinition, bpmnProcessId, workflowModuleId);
+
+  }
+
+  /**
    * Whether this connectable serves the given EL name evaluated at the given BPMN
    * element - by NAME (the model's delegate expression is the task definition) or by
    * ELEMENT (a method wired to the activity, whatever the model calls the
