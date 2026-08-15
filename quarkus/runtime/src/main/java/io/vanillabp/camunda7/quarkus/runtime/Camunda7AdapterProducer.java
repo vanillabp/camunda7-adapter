@@ -80,6 +80,11 @@ public class Camunda7AdapterProducer {
               engine
                   .getProcessEngine()
                   .getIdentityService());
+          // story 57: how many workflows still run on an older version
+          deploymentService.setRuntimeService(
+              engine
+                  .getProcessEngine()
+                  .getRuntimeService());
           deploymentService.setAcceptUnscopedIdentifiers(acceptUnscopedIdentifiersOf(overlay, adapterId));
           return deploymentService;
         })

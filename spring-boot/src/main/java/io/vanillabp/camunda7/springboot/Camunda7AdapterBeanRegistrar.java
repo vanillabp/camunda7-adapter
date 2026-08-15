@@ -132,6 +132,11 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                     engine
                         .getProcessEngine()
                         .getIdentityService());
+                // story 57: how many workflows still run on an older version
+                deploymentService.setRuntimeService(
+                    engine
+                        .getProcessEngine()
+                        .getRuntimeService());
                 deploymentService.setAcceptUnscopedIdentifiers(
                     supplierContext
                         .bean(VanillaBpCamunda7Properties.class)
