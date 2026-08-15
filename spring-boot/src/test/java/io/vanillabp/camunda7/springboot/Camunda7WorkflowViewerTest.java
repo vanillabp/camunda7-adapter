@@ -76,6 +76,31 @@ public class Camunda7WorkflowViewerTest {
   }
 
   @Test
+  @DisplayName("A workflow module without a tenant asks without one - Camunda rejects a null tenant id")
+  public void aModuleWithoutTenantIsQueriedWithoutTenant() {
+
+    // 'name-clash-avoidance: none' is the DEFAULT of this adapter, and then there is no
+    // tenant at all. Passing null to tenantIdIn does not mean "any tenant" - the engine
+    // throws NullValueException('tenantIds contains null value'), which used to make every
+    // viewer call of a default-configured application fail.
+    withoutHistory();
+    when(instanceQuery.singleResult()).thenReturn(null);
+
+    assertEquals(List.of(), viewer.getProcessDefinitions("module", "Process", null, "42", null));
+    assertNull(viewer.getWorkflowHistory("module", "Process", null, "42", null));
+
+    org.mockito.Mockito.verify(instanceQuery, org.mockito.Mockito.atLeastOnce()).withoutTenantId();
+    org.mockito.Mockito.verify(historicInstanceQuery, org.mockito.Mockito.atLeastOnce()).withoutTenantId();
+    org.mockito.Mockito
+        .verify(instanceQuery, org.mockito.Mockito.never())
+        .tenantIdIn(org.mockito.ArgumentMatchers.any());
+    org.mockito.Mockito
+        .verify(historicInstanceQuery, org.mockito.Mockito.never())
+        .tenantIdIn(org.mockito.ArgumentMatchers.any());
+
+  }
+
+  @Test
   @DisplayName("A workflow unknown to this engine is reported as unknown (empty list / null history)")
   public void unknownWorkflowIsReportedAsUnknown() {
 

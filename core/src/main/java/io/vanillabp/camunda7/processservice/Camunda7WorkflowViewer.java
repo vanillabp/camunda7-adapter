@@ -207,12 +207,16 @@ public class Camunda7WorkflowViewer {
           ? null
           : calledInstance.getProcessDefinitionId();
     }
-    final var instance = runtimeService
+    var runningQuery = runtimeService
         .createProcessInstanceQuery()
         .processInstanceBusinessKey(String.valueOf(workflowAggregateId))
-        .processDefinitionKey(bpmnProcessId)
-        .tenantIdIn(tenantId)
-        .singleResult();
+        .processDefinitionKey(bpmnProcessId);
+    // a module without a tenant is the DEFAULT ('name-clash-avoidance: none'), and
+    // Camunda rejects a null tenant id instead of ignoring it
+    runningQuery = tenantId != null
+        ? runningQuery.tenantIdIn(tenantId)
+        : runningQuery.withoutTenantId();
+    final var instance = runningQuery.singleResult();
     return instance == null
         ? null
         : instance.getProcessDefinitionId();
@@ -232,11 +236,14 @@ public class Camunda7WorkflowViewer {
       final Object workflowAggregateId,
       final String historyContext) {
 
-    final var primaryInstance = historyService
+    var historicQuery = historyService
         .createHistoricProcessInstanceQuery()
         .processInstanceBusinessKey(String.valueOf(workflowAggregateId))
-        .processDefinitionKey(bpmnProcessId)
-        .tenantIdIn(tenantId)
+        .processDefinitionKey(bpmnProcessId);
+    historicQuery = tenantId != null
+        ? historicQuery.tenantIdIn(tenantId)
+        : historicQuery.withoutTenantId();
+    final var primaryInstance = historicQuery
         .orderByProcessInstanceStartTime()
         .desc()
         .list()
@@ -317,10 +324,13 @@ public class Camunda7WorkflowViewer {
     elementsByCalledProcess.forEach((
         calledProcessId,
         elementIds) -> {
-      final var latest = repositoryService
+      var definitionQuery = repositoryService
           .createProcessDefinitionQuery()
-          .processDefinitionKey(calledProcessId)
-          .tenantIdIn(tenantId)
+          .processDefinitionKey(calledProcessId);
+      definitionQuery = tenantId != null
+          ? definitionQuery.tenantIdIn(tenantId)
+          : definitionQuery.withoutTenantId();
+      final var latest = definitionQuery
           .latestVersion()
           .singleResult();
       if (latest == null) {
