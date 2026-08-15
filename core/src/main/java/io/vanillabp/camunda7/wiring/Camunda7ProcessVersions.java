@@ -7,9 +7,12 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.camunda.bpm.engine.RepositoryService;
+import org.camunda.bpm.engine.RuntimeService;
+import org.camunda.bpm.model.bpmn.BpmnModelInstance;
 
 import io.vanillabp.integration.adapter.spi.version.CachingProcessVersionCatalog;
 import io.vanillabp.integration.adapter.spi.version.DeployedProcessVersion;
+import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 
 /**
  * The versions of the process definitions of ONE Camunda 7 engine (= one adapter id):
@@ -49,14 +52,143 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
    */
   private final Map<String, String> versionsByDefinitionId = new ConcurrentHashMap<>();
 
+  /**
+   * The version this boot deployed per process (story 57) - what tells a restart
+   * without a model change that it still has to report a version.
+   */
+  private final Map<String, String> deployedVersions = new ConcurrentHashMap<>();
+
+  /**
+   * Reads the tasks of a model the engine holds - the deployment service' own
+   * extraction (story 57).
+   */
+  @FunctionalInterface
+  public interface TasksOfModel {
+
+    java.util.Collection<BpmnTaskSpec> of(
+        String workflowModuleId,
+        String bpmnProcessId,
+        String version,
+        BpmnModelInstance model);
+
+  }
+
+  private final TasksOfModel tasksOfModel;
+
+  /**
+   * The engine's runtime, asked how many workflows still run on an old version
+   * (story 57). Set once the engine is there; <code>null</code> switches the
+   * question off.
+   */
+  private RuntimeService runtimeService;
+
   public Camunda7ProcessVersions(
       final RepositoryService repositoryService,
       final BiFunction<String, String, String> scopedProcessIds,
-      final Function<String, String> tenants) {
+      final Function<String, String> tenants,
+      final TasksOfModel tasksOfModel) {
 
     this.repositoryService = repositoryService;
     this.scopedProcessIds = scopedProcessIds;
     this.tenants = tenants;
+    this.tasksOfModel = tasksOfModel;
+
+  }
+
+  /**
+   * @param runtimeService The engine's runtime service
+   */
+  public void setRuntimeService(
+      final RuntimeService runtimeService) {
+
+    this.runtimeService = runtimeService;
+
+  }
+
+  /**
+   * The version this adapter recorded for that process during this boot, or
+   * <code>null</code> if it deployed nothing (story 57).
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @return The version or <code>null</code>
+   */
+  public String deployedVersionOf(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    return deployedVersions.get(workflowModuleId
+        + "|"
+        + bpmnProcessId);
+
+  }
+
+  @Override
+  public java.util.Collection<BpmnTaskSpec> tasksOfVersion(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    if (tasksOfModel == null) {
+      return null;
+    }
+    final var definitionId = definitionIdOf(workflowModuleId, bpmnProcessId, version);
+    if (definitionId == null) {
+      // the engine does not hold that version any more (a deployment was deleted
+      // between the query and this call) - nothing to check, and nothing to warn
+      // about either
+      return java.util.List.of();
+    }
+    return tasksOfModel
+        .of(workflowModuleId, bpmnProcessId, version, repositoryService.getBpmnModelInstance(definitionId));
+
+  }
+
+  @Override
+  public Long activeInstanceCountOf(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    if (runtimeService == null) {
+      return null;
+    }
+    final var definitionId = definitionIdOf(workflowModuleId, bpmnProcessId, version);
+    if (definitionId == null) {
+      return 0L;
+    }
+    return runtimeService
+        .createProcessInstanceQuery()
+        .processDefinitionId(definitionId)
+        .active()
+        .count();
+
+  }
+
+  /**
+   * The engine's process definition id of one version of a process.
+   */
+  private String definitionIdOf(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    if (!version.matches("\\d+")) {
+      return null;
+    }
+    final var scopedProcessId = scopedProcessIds.apply(workflowModuleId, bpmnProcessId);
+    final var tenantId = tenants.apply(workflowModuleId);
+    var query = repositoryService
+        .createProcessDefinitionQuery()
+        .processDefinitionKey(scopedProcessId)
+        .processDefinitionVersion(Integer.valueOf(version));
+    query = tenantId == null
+        ? query.withoutTenantId()
+        : query.tenantIdIn(tenantId);
+    final var definition = query.singleResult();
+    return definition == null
+        ? null
+        : definition.getId();
 
   }
 
@@ -110,6 +242,9 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
       final String versionTag) {
 
     versionsByDefinitionId.put(processDefinitionId, String.valueOf(version));
+    deployedVersions.put(workflowModuleId
+        + "|"
+        + bpmnProcessId, String.valueOf(version));
     record(workflowModuleId, bpmnProcessId, DeployedProcessVersion.of(String.valueOf(version), versionTag));
 
   }

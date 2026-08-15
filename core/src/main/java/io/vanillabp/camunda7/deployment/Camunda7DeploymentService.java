@@ -291,7 +291,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // story 48: what the engine's process definitions are versioned as - the
     // registry hands it to every listener building an invocation context
     this.processVersions = new io.vanillabp.camunda7.wiring.Camunda7ProcessVersions(
-        repositoryService, this::scopedProcessId, this::tenantIdOf);
+        repositoryService, this::scopedProcessId, this::tenantIdOf, this::tasksOfDeployedModel);
     if (taskRegistry != null) {
       taskRegistry.setProcessVersions(processVersions);
       // every inbound delivery reports which adapter it came from (story 54)
@@ -488,55 +488,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // them), while the core is keyed by the plain ones - so the model is searched
     // by the scoped id and the invoker is called with the plain one (story 35)
     final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
-    serviceLikeTasksOf(model, scopedBpmnProcessId)
-        .forEach(task -> {
-          final var delegateExpression = task.getAttributeValueNs(CAMUNDA_NS, "delegateExpression");
-          final var expression = task.getAttributeValueNs(CAMUNDA_NS, "expression");
-          final var topic = task.getAttributeValueNs(CAMUNDA_NS, "topic");
-          if ((topic != null) && !topic.isBlank()) {
-            throw new IllegalStateException(
-                """
-                    Task '%s' of BPMN process '%s' (file '%s', workflow module '%s') is implemented \
-                    as an external task (camunda:topic) which is not supported by VanillaBP yet! \
-                    Wire the task by 'camunda:expression' or 'camunda:delegateExpression' naming the \
-                    @WorkflowTask method's task definition, e.g. ${%s}."""
-                    .formatted(task.getId(), bpmnProcessId, filename, workflowModuleId, topic));
-          }
-          final String rawExpression;
-          final Camunda7TaskConnectable.Type type;
-          if ((delegateExpression != null) && !delegateExpression.isBlank()) {
-            rawExpression = delegateExpression;
-            type = Camunda7TaskConnectable.Type.DELEGATE_EXPRESSION;
-          } else if ((expression != null) && !expression.isBlank()) {
-            rawExpression = expression;
-            type = Camunda7TaskConnectable.Type.EXPRESSION;
-          } else {
-            // no implementation given: reported by the wiring validation with a
-            // guiding message (task definition null - matched by activity ID only)
-            specs.add(new BpmnTaskSpec(task.getId(), null));
-            return;
-          }
-          final var taskDefinition = unwrapExpression(
-              rawExpression, task.getId(), bpmnProcessId, filename, workflowModuleId);
-          specs.add(new BpmnTaskSpec(task.getId(), taskDefinition));
-          connectables.add(new Camunda7TaskConnectable(
-              workflowModuleId, bpmnProcessId, scopedBpmnProcessId, task.getId(), taskDefinition, type));
-        });
-
-    // user tasks (story 24): the task definition is the camunda:formKey; a
-    // matching @WorkflowTask method is OPTIONAL (notification only) - the spec
-    // still marks matching methods as wired
-    model
-        .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.UserTask.class)
-        .stream()
-        .filter(task -> scopedBpmnProcessId.equals(owningProcessId(task)))
-        .forEach(task -> {
-          final var formKey = task.getAttributeValueNs(CAMUNDA_NS, "formKey");
-          specs.add(BpmnTaskSpec.userTask(task.getId(), formKey));
-          connectables.add(new Camunda7TaskConnectable(
-              workflowModuleId, bpmnProcessId, scopedBpmnProcessId, task
-                  .getId(), formKey, Camunda7TaskConnectable.Type.USER_TASK));
-        });
+    collectTasks(model, workflowModuleId, bpmnProcessId, scopedBpmnProcessId, filename, specs, connectables);
 
     // both directions with guiding messages; throwing here honors the
     // deployment-failure policy for non-first-priority adapter ids
@@ -584,6 +536,155 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         bpmnProcessId,
         filename,
         workflowModuleId);
+
+  }
+
+  /**
+   * The engine's runtime service, used by the startup check of story 57 to ask how
+   * many workflows still run on an old version of a process. Set by the platform
+   * integration, like the identity service.
+   *
+   * @param runtimeService The engine's runtime service
+   */
+  public void setRuntimeService(
+      final org.camunda.bpm.engine.RuntimeService runtimeService) {
+
+    processVersions.setRuntimeService(runtimeService);
+
+  }
+
+  /**
+   * The process definition the engine considers current for that process - what this
+   * application runs on when its resources were deployed before (story 57).
+   */
+  private org.camunda.bpm.engine.repository.ProcessDefinition latestVersionOf(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    final var tenantId = tenantIdOf(workflowModuleId);
+    var query = repositoryService
+        .createProcessDefinitionQuery()
+        .processDefinitionKey(scopedProcessId(workflowModuleId, bpmnProcessId))
+        .latestVersion();
+    query = tenantId == null
+        ? query.withoutTenantId()
+        : query.tenantIdIn(tenantId);
+    return query.singleResult();
+
+  }
+
+  /**
+   * The tasks of a model the engine still holds, read for the startup check of story
+   * 57 - the same extraction the deployed model goes through, so both directions
+   * cannot disagree about what a task is.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param version The version the engine assigned
+   * @param model The model of that version
+   * @return The tasks of that version
+   */
+  private java.util.Collection<BpmnTaskSpec> tasksOfDeployedModel(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version,
+      final BpmnModelInstance model) {
+
+    final var specs = new LinkedList<BpmnTaskSpec>();
+    collectTasks(
+        model,
+        workflowModuleId,
+        bpmnProcessId,
+        scopedProcessId(workflowModuleId, bpmnProcessId),
+        "version %s".formatted(version),
+        specs,
+        null);
+    return specs;
+
+  }
+
+  /**
+   * Extracts the tasks of ONE executable BPMN process into the specs the core
+   * validates against, and - for the model this boot deploys - into the connectables
+   * the engine's EL resolver looks up at runtime.
+   * <p>
+   * Story 57 reads the models of OLDER versions the engine still holds and asks the
+   * core whether the application still serves them, which is why this sits in its own
+   * method: both directions have to see a model exactly the same way, and a second
+   * implementation would drift.
+   *
+   * @param model The BPMN model, carrying the identifiers the ENGINE knows
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param scopedBpmnProcessId The BPMN process ID as the engine knows it
+   * @param describedSource What to name in a message about a broken model (the file
+   *          for the deployed model, the version for an older one)
+   * @param specs Collects the task specs
+   * @param connectables Collects the connectables, or <code>null</code> for a model
+   *          which is not being deployed
+   */
+  private void collectTasks(
+      final BpmnModelInstance model,
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String scopedBpmnProcessId,
+      final String describedSource,
+      final List<BpmnTaskSpec> specs,
+      final List<Camunda7TaskConnectable> connectables) {
+    serviceLikeTasksOf(model, scopedBpmnProcessId)
+        .forEach(task -> {
+          final var delegateExpression = task.getAttributeValueNs(CAMUNDA_NS, "delegateExpression");
+          final var expression = task.getAttributeValueNs(CAMUNDA_NS, "expression");
+          final var topic = task.getAttributeValueNs(CAMUNDA_NS, "topic");
+          if ((topic != null) && !topic.isBlank()) {
+            throw new IllegalStateException(
+                """
+                    Task '%s' of BPMN process '%s' (file '%s', workflow module '%s') is implemented \
+                    as an external task (camunda:topic) which is not supported by VanillaBP yet! \
+                    Wire the task by 'camunda:expression' or 'camunda:delegateExpression' naming the \
+                    @WorkflowTask method's task definition, e.g. ${%s}."""
+                    .formatted(task.getId(), bpmnProcessId, describedSource, workflowModuleId, topic));
+          }
+          final String rawExpression;
+          final Camunda7TaskConnectable.Type type;
+          if ((delegateExpression != null) && !delegateExpression.isBlank()) {
+            rawExpression = delegateExpression;
+            type = Camunda7TaskConnectable.Type.DELEGATE_EXPRESSION;
+          } else if ((expression != null) && !expression.isBlank()) {
+            rawExpression = expression;
+            type = Camunda7TaskConnectable.Type.EXPRESSION;
+          } else {
+            // no implementation given: reported by the wiring validation with a
+            // guiding message (task definition null - matched by activity ID only)
+            specs.add(new BpmnTaskSpec(task.getId(), null));
+            return;
+          }
+          final var taskDefinition = unwrapExpression(
+              rawExpression, task.getId(), bpmnProcessId, describedSource, workflowModuleId);
+          specs.add(new BpmnTaskSpec(task.getId(), taskDefinition));
+          if (connectables != null) {
+            connectables.add(new Camunda7TaskConnectable(
+                workflowModuleId, bpmnProcessId, scopedBpmnProcessId, task.getId(), taskDefinition, type));
+          }
+        });
+
+    // user tasks (story 24): the task definition is the camunda:formKey; a
+    // matching @WorkflowTask method is OPTIONAL (notification only) - the spec
+    // still marks matching methods as wired
+    model
+        .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.UserTask.class)
+        .stream()
+        .filter(task -> scopedBpmnProcessId.equals(owningProcessId(task)))
+        .forEach(task -> {
+          final var formKey = task.getAttributeValueNs(CAMUNDA_NS, "formKey");
+          specs.add(BpmnTaskSpec.userTask(task.getId(), formKey));
+          if (connectables != null) {
+            connectables.add(new Camunda7TaskConnectable(
+                workflowModuleId, bpmnProcessId, scopedBpmnProcessId, task
+                    .getId(), formKey, Camunda7TaskConnectable.Type.USER_TASK));
+          }
+        });
+
 
   }
 
@@ -795,14 +896,49 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     final var deployedDefinitions = deployment.getDeployedProcessDefinitions();
     if (deployedDefinitions != null) {
       deployedDefinitions
-          .forEach(definition -> processVersions
-              .recordDeployed(
-                  workflowModuleId,
-                  taskRegistry.plainBpmnProcessId(workflowModuleId, definition.getKey()),
-                  definition.getId(),
-                  definition.getVersion(),
-                  definition.getVersionTag()));
+          .forEach(definition -> {
+            final var plainBpmnProcessId = taskRegistry.plainBpmnProcessId(workflowModuleId, definition.getKey());
+            processVersions
+                .recordDeployed(
+                    workflowModuleId,
+                    plainBpmnProcessId,
+                    definition.getId(),
+                    definition.getVersion(),
+                    definition.getVersionTag());
+            // story 57: the border between the model this boot brought and the older
+            // versions the engine still holds
+            workflowTaskInvoker
+                .registerDeployedVersion(
+                    adapterId,
+                    workflowModuleId,
+                    plainBpmnProcessId,
+                    String.valueOf(definition.getVersion()));
+          });
     }
+
+    // Camunda deploys nothing when the resources did not change, so a restart without
+    // a model change reports no definitions at all. The version this application runs
+    // on is the engine's latest one then, and story 57's check needs it on EVERY boot,
+    // not only on the one which changed something.
+    bpmsProcessingContext
+        .getDeployedProcessIds()
+        .stream()
+        .filter(bpmnProcessId -> processVersions.deployedVersionOf(workflowModuleId, bpmnProcessId) == null)
+        .forEach(bpmnProcessId -> {
+          final var latest = latestVersionOf(workflowModuleId, bpmnProcessId);
+          if (latest != null) {
+            processVersions
+                .recordDeployed(
+                    workflowModuleId,
+                    bpmnProcessId,
+                    latest.getId(),
+                    latest.getVersion(),
+                    latest.getVersionTag());
+            workflowTaskInvoker
+                .registerDeployedVersion(
+                    adapterId, workflowModuleId, bpmnProcessId, String.valueOf(latest.getVersion()));
+          }
+        });
 
     log.info(
         "Camunda7[{}]: deployed {} BPMN resource(s) of workflow module '{}' (tenant '{}') as deployment '{}'",
