@@ -527,6 +527,16 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // is what a version specification naming a version TAG needs
     workflowTaskInvoker
         .registerProcessVersions(adapterId, workflowModuleId, bpmnProcessId, processVersions);
+
+    // story 59: which elements can put a second token into a running workflow - two
+    // tokens are two writers on the workflow aggregate, and the core knows whether
+    // that aggregate can survive them
+    workflowTaskInvoker
+        .reportConcurrentTokenElements(
+            workflowModuleId,
+            bpmnProcessId,
+            Camunda7ConcurrentTokens.elementIdsOf(model, scopedBpmnProcessId));
+
     wireBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
 
     log.info(
@@ -704,7 +714,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
   }
 
-  private static String owningProcessId(
+  static String owningProcessId(
       final FlowElement element) {
 
     ModelElementInstance current = element;
