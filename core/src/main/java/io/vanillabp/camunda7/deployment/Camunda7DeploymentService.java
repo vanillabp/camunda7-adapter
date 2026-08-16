@@ -105,6 +105,35 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * The core's registry of <code>&#64;WorkflowEnded</code> methods, used at deployment
+   * to tell an application that its method will never be called. May be
+   * <code>null</code> (tests) - nothing is checked then.
+   */
+  private io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker;
+
+  /**
+   * Whether the engine of this adapter id attached the end listener, see
+   * {@link #setWorkflowEndedSupport}.
+   */
+  private boolean engineDeliversWorkflowEnded;
+
+  /**
+   * Hands over what is needed to check <code>&#64;WorkflowEnded</code> methods against
+   * what this adapter id's engine actually delivers.
+   *
+   * @param workflowEndedInvoker The core's registry of end handlers
+   * @param engineDeliversWorkflowEnded Whether the engine attached its end listener
+   */
+  public void setWorkflowEndedSupport(
+      final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker,
+      final boolean engineDeliversWorkflowEnded) {
+
+    this.workflowEndedInvoker = workflowEndedInvoker;
+    this.engineDeliversWorkflowEnded = engineDeliversWorkflowEnded;
+
+  }
+
+  /**
    * The core's name-clash-avoidance model (story 35): decides whether a workflow
    * module is isolated by the Camunda TENANT ({@code by-adapter}, version 1's
    * behavior), by PREFIXING the identifiers ({@code use-prefix} - no tenant) or not at
@@ -537,6 +566,12 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             bpmnProcessId,
             Camunda7ConcurrentTokens.elementIdsOf(model, scopedBpmnProcessId));
 
+    // story 72: this engine reports the end of a workflow, so a @WorkflowEnded
+    // method staying silent means the adapter was not wired - which used to be
+    // invisible: the application booted, the workflow ran, the method was never
+    // called and nothing was logged
+    warnAboutUnservedWorkflowEndedHandlers(workflowModuleId, bpmnProcessId);
+
     wireBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
 
     log.info(
@@ -759,6 +794,41 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * @param scopedBpmnProcessId The process definition key the engine will know
    * @param model The BPMN model
    */
+  /**
+   * Reports a <code>&#64;WorkflowEnded</code> method which this adapter id will never
+   * call. Camunda 7 CAN report the end of a workflow, so the only way to get here is a
+   * missing wire between the platform module and the engine - it happened
+   * (story 72: the Quarkus producer did not hand the invoker over, and nothing said
+   * so). The deployment is not failed over it: the workflow itself runs, only the
+   * notification is missing.
+   *
+   * Visible for tests.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID
+   */
+  void warnAboutUnservedWorkflowEndedHandlers(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    if (engineDeliversWorkflowEnded || (workflowEndedInvoker == null) || !workflowEndedInvoker
+        .workflowEndedHandlerExists(workflowModuleId, bpmnProcessId)) {
+      return;
+    }
+    log
+        .warn(
+            """
+                A @WorkflowEnded method serves BPMN process '{}' of workflow module '{}', but the \
+                Camunda 7 adapter '{}' did not attach its end listener - the method will never be \
+                called although this engine could report the end of a workflow. This is a wiring \
+                defect of the adapter, not of your application: please report it naming the \
+                platform you run on (Spring Boot or Quarkus) and this adapter's version.""",
+            bpmnProcessId,
+            workflowModuleId,
+            adapterId);
+
+  }
+
   private void wireBpmsInitiatedStarts(
       final String workflowModuleId,
       final String bpmnProcessId,

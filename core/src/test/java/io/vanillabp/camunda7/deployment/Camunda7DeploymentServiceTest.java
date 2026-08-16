@@ -31,6 +31,85 @@ public class Camunda7DeploymentServiceTest {
 
   }
 
+  /**
+   * The core's registry of <code>&#64;WorkflowEnded</code> methods, reduced to the one
+   * question the deployment asks it.
+   */
+  private static io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker handlersFor(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    return new io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker() {
+
+      @Override
+      public boolean workflowEndedHandlerExists(
+          final String module,
+          final String process) {
+
+        return workflowModuleId.equals(module) && bpmnProcessId.equals(process);
+
+      }
+
+      @Override
+      public void workflowEnded(
+          final String module,
+          final String process,
+          final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedContext context) {
+
+        throw new UnsupportedOperationException("not part of this test");
+
+      }
+
+    };
+
+  }
+
+  @Test
+  @DisplayName("A @WorkflowEnded method nobody will call is reported as the adapter's wiring defect")
+  public void unservedWorkflowEndedHandlerIsReported() {
+
+    final var service = serviceOfAdapterId("c7");
+    service.setWorkflowEndedSupport(handlersFor(MODULE, "LoanApproval"), false);
+
+    final var warnings = warningsOf(() -> service.warnAboutUnservedWorkflowEndedHandlers(MODULE, "LoanApproval"));
+
+    assertEquals(1, warnings.size(), () -> warnings.toString());
+    final var message = warnings.getFirst();
+    assertTrue(message.contains("LoanApproval"), () -> message);
+    assertTrue(message.contains(MODULE), () -> message);
+    assertTrue(message.contains("'c7'"), () -> message);
+    // Camunda 7 CAN report the end of a workflow, so this is not the application's
+    // problem to solve - the message has to say whose it is
+    assertTrue(message.contains("wiring defect of the adapter"), () -> message);
+
+  }
+
+  @Test
+  @DisplayName("Nothing is said where the engine reports the end, or where no method waits for it")
+  public void servedOrUnusedWorkflowEndStaysSilent() {
+
+    final var wired = serviceOfAdapterId("c7");
+    wired.setWorkflowEndedSupport(handlersFor(MODULE, "LoanApproval"), true);
+    assertEquals(
+        List.of(),
+        warningsOf(() -> wired.warnAboutUnservedWorkflowEndedHandlers(MODULE, "LoanApproval")),
+        "the end listener is attached, so the method will be called");
+
+    final var withoutHandler = serviceOfAdapterId("c7");
+    withoutHandler.setWorkflowEndedSupport(handlersFor(MODULE, "AnotherProcess"), false);
+    assertEquals(
+        List.of(),
+        warningsOf(() -> withoutHandler.warnAboutUnservedWorkflowEndedHandlers(MODULE, "LoanApproval")),
+        "no method of this process waits for the notification");
+
+    final var withoutRegistry = serviceOfAdapterId("c7");
+    assertEquals(
+        List.of(),
+        warningsOf(() -> withoutRegistry.warnAboutUnservedWorkflowEndedHandlers(MODULE, "LoanApproval")),
+        "without the core's registry there is nothing to compare against");
+
+  }
+
   @Test
   @DisplayName("Without configuration the mode is NONE - Camunda 7 has more than one way to isolate")
   public void defaultsToNone() {

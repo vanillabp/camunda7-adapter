@@ -51,6 +51,12 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
 
   private final boolean usesSeparateDataSource;
 
+  /**
+   * Whether the core's entry point for ended workflows was handed over, see
+   * {@link #deliversWorkflowEnded()}.
+   */
+  private final boolean deliversWorkflowEnded;
+
   private final ProcessEngine processEngine;
 
   private final Camunda7JobExecutorLifecycle jobExecutorLifecycle;
@@ -78,6 +84,20 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
    * @param processDefinitionKey The process definition key the engine parses
    * @return Whether an end listener has to be attached
    */
+  /**
+   * Whether this engine reports the end of a workflow, which it does when the core
+   * handed over its invoker. False means every <code>&#64;WorkflowEnded</code> method
+   * of a process deployed here stays silent - the deployment service says so instead
+   * of leaving the application waiting (story 72).
+   *
+   * @return Whether the end listener was attached
+   */
+  public boolean deliversWorkflowEnded() {
+
+    return deliversWorkflowEnded;
+
+  }
+
   private boolean workflowEndedHandlerExists(
       final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker,
       final String tenantId,
@@ -94,32 +114,15 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
 
   }
 
-  public Camunda7QuarkusEngineHolder(
-      final String adapterId,
-      final Camunda7EngineProperties properties,
-      final AgroalDataSource dataSource,
-      final boolean usesSeparateDataSource,
-      final TransactionManager transactionManager,
-      final WorkflowTaskInvoker workflowTaskInvoker) {
-
-    this(adapterId, properties, dataSource, usesSeparateDataSource, transactionManager, workflowTaskInvoker, null);
-
-  }
-
-  public Camunda7QuarkusEngineHolder(
-      final String adapterId,
-      final Camunda7EngineProperties properties,
-      final AgroalDataSource dataSource,
-      final boolean usesSeparateDataSource,
-      final TransactionManager transactionManager,
-      final WorkflowTaskInvoker workflowTaskInvoker,
-      final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker) {
-
-    this(
-        adapterId, properties, dataSource, usesSeparateDataSource, transactionManager, workflowTaskInvoker, bpmsInitiatedStartInvoker, null);
-
-  }
-
+  /**
+   * There is deliberately only ONE constructor, and it takes every invoker the core
+   * offers. The convenience constructors this class used to have filled the missing
+   * ones with <code>null</code>, which silently switched off a feature: the engine
+   * attached no end listener, the application booted without a warning and a
+   * <code>&#64;WorkflowEnded</code> method was simply never called (story 72). What
+   * an engine does not support is the adapter's decision, not something a forgotten
+   * argument decides.
+   */
   public Camunda7QuarkusEngineHolder(
       final String adapterId,
       final Camunda7EngineProperties properties,
@@ -132,6 +135,7 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
 
     this.adapterId = adapterId;
     this.usesSeparateDataSource = usesSeparateDataSource;
+    this.deliversWorkflowEnded = workflowEndedInvoker != null;
 
     final var parseListener = new Camunda7AsyncBpmnParseListener(
         new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(

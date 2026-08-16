@@ -74,6 +74,7 @@ public class Camunda7AdapterProducer {
               adapterId, engine.getRepositoryService(), engine, workflowTaskRegistry, engine
                   .getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
           deploymentService.setBpmsInitiatedStartInvoker(workflowTaskRegistry);
+          deploymentService.setWorkflowEndedSupport(workflowTaskRegistry, engine.deliversWorkflowEnded());
           deploymentService.setScoping(scoping);
           deploymentService.setConfiguredTenantId(configuredTenantIdOf(overlay, adapterId));
           deploymentService.setIdentityService(

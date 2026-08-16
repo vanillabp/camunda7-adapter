@@ -116,42 +116,41 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    * The core's entry point for workflows which ended (story 43). May be
    * <code>null</code> - the engine then attaches no end listener.
    */
-  private io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker;
+  private final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker;
 
   /**
-   * Hands over the core's entry point for workflows which ended.
+   * There is deliberately only ONE constructor, and it takes every invoker the core
+   * offers - the same rule as on Quarkus. A convenience constructor (or a setter
+   * called later) leaves an invoker at <code>null</code>, which switches a feature
+   * off silently: the engine attaches no end listener, the application boots without
+   * a warning and a <code>&#64;WorkflowEnded</code> method is never called (story
+   * 72).
    *
-   * @param workflowEndedInvoker The core's invoker
+   * @param adapterId The adapter id
+   * @param properties The adapter id's engine settings
+   * @param applicationDataSource The application's data source (null for an id using
+   *        a named one)
+   * @param applicationTransactionManager The application's transaction manager (null
+   *        for an id using a named data source)
+   * @param workflowTaskInvoker The core's entry point for BPMN tasks
+   * @param bpmsInitiatedStartInvoker The core's entry point for workflows the engine
+   *        starts on its own (may be <code>null</code> if the core provides none)
+   * @param workflowEndedInvoker The core's entry point for workflows which ended (may
+   *        be <code>null</code> if the core provides none)
    */
-  public void setWorkflowEndedInvoker(
-      final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker) {
-
-    this.workflowEndedInvoker = workflowEndedInvoker;
-
-  }
-
-  public Camunda7EngineHolder(
-      final String adapterId,
-      final Camunda7EngineProperties properties,
-      final DataSource applicationDataSource,
-      final PlatformTransactionManager applicationTransactionManager,
-      final WorkflowTaskInvoker workflowTaskInvoker) {
-
-    this(adapterId, properties, applicationDataSource, applicationTransactionManager, workflowTaskInvoker, null);
-
-  }
-
   public Camunda7EngineHolder(
       final String adapterId,
       final Camunda7EngineProperties properties,
       final DataSource applicationDataSource,
       final PlatformTransactionManager applicationTransactionManager,
       final WorkflowTaskInvoker workflowTaskInvoker,
-      final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker) {
+      final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker,
+      final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker) {
 
     this.adapterId = adapterId;
     this.workflowTaskInvoker = workflowTaskInvoker;
     this.bpmsInitiatedStartInvoker = bpmsInitiatedStartInvoker;
+    this.workflowEndedInvoker = workflowEndedInvoker;
     this.properties = properties;
     this.applicationDataSource = applicationDataSource;
     this.applicationTransactionManager = applicationTransactionManager;
@@ -183,6 +182,20 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    * @param processDefinitionKey The process definition key the engine parses
    * @return Whether an end listener has to be attached
    */
+  /**
+   * Whether this engine reports the end of a workflow, which it does when the core
+   * handed over its invoker. False means every <code>&#64;WorkflowEnded</code> method
+   * of a process deployed here stays silent - the deployment service says so instead
+   * of leaving the application waiting (story 72).
+   *
+   * @return Whether the end listener was attached
+   */
+  public boolean deliversWorkflowEnded() {
+
+    return workflowEndedInvoker != null;
+
+  }
+
   private boolean workflowEndedHandlerExists(
       final String tenantId,
       final String processDefinitionKey) {
