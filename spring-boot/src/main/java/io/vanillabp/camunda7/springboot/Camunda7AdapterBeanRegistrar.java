@@ -75,7 +75,7 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 // are only needed (and only required to exist) if the id references
                 // no named datasource bean (data-source-name)
                 final var usesNamedDataSource = engineProperties.usesSeparateDataSource();
-                final var holder = new Camunda7EngineHolder(
+                return new Camunda7EngineHolder(
                     adapterId, engineProperties, usesNamedDataSource
                         ? null
                         : applicationBean(supplierContext, DataSource.class, adapterId), usesNamedDataSource
@@ -85,13 +85,10 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                                     .bean(WorkflowTaskInvoker.class), supplierContext
                                         .beanProvider(
                                             io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker.class)
-                                        .getIfAvailable());
-                holder.setWorkflowEndedInvoker(
-                    supplierContext
-                        .beanProvider(
-                            io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker.class)
-                        .getIfAvailable());
-                return holder;
+                                        .getIfAvailable(), supplierContext
+                                            .beanProvider(
+                                                io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker.class)
+                                            .getIfAvailable());
               }));
 
           registry.registerBean(
@@ -124,6 +121,12 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                         .beanProvider(
                             io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker.class)
                         .getIfAvailable());
+                deploymentService.setWorkflowEndedSupport(
+                    supplierContext
+                        .beanProvider(
+                            io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker.class)
+                        .getIfAvailable(),
+                    engine.deliversWorkflowEnded());
                 deploymentService.setScoping(
                     supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class));
                 deploymentService.setConfiguredTenantId(
