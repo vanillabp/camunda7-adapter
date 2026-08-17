@@ -79,22 +79,19 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private final org.camunda.bpm.engine.RepositoryService repositoryService;
 
   /**
-   * The core's sync model (story 28). Camunda 7 is EMBEDDED: BPMN expressions read
-   * the aggregate LIVE (see the EL resolver of story 21b), so nothing has to be
-   * pushed - the adapter's default is therefore
-   * {@link io.vanillabp.integration.adapter.spi.AggregateSyncMode#NONE}. What the
-   * application DOES share ({@code @SyncWithBPMS}) is written as process variables
-   * for one purpose only: context information for operators in Camunda's Cockpit.
-   * VanillaBP never reads those variables back (the aggregate is the truth); the
-   * only variables read are the ones a {@code @TaskParam} asks for, which the BPMN
-   * model provides deliberately.
+   * The core's sync model (story 28). Since story 66 Camunda 7 shares like every other
+   * BPMS: the values are written as process variables at every point this adapter talks
+   * to the engine, and the engine's expressions read those variables. Being embedded is
+   * no reason to do it differently - the engine evaluates its models against its own
+   * variables either way, and a model reading something else would work here and break
+   * on every remote BPMS.
+   * <p>
+   * VanillaBP never reads these variables back: the aggregate is the truth. The only
+   * variables read are the ones a {@code @TaskParam} asks for, which the BPMN model
+   * provides deliberately.
    */
   private final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync;
 
-  /**
-   * The default of this adapter: nothing is shared unless the application asks for
-   * it ({@code @SyncWithBPMS}).
-   */
   /**
    * The technical variable written when the application shares nothing: Camunda 7
    * evaluates conditional events on variable changes, so SOMETHING has to change for
@@ -103,7 +100,12 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    */
   public static final String AGGREGATE_CHANGED_MARKER = "vanillabpAggregateChanged";
 
-  public static final io.vanillabp.integration.adapter.spi.AggregateSyncMode SYNC_MODE = io.vanillabp.integration.adapter.spi.AggregateSyncMode.NONE;
+  /**
+   * The default of this adapter since story 66: everything is shared unless the
+   * application excludes it ({@code @NoSyncWithBPMS}), which is the default of every
+   * VanillaBP adapter - a model must not depend on which BPMS runs it.
+   */
+  public static final io.vanillabp.integration.adapter.spi.AggregateSyncMode SYNC_MODE = io.vanillabp.integration.adapter.spi.AggregateSyncMode.FULL;
 
   /**
    * The core's name-clash-avoidance model (story 35): translates process ids, message
@@ -112,6 +114,38 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * is the tenant then, as before.
    */
   private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
+
+  /**
+   * Which serialization format nested shared values are stored in, resolved per workflow
+   * with a fallback to the workflow module and the adapter (story 66). Provided by the
+   * platform integration, which binds the configuration; <code>null</code> in tests -
+   * the engine's default applies then.
+   */
+  private io.vanillabp.camunda7.sync.Camunda7SerializationFormats serializationFormats;
+
+  /**
+   * @param serializationFormats The format resolution of the platform integration
+   */
+  public void setSerializationFormats(
+      final io.vanillabp.camunda7.sync.Camunda7SerializationFormats serializationFormats) {
+
+    this.serializationFormats = serializationFormats;
+
+  }
+
+  /**
+   * The configured format for nested shared values of one workflow, or
+   * <code>null</code>.
+   */
+  private String serializationFormatOf(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    return serializationFormats != null
+        ? serializationFormats.formatFor(workflowModuleId, bpmnProcessId)
+        : null;
+
+  }
 
   /**
    * The tenant name configured for this adapter id or <code>null</code> (then the
@@ -142,7 +176,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private void startByMessage(
       final String workflowModuleId,
       final String messageName,
-      final String businessKey) {
+      final String businessKey,
+      final java.util.Map<String, Object> sharedValues) {
 
     var correlation = runtimeService
         .createMessageCorrelation(scopedIdentifier(workflowModuleId, messageName))
@@ -151,7 +186,11 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     correlation = tenantId != null
         ? correlation.tenantId(tenantId)
         : correlation.withoutTenantId();
-    correlation.correlateStartMessage();
+    // the new instance starts with the values its model may read (story 66), exactly
+    // like a workflow started without a message
+    correlation
+        .setVariables(sharedValues)
+        .correlateStartMessage();
 
   }
 
@@ -362,7 +401,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         : builder.processDefinitionWithoutTenantId();
     final var processInstance = builder
         .businessKey(businessKey)
-        .setVariables(operatorContext(aggregate))
+        .setVariables(sharedValues(aggregate, workflowModuleId, bpmnProcessId))
         .execute();
 
     log.info(
@@ -378,37 +417,67 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The aggregate's shared attributes - written as process variables for operators
-   * (Cockpit context). Empty unless the application opted in, since this adapter's
-   * default is {@code NONE}.
+   * The values the aggregate shares with the BPMS, as Camunda 7 process variables
+   * (story 66): what the engine's expressions read, and what an operator sees in
+   * Cockpit. Nested structures travel as JSON strings, see
+   * {@link io.vanillabp.camunda7.sync.Camunda7Variables}.
    *
    * @param aggregate The workflow aggregate or <code>null</code>
    * @return The variables (never <code>null</code>)
    */
-  private java.util.Map<String, Object> operatorContext(
-      final A aggregate) {
+  private java.util.Map<String, Object> sharedValues(
+      final A aggregate,
+      final String workflowModuleId,
+      final String bpmnProcessId) {
 
     if ((aggregateSync == null) || (aggregate == null)) {
       return java.util.Map.of();
     }
-    // a plain copy, NOT Map.copyOf: a shared attribute may well be null and the
-    // engine stores a null variable just fine (Map.copyOf would throw)
-    return new java.util.LinkedHashMap<>(aggregateSync.syncedValues(aggregate, SYNC_MODE));
+    return io.vanillabp.camunda7.sync.Camunda7Variables
+        .of(
+            aggregateSync.syncedValues(aggregate, SYNC_MODE),
+            serializationFormatOf(workflowModuleId, bpmnProcessId));
 
   }
 
   /**
-   * Refreshes the operator context of a running workflow (see
-   * {@link #operatorContext}) - a no-op unless the application shares attributes.
+   * The shared values of an aggregate this method has to read first - the shape phase
+   * two needs, where the caller's transaction is committed and only the ID is at hand.
+   * A persistence which cannot read the aggregate must not keep the operation from
+   * happening, so a failure yields no variables rather than an exception.
+   *
+   * @param aggregatePersistence The aggregate's persistence (may be
+   *          <code>null</code>)
+   * @param workflowAggregateId The aggregate's ID
+   * @return The variables (never <code>null</code>)
+   */
+  private java.util.Map<String, Object> sharedValues(
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    return sharedValues(
+        aggregateForOperatorContext(aggregatePersistence, workflowAggregateId),
+        workflowModuleId,
+        bpmnProcessId);
+
+  }
+
+  /**
+   * Writes the shared values into a running workflow (see {@link #sharedValues}) - a
+   * no-op where the aggregate shares nothing at all.
    *
    * @param executionId The execution to write the variables at
    * @param aggregate The workflow aggregate or <code>null</code>
    */
-  private void refreshOperatorContext(
+  private void refreshSharedValues(
       final String executionId,
-      final A aggregate) {
+      final A aggregate,
+      final String workflowModuleId,
+      final String bpmnProcessId) {
 
-    final var variables = operatorContext(aggregate);
+    final var variables = sharedValues(aggregate, workflowModuleId, bpmnProcessId);
     if (variables.isEmpty()) {
       return;
     }
@@ -611,6 +680,20 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String bpmnErrorCode,
       final boolean tolerateGoneTask) {
 
+    executeUserTask(taskId, bpmnErrorCode, tolerateGoneTask, null);
+
+  }
+
+  /**
+   * @param beforeExecute Runs after the user task was found and before it is completed
+   *        or cancelled - writes the values the model reads next (story 66)
+   */
+  private void executeUserTask(
+      final String taskId,
+      final String bpmnErrorCode,
+      final boolean tolerateGoneTask,
+      final Runnable beforeExecute) {
+
     if (tolerateGoneTask) {
       // check BEFORE executing - see signalTask: a failing engine command would
       // mark the joined transaction rollback-only even if the exception is caught
@@ -629,12 +712,42 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         return;
       }
     }
+    if (beforeExecute != null) {
+      beforeExecute.run();
+    }
     if (bpmnErrorCode == null) {
       taskService.complete(taskId);
     } else {
       // routes the workflow through an error boundary event on the user task
       taskService.handleBpmnError(taskId, bpmnErrorCode);
     }
+
+  }
+
+  /**
+   * Writes the shared values at the execution of a user task (story 66) - the variables
+   * the flow behind the task reads.
+   *
+   * @param taskId The user task's ID
+   * @param aggregatePersistence The aggregate's persistence
+   * @param workflowAggregateId The aggregate's ID
+   */
+  private void refreshSharedValuesOfUserTask(
+      final String taskId,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    final var variables = sharedValues(
+        aggregatePersistence,
+        workflowAggregateId,
+        workflowModuleId,
+        bpmnProcessId);
+    if (variables.isEmpty()) {
+      return;
+    }
+    taskService.setVariables(taskId, variables);
 
   }
 
@@ -660,7 +773,16 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String taskId) {
 
-    executeUserTask(taskId, null, true);
+    executeUserTask(
+        taskId,
+        null,
+        true,
+        () -> refreshSharedValuesOfUserTask(
+            taskId,
+            aggregatePersistence,
+            workflowAggregateId,
+            workflowModuleId,
+            bpmnProcessId));
 
   }
 
@@ -687,7 +809,16 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String taskId,
       final String bpmnErrorCode) {
 
-    executeUserTask(taskId, scopedIdentifier(workflowModuleId, bpmnErrorCode), true);
+    executeUserTask(
+        taskId,
+        scopedIdentifier(workflowModuleId, bpmnErrorCode),
+        true,
+        () -> refreshSharedValuesOfUserTask(
+            taskId,
+            aggregatePersistence,
+            workflowAggregateId,
+            workflowModuleId,
+            bpmnProcessId));
 
   }
 
@@ -715,7 +846,20 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String taskId) {
 
-    signalTask(taskId, null, true);
+    // the values the model reads are written along with the completion (story 66):
+    // whatever the caller changed before answering the task decides where the
+    // workflow goes next. Only after signalTask verified the task is still there -
+    // writing variables of a gone execution would mark the dispatcher's transaction
+    // rollback-only
+    signalTask(
+        taskId,
+        null,
+        true,
+        () -> refreshSharedValues(
+            taskId,
+            aggregateForOperatorContext(aggregatePersistence, workflowAggregateId),
+            workflowModuleId,
+            bpmnProcessId));
 
   }
 
@@ -755,7 +899,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         () -> {
           final var workflowAggregate = aggregatePersistence.loadById(workflowAggregateId);
           if (workflowAggregate != null) {
-            refreshOperatorContext(taskId, workflowAggregate);
+            refreshSharedValues(taskId, workflowAggregate, workflowModuleId, bpmnProcessId);
           }
         });
 
@@ -938,8 +1082,11 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   /**
    * A signal reaches every subscription of the workflow module's scope - the
    * tenant it is deployed into, respectively no tenant where the module prefixes
-   * its identifiers (story 35). No variables travel: a signal transports its name,
-   * the workflow aggregate stays the source of truth.
+   * its identifiers (story 35). No variables travel, and story 66 did not change that
+   * although it made every other sync point write them: a broadcast reaches workflows of
+   * OTHER aggregates, so writing the values of the sending one into them would state
+   * something false. Camunda 8 behaves the same way, for the same reason - the
+   * difference to the other sync points is the broadcast, not the engine.
    */
   private void broadcastSignal(
       final String workflowModuleId,
@@ -1044,7 +1191,11 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
           businessKey);
       return;
     }
+    // the values the model reads travel with the correlation (story 66): a gateway
+    // behind the receiving event decides on what the caller changed before correlating
     messageCorrelation(workflowModuleId, bpmnProcessId, messageName, businessKey, correlationId)
+        .setVariables(
+            sharedValues(aggregatePersistence, workflowAggregateId, workflowModuleId, bpmnProcessId))
         .correlateWithResult();
 
   }
@@ -1071,7 +1222,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String taskId) {
 
     final var aggregate = aggregatePersistence.loadById(workflowAggregateId);
-    pushAggregate(String.valueOf(workflowAggregateId), aggregate, taskId, true);
+    pushAggregate(
+        String.valueOf(workflowAggregateId),
+        aggregate,
+        taskId,
+        true,
+        workflowModuleId,
+        bpmnProcessId);
 
   }
 
@@ -1081,10 +1238,9 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * change.
    * <p>
    * Camunda 7 evaluates conditional events when a variable of their scope changes,
-   * so the write itself is the trigger - and it has to happen even when the
-   * application shares nothing ({@code @SyncWithBPMS} is opt-in here), which is why
-   * a technical marker variable is written alongside. Camunda 7 reads the aggregate
-   * LIVE through the EL resolver, so a condition sees the current state either way;
+   * so the write itself is the trigger - and it has to happen even for an aggregate
+   * sharing nothing at all, which is why a technical marker variable is written
+   * alongside. What a condition then reads are the values written here (story 66);
    * without the write nothing would look.
    *
    * @param businessKey The aggregate's ID
@@ -1098,13 +1254,16 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String businessKey,
       final A aggregate,
       final String taskId,
-      final boolean tolerateGoneWorkflow) {
+      final boolean tolerateGoneWorkflow,
+      final String workflowModuleId,
+      final String bpmnProcessId) {
 
-    final var variables = new java.util.LinkedHashMap<String, Object>(operatorContext(aggregate));
+    final var variables = new java.util.LinkedHashMap<String, Object>(
+        sharedValues(aggregate, workflowModuleId, bpmnProcessId));
     if (variables.isEmpty()) {
-      // nothing is shared (this adapter's default) - without a variable event the
-      // engine would not look at its conditional events at all, so a technical
-      // marker is written instead
+      // an aggregate sharing nothing at all (@NoSyncWithBPMS on the class) - without a
+      // variable event the engine would not look at its conditional events, so a
+      // technical marker is written instead
       variables.put(AGGREGATE_CHANGED_MARKER, System.currentTimeMillis());
     }
 
@@ -1330,7 +1489,11 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
           businessKey);
       return;
     }
-    startByMessage(workflowModuleId, messageName, businessKey);
+    startByMessage(
+        workflowModuleId,
+        messageName,
+        businessKey,
+        sharedValues(aggregatePersistence, workflowAggregateId, workflowModuleId, bpmnProcessId));
 
   }
 

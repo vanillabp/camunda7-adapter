@@ -19,19 +19,19 @@ import org.springframework.transaction.support.TransactionTemplate;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What the EMBEDDED Camunda 7 engine gets to see of a workflow aggregate (stories
- * 28/28b), asserted against the real engine's {@code RuntimeService}:
+ * What the EMBEDDED Camunda 7 engine gets to see of a workflow aggregate (stories 28, 28b
+ * and 66), asserted against the real engine:
  * <ul>
- * <li>an aggregate sharing ONE attribute ({@code @SyncWithBPMS}) writes exactly
- * that process variable - and nothing else, because since story 28b that one
- * annotation derives the class' mode (opt-in);</li>
- * <li>an aggregate carrying NO annotation at all writes NO variable: this adapter's
- * default is {@code AggregateSyncMode.NONE} (the engine reads the aggregate live -
- * shared values are operator context for the Cockpit, nothing else);</li>
- * <li>a BPMN gateway expression on a NOT shared attribute still works. This pins the
- * deliberate deviation of the Camunda 7 adapter: expressions are evaluated against
- * the LIVE aggregate through VanillaBP's EL resolver, so sharing is never a
- * precondition for a working model.</li>
+ * <li>since story 66 this adapter shares like every other BPMS: an aggregate carrying NO
+ * annotation writes every attribute as a process variable, and the engine's expressions
+ * read those variables;</li>
+ * <li>an aggregate which minimizes ({@code @SyncWithBPMS} on one attribute derives opt-out
+ * for the rest) writes exactly what it named - and an expression reading something it did
+ * NOT share only works through the MIGRATION FALLBACK of the EL resolver, which version
+ * 2.1 removes;</li>
+ * <li>the case the story was written for: the gateway right behind a service task branches
+ * on what THAT task computed, which means the value has to be a variable by then. The
+ * condition also navigates a NESTED shared value, which travels as an object variable.</li>
  * </ul>
  */
 @SpringBootTest(classes = TestApplication.class, properties = {
@@ -70,14 +70,28 @@ public class Camunda7AggregateSyncIT {
   private TaskTestWorkflowService taskWorkflowService;
 
   @Autowired
+  private DecisionTestRepository decisionRepository;
+
+  @Autowired
+  private DecisionTestWorkflowService decisionWorkflowService;
+
+  @Autowired
   private TransactionTemplate transactionTemplate;
 
   private Map<String, Object> variablesOfWorkflow(
       final Object aggregateId) {
 
+    return variablesOfWorkflow(aggregateId, "SyncProcess");
+
+  }
+
+  private Map<String, Object> variablesOfWorkflow(
+      final Object aggregateId,
+      final String bpmnProcessId) {
+
     final var processInstance = runtimeService
         .createProcessInstanceQuery()
-        .processDefinitionKey("SyncProcess")
+        .processDefinitionKey(bpmnProcessId)
         .processInstanceBusinessKey(String.valueOf(aggregateId))
         .tenantIdIn(MODULE_ID)
         .singleResult();
@@ -94,7 +108,7 @@ public class Camunda7AggregateSyncIT {
   }
 
   @Test
-  @DisplayName("One @SyncWithBPMS attribute is written as operator context - and nothing else")
+  @DisplayName("An aggregate which minimizes writes what it named - the rest needs the migration fallback")
   public void sharedAttributeBecomesAProcessVariable() {
 
     final var aggregateId = transactionTemplate.execute(status -> {
@@ -106,8 +120,10 @@ public class Camunda7AggregateSyncIT {
       return syncWorkflowService.startSyncProcess(aggregate).getId();
     });
 
-    // the gateway condition on the NOT shared attribute took the 'yes' path: the
-    // embedded engine read the aggregate live (the deliberate C7 deviation)
+    // the gateway condition reads the NOT shared attribute, so the workflow got past it
+    // through the migration fallback of story 66 - the EL resolver still reads the
+    // aggregate where the engine has no variable of that name. Version 2.1 removes that,
+    // and the startup check names such expressions while the application boots
     assertTrue(
         waitForTaskId(aggregateId),
         "the workflow has to reach the asynchronous task behind the gateway");
@@ -120,12 +136,11 @@ public class Camunda7AggregateSyncIT {
   }
 
   @Test
-  @DisplayName("An aggregate without any annotation writes no process variable at all")
-  public void unannotatedAggregateWritesNothing() {
+  @DisplayName("An aggregate without any annotation shares everything - the default of every adapter")
+  public void unannotatedAggregateSharesEverything() {
 
-    // started through VanillaBP (the sync point under test): TaskProcess runs to
-    // its end, so the assertion is made against the ENGINE'S HISTORY - a variable
-    // written at start would be recorded there
+    // started through VanillaBP (the sync point under test): TaskProcess runs to its end,
+    // so the assertion is made against the ENGINE'S HISTORY
     final var aggregateId = transactionTemplate.execute(status -> {
       final var aggregate = new TaskTestAggregate();
       aggregate.setApproved(true);
@@ -138,7 +153,7 @@ public class Camunda7AggregateSyncIT {
             .map(TaskTestAggregate::getResults)
             .filter(results -> results.contains("approved"))
             .isPresent()),
-        "TaskProcess has to pass the gateway reading the live aggregate");
+        "TaskProcess has to pass the gateway reading the shared attribute");
 
     final var historyService = processEngine.getHistoryService();
     final var historicInstance = historyService
@@ -147,16 +162,95 @@ public class Camunda7AggregateSyncIT {
         .processInstanceBusinessKey(String.valueOf(aggregateId))
         .singleResult();
     assertNotNull(historicInstance, "the finished workflow has to be in the history");
+    final var variableNames = historyService
+        .createHistoricVariableInstanceQuery()
+        .processInstanceId(historicInstance.getId())
+        .list()
+        .stream()
+        .map(variable -> variable.getName())
+        .toList();
+    // story 66: FULL is the default of every adapter, so every attribute of this
+    // unannotated aggregate is a variable the model may read
+    assertTrue(variableNames.contains("approved"), "shared attributes: "
+        + variableNames);
+    assertTrue(variableNames.contains("results"), "shared attributes: "
+        + variableNames);
+    assertTrue(variableNames.contains("id"), "shared attributes: "
+        + variableNames);
+
+  }
+
+  @Test
+  @DisplayName("The gateway behind a task branches on what THAT task computed (story 66)")
+  public void theGatewayBehindATaskReadsWhatTheTaskComputed() {
+
+    final var aggregateId = transactionTemplate.execute(status -> {
+      final var aggregate = new DecisionTestAggregate();
+      final var customer = new DecisionTestCustomer();
+      customer.setCustomerName("ACME");
+      customer.setVip(true);
+      aggregate.setCustomer(customer);
+      // NOT decided when the workflow starts - the first task decides
+      return decisionWorkflowService.startDecisionProcess(aggregate).getId();
+    });
+
+    assertTrue(
+        waitFor(() -> decisionRepository
+            .findById(aggregateId)
+            .map(DecisionTestAggregate::getDecisionResult)
+            .isPresent()),
+        "the workflow has to get past the gateway behind the deciding task");
     assertEquals(
-        java.util.List.of(),
-        historyService
-            .createHistoricVariableInstanceQuery()
-            .processInstanceId(historicInstance.getId())
-            .list()
-            .stream()
-            .map(variable -> variable.getName())
-            .toList(),
-        "the Camunda 7 default is NONE - the engine reads the aggregate live");
+        "decided",
+        decisionRepository.findById(aggregateId).orElseThrow().getDecisionResult(),
+        "the gateway took the rejecting branch - it did not see what the task computed");
+
+    // the value the task computed IS a process variable now, which is what the gateway
+    // read: before story 66 nothing was written when a task completed
+    final var variables = variablesOfWorkflow(aggregateId, "SyncDecisionProcess");
+    assertEquals("true", variables.get("decided"), "variables: "
+        + variables);
+
+  }
+
+  @Test
+  @DisplayName("A nested shared value travels as an object variable a condition can navigate")
+  public void nestedValuesBecomeObjectVariables() {
+
+    final var aggregateId = transactionTemplate.execute(status -> {
+      final var aggregate = new DecisionTestAggregate();
+      final var customer = new DecisionTestCustomer();
+      customer.setCustomerName("ACME");
+      customer.setVip(true);
+      aggregate.setCustomer(customer);
+      return decisionWorkflowService.startDecisionProcess(aggregate).getId();
+    });
+
+    assertTrue(
+        waitFor(() -> decisionRepository
+            .findById(aggregateId)
+            .map(DecisionTestAggregate::getTaskId)
+            .isPresent()),
+        "the workflow has to park at the task behind the gateway");
+
+    // the condition of that gateway reads '${decided and customer.vip}', so the dot
+    // notation navigated the nested value - which only works because it is an OBJECT
+    // variable the engine deserializes, not a text
+    final var processInstance = runtimeService
+        .createProcessInstanceQuery()
+        .processDefinitionKey("SyncDecisionProcess")
+        .processInstanceBusinessKey(String.valueOf(aggregateId))
+        .tenantIdIn(MODULE_ID)
+        .singleResult();
+    assertNotNull(processInstance);
+    final var customerVariable = runtimeService
+        .createVariableInstanceQuery()
+        .processInstanceIdIn(processInstance.getProcessInstanceId())
+        .variableName("customer")
+        .disableCustomObjectDeserialization()
+        .singleResult();
+    assertNotNull(customerVariable, "the nested value has to be a variable");
+    assertEquals("object", customerVariable.getTypeName(), "a nested value is an object variable");
 
   }
 

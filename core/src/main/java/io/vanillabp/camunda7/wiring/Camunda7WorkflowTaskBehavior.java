@@ -159,14 +159,58 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
         connectable.workflowModuleId(),
         connectable.bpmnProcessId(),
         new Camunda7TaskInvocationContext(connectable, execution, taskRegistry));
+    // story 66: what the handler computed has to reach the engine BEFORE it evaluates
+    // what comes next - a gateway right behind this task would otherwise decide on the
+    // values of the last ProcessService call. Written here, inside the engine's
+    // transaction, so the variables commit with the aggregate and with the token
+    writeSharedValues(execution);
     if (outcome.kind() == WorkflowTaskOutcome.Kind.BPMN_ERROR) {
       // error-boundary routing; the aggregate changes were saved and commit
-      // with the engine's transaction (the V1 contract)
+      // with the engine's transaction (the V1 contract). The values are written above,
+      // because the flow behind the error boundary may branch on them as well
       throw outcome.errorName() != null
           ? new BpmnError(scopedErrorCode(outcome.errorCode()), outcome.errorName())
           : new BpmnError(scopedErrorCode(outcome.errorCode()));
     }
     return outcome;
+
+  }
+
+  /**
+   * Writes the values the aggregate shares with the BPMS onto the execution (story 66).
+   * <p>
+   * The values are read in the CALLER's transaction, which is the engine's: the handler
+   * just changed the aggregate there, and reading in a new transaction would either see
+   * the state before the handler or wait for the row this transaction holds. The read
+   * never throws, and where nothing is shared nothing is written.
+   *
+   * @param execution The execution of the task just processed
+   */
+  private void writeSharedValues(
+      final DelegateExecution execution) {
+
+    final var businessKey = execution.getProcessBusinessKey();
+    if (businessKey == null) {
+      // no aggregate identity at hand (a process started outside VanillaBP): there is
+      // nothing to read the values from
+      return;
+    }
+    final var sharedValues = workflowTaskInvoker.syncedWorkflowAggregateValuesInCurrentTransaction(
+        connectable.workflowModuleId(),
+        connectable.bpmnProcessId(),
+        businessKey,
+        io.vanillabp.camunda7.processservice.Camunda7ProcessService.SYNC_MODE);
+    if (sharedValues.isEmpty()) {
+      return;
+    }
+    execution
+        .setVariables(
+            io.vanillabp.camunda7.sync.Camunda7Variables
+                .of(
+                    sharedValues,
+                    taskRegistry.serializationFormatFor(
+                        connectable.workflowModuleId(),
+                        connectable.bpmnProcessId())));
 
   }
 

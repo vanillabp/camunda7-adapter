@@ -95,7 +95,9 @@ public class Camunda7AggregateChangedIT {
     transactionTemplate
         .executeWithoutResult(status -> multiInstanceWorkflowService.escalateAt(aggregateId, taskId));
 
-    final var marker = Camunda7ProcessService.AGGREGATE_CHANGED_MARKER;
+    // story 66: the pushed VALUES are the change now - the technical marker is written
+    // only for an aggregate which shares nothing at all
+    final var marker = "escalate";
     // the push happens after the commit (story 63), so the scope it lands in is
     // waited for
     final var instanceId = processInstanceIdOf(aggregateId);
@@ -234,14 +236,25 @@ public class Camunda7AggregateChangedIT {
 
     // the values land in the scope the task RUNS IN - the iteration of the
     // multi-instance subprocess, recognizable by its own 'item' variable
-    final var marker = Camunda7ProcessService.AGGREGATE_CHANGED_MARKER;
+    // story 66: the pushed VALUES are the change now - the technical marker is written
+    // only for an aggregate which shares nothing at all
+    final var marker = "escalate";
     final var iterationExecutionId = executionIdOfIteration(aggregateId, pushedItem);
     AwaitPhaseTwo.until(
         () -> runtimeService.getVariablesLocal(iterationExecutionId).containsKey(marker),
         "the push has to land in the scope of the iteration the task runs in");
-    assertFalse(
-        runtimeService.getVariablesLocal(processInstanceIdOf(aggregateId)).containsKey(marker),
-        "and not at the workflow's global scope, which the sibling iterations read");
+    // the pushed value is TRUE in the iteration the task runs in
+    assertEquals(
+        Boolean.TRUE,
+        runtimeService.getVariablesLocal(iterationExecutionId).get(marker),
+        "the iteration the task runs in has to carry the pushed value");
+    // the workflow's global scope keeps what the START wrote (story 66 writes the shared
+    // values there when the workflow begins), so the sibling iterations read the old
+    // value - which is the point of writing at the scope the task runs in
+    assertEquals(
+        Boolean.FALSE,
+        runtimeService.getVariablesLocal(processInstanceIdOf(aggregateId)).get(marker),
+        "the workflow's global scope may not be changed by a task-scoped push");
     assertFalse(
         runtimeService
             .getVariablesLocal(executionIdOfIteration(aggregateId, siblingItem))
@@ -286,7 +299,7 @@ public class Camunda7AggregateChangedIT {
     AwaitPhaseTwo.until(
         () -> runtimeService
             .getVariablesLocal(instanceId)
-            .containsKey(Camunda7ProcessService.AGGREGATE_CHANGED_MARKER),
+            .containsKey("escalate"),
         "the global push has to land at the workflow's scope");
 
   }

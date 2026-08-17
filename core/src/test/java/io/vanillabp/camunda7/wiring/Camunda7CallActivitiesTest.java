@@ -91,6 +91,7 @@ public class Camunda7CallActivitiesTest {
 
     }
 
+    @Deprecated(forRemoval = true)
     @Override
     public boolean workflowAggregateHasProperty(
         final String workflowModuleId,
@@ -101,6 +102,7 @@ public class Camunda7CallActivitiesTest {
 
     }
 
+    @Deprecated(forRemoval = true)
     @Override
     public Object resolveWorkflowAggregateProperty(
         final String workflowModuleId,
@@ -109,6 +111,17 @@ public class Camunda7CallActivitiesTest {
         final String propertyName) {
 
       return null;
+
+    }
+
+    @Override
+    public java.util.Map<String, Object> syncedWorkflowAggregateValuesInCurrentTransaction(
+        final String workflowModuleId,
+        final String bpmnProcessId,
+        final String workflowAggregateId,
+        final io.vanillabp.integration.adapter.spi.AggregateSyncMode adapterDefault) {
+
+      return java.util.Map.of();
 
     }
 

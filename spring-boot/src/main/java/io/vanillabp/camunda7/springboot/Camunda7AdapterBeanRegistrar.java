@@ -103,6 +103,21 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 processService.setScoping(
                     supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class),
                     configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
+                // story 66: which serialization format nested shared values are stored
+                // in, resolved per workflow with a fallback to the module and the adapter
+                final var overlay = supplierContext.bean(VanillaBpCamunda7Properties.class);
+                processService.setSerializationFormats(
+                    (
+                        workflowModuleId,
+                        bpmnProcessId) -> overlay
+                            .serializationFormatFor(adapterId, workflowModuleId, bpmnProcessId));
+                engine
+                    .getTaskRegistry()
+                    .setSerializationFormats(
+                        (
+                            workflowModuleId,
+                            bpmnProcessId) -> overlay
+                                .serializationFormatFor(adapterId, workflowModuleId, bpmnProcessId));
                 return processService;
               }));
 

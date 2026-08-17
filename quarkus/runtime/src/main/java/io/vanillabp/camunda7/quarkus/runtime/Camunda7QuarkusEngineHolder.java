@@ -174,10 +174,40 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     // Provide an engine-wide default so BPMN models need not declare it individually
     // (a process may still override it via camunda:historyTimeToLive).
     configuration.setHistoryTimeToLive(properties.getHistoryTimeToLive());
+    // story 66: nested values shared by a workflow aggregate become object variables, and
+    // the format they are stored in is the application's choice - configured once at the
+    // adapter and applied to the engine here, so nobody has to touch the engine
+    // configuration for it
+    if ((properties.getSerializationFormat() != null) && !properties.getSerializationFormat().isBlank()) {
+      configuration.setDefaultSerializationFormat(properties.getSerializationFormat());
+    }
     // an own table prefix makes two adapter ids distinct engines on ONE datasource
     // (the side-by-side migration setup on a single database, story 34)
     if ((properties.getTablePrefix() != null) && !properties.getTablePrefix().isBlank()) {
       configuration.setDatabaseTablePrefix(properties.getTablePrefix());
+    }
+
+    // story 66: engine plugins of the application - the way a serialization dataformat
+    // gets into an embedded engine (camunda-xstream, SPIN). Every plugin bean is applied
+    // to every engine this adapter builds
+    final var plugins = io.quarkus.arc.Arc
+        .container()
+        .listAll(org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin.class)
+        .stream()
+        .map(io.quarkus.arc.InstanceHandle::get)
+        .toList();
+    if (!plugins.isEmpty()) {
+      configuration
+          .getProcessEnginePlugins()
+          .addAll(plugins);
+      log.info(
+          "Camunda7[{}]: applying {} engine plugin(s) of the application: {}",
+          adapterId,
+          plugins.size(),
+          plugins
+              .stream()
+              .map(plugin -> plugin.getClass().getName())
+              .toList());
     }
 
     this.processEngine = configuration.buildProcessEngine();
