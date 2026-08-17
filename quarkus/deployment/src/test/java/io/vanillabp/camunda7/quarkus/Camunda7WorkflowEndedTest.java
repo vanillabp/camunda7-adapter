@@ -38,7 +38,7 @@ public class Camunda7WorkflowEndedTest {
           .addAsResource("application.yaml")
           .addAsResource("c7-ended/processes/ended-process.bpmn", "c7-test/processes/ended-process.bpmn")
           .addAsResource("workflow-module-descriptor/workflow-module", "META-INF/workflow-module"))
-      .overrideConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-ended-test;DB_CLOSE_DELAY=-1");
+      .overrideRuntimeConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-ended-test;DB_CLOSE_DELAY=-1");
 
   @Inject
   EndedWorkflowService workflowService;

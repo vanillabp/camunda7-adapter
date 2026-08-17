@@ -3,7 +3,6 @@ package io.vanillabp.camunda7.it;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.function.Supplier;
 
@@ -97,14 +96,17 @@ public class Camunda7AggregateChangedIT {
         .executeWithoutResult(status -> multiInstanceWorkflowService.escalateAt(aggregateId, taskId));
 
     final var marker = Camunda7ProcessService.AGGREGATE_CHANGED_MARKER;
+    // the push happens after the commit (story 63), so the scope it lands in is
+    // waited for
+    final var instanceId = processInstanceIdOf(aggregateId);
+    AwaitPhaseTwo.until(
+        () -> runtimeService.getVariablesLocal(instanceId).containsKey(marker),
+        "the scope around the task is the workflow itself here");
     // the boundary event makes the engine give the activity a scope of its own, and
     // that scope is the task's context - not the scope the task RUNS in
     assertFalse(
         runtimeService.getVariablesLocal(taskId).containsKey(marker),
         "the activity's own scope may not be written at");
-    assertTrue(
-        runtimeService.getVariablesLocal(processInstanceIdOf(aggregateId)).containsKey(marker),
-        "the scope around the task is the workflow itself here");
 
   }
 
@@ -123,16 +125,24 @@ public class Camunda7AggregateChangedIT {
 
   }
 
+  /**
+   * The workflow is created by the phase-two outbox after the commit (story 63), so
+   * the lookup waits for it instead of reading a moment too early.
+   *
+   * @param aggregateId The aggregate's id (the business key)
+   * @return The process instance's id
+   */
   private String processInstanceIdOf(
       final Object aggregateId) {
 
-    final var instance = runtimeService
-        .createProcessInstanceQuery()
-        .processInstanceBusinessKey(String.valueOf(aggregateId))
-        .singleResult();
-    return instance == null
-        ? null
-        : instance.getId();
+    return AwaitPhaseTwo
+        .untilAvailable(
+            () -> runtimeService
+                .createProcessInstanceQuery()
+                .processInstanceBusinessKey(String.valueOf(aggregateId))
+                .singleResult(),
+            "the workflow of aggregate '%s' to be started".formatted(aggregateId))
+        .getId();
 
   }
 
@@ -226,8 +236,8 @@ public class Camunda7AggregateChangedIT {
     // multi-instance subprocess, recognizable by its own 'item' variable
     final var marker = Camunda7ProcessService.AGGREGATE_CHANGED_MARKER;
     final var iterationExecutionId = executionIdOfIteration(aggregateId, pushedItem);
-    assertTrue(
-        runtimeService.getVariablesLocal(iterationExecutionId).containsKey(marker),
+    AwaitPhaseTwo.until(
+        () -> runtimeService.getVariablesLocal(iterationExecutionId).containsKey(marker),
         "the push has to land in the scope of the iteration the task runs in");
     assertFalse(
         runtimeService.getVariablesLocal(processInstanceIdOf(aggregateId)).containsKey(marker),
@@ -272,9 +282,10 @@ public class Camunda7AggregateChangedIT {
 
     transactionTemplate.executeWithoutResult(status -> multiInstanceWorkflowService.pushGlobally(aggregateId));
 
-    assertTrue(
-        runtimeService
-            .getVariablesLocal(processInstanceIdOf(aggregateId))
+    final var instanceId = processInstanceIdOf(aggregateId);
+    AwaitPhaseTwo.until(
+        () -> runtimeService
+            .getVariablesLocal(instanceId)
             .containsKey(Camunda7ProcessService.AGGREGATE_CHANGED_MARKER),
         "the global push has to land at the workflow's scope");
 

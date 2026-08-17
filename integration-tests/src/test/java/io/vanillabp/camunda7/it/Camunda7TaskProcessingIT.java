@@ -40,7 +40,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * on the parsed process definition).</li>
  * </ul>
  */
-@SpringBootTest(classes = TestApplication.class)
+@SpringBootTest(classes = TestApplication.class, properties = {
+    // a database of its own: the phase-two outbox of a test class Spring keeps
+    // cached would otherwise dispatch the entries of the next one
+    "spring.datasource.url=jdbc:h2:mem:c7-task-processing-it;DB_CLOSE_DELAY=-1"
+})
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
 public class Camunda7TaskProcessingIT {
@@ -110,26 +114,44 @@ public class Camunda7TaskProcessingIT {
 
   }
 
+  /**
+   * The instance is created by the phase-two outbox AFTER the commit (story 63), so
+   * the lookup waits for it instead of reading a moment too early.
+   *
+   * @param aggregateId The aggregate's id (the business key)
+   * @return The process instance's id
+   */
   private String instanceIdOf(
       final Long aggregateId) {
 
-    final var instance = runtimeService
-        .createProcessInstanceQuery()
-        .processInstanceBusinessKey(String.valueOf(aggregateId))
-        .singleResult();
-    return instance != null
-        ? instance.getId()
-        : null;
+    return AwaitPhaseTwo
+        .untilAvailable(
+            () -> runtimeService
+                .createProcessInstanceQuery()
+                .processInstanceBusinessKey(String.valueOf(aggregateId))
+                .singleResult(),
+            "the workflow of aggregate '%s' to be started".formatted(aggregateId))
+        .getId();
 
   }
 
+  /**
+   * Asked against the HISTORY: a workflow which does not run may also be one the
+   * outbox has not started yet, and after story 63 that is a state every test passes
+   * through.
+   *
+   * @param aggregateId The aggregate's id (the business key)
+   * @return Whether the workflow ran and ended
+   */
   private boolean processEnded(
       final Long aggregateId) {
 
-    return runtimeService
-        .createProcessInstanceQuery()
+    return processEngine
+        .getHistoryService()
+        .createHistoricProcessInstanceQuery()
         .processInstanceBusinessKey(String.valueOf(aggregateId))
-        .count() == 0;
+        .finished()
+        .count() > 0;
 
   }
 
@@ -709,13 +731,16 @@ public class Camunda7TaskProcessingIT {
                 .correlationIdVariableName("TaskProcess", "PaymentReceived"),
             "payment-42"));
 
-    // a mismatching correlation id does not correlate
-    assertThrows(
-        org.camunda.bpm.engine.MismatchingMessageCorrelationException.class,
+    // a mismatching correlation id does not correlate - and since story 63 the
+    // adapter's phase one says so where the application called it, instead of
+    // letting the correlation fail behind the commit
+    final var mismatch = assertThrows(
+        IllegalStateException.class,
         () -> transactionTemplate.executeWithoutResult(status -> {
           final var aggregate = repository.findById(aggregateId).orElseThrow();
           workflowService.correlate(aggregate, "PaymentReceived", "wrong-id");
         }));
+    assertTrue(mismatch.getMessage().contains("wrong-id"), mismatch.getMessage());
     assertNotNull(instanceIdOf(aggregateId), "the instance must still wait");
 
     // the matching one does

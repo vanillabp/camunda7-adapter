@@ -27,8 +27,9 @@ import io.vanillabp.spi.process.ProcessService;
  * It proves the three properties of the C7 start:
  * <ol>
  *   <li>BPMN resources are deployed with the workflow module ID as the Camunda tenant ID,</li>
- *   <li>starting a workflow inside a transaction creates a process instance whose business
- *       key equals the aggregate ID, and</li>
+ *   <li>starting a workflow creates a process instance whose business key equals the
+ *       aggregate ID - through the adapter's own method within the transaction, through
+ *       the VanillaBP user API right after the commit (story 63), and</li>
  *   <li>rolling back the surrounding transaction removes BOTH the aggregate and the process
  *       instance (the embedded-engine guarantee).</li>
  * </ol>
@@ -36,7 +37,11 @@ import io.vanillabp.spi.process.ProcessService;
  * {@link Camunda7ProcessService#startProcessInstance(String, String, Object)} and
  * end-to-end via the VanillaBP user API {@link ProcessService#startWorkflow(Object)}.
  */
-@SpringBootTest(classes = TestApplication.class)
+@SpringBootTest(classes = TestApplication.class, properties = {
+    // a database of its own: the phase-two outbox of a test class Spring keeps
+    // cached would otherwise dispatch the entries of the next one
+    "spring.datasource.url=jdbc:h2:mem:c7-start-workflow-it;DB_CLOSE_DELAY=-1"
+})
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
 public class Camunda7StartWorkflowIT {
@@ -50,6 +55,9 @@ public class Camunda7StartWorkflowIT {
 
   @Autowired
   private RuntimeService runtimeService;
+
+  @Autowired
+  private org.camunda.bpm.engine.ProcessEngine processEngine;
 
   @SuppressWarnings("rawtypes")
   @Autowired
@@ -158,31 +166,43 @@ public class Camunda7StartWorkflowIT {
 
   /**
    * The canonical end-to-end path through the VanillaBP user API: starting a workflow via
-   * {@link ProcessService#startWorkflow(Object)} inside a transaction creates the process
-   * instance (business key = aggregate id), and rolling the transaction back removes both
-   * the aggregate and the process instance.
+   * {@link ProcessService#startWorkflow(Object)} schedules the instance, which is created
+   * right after the transaction committed (story 63), and rolling the transaction back
+   * removes the aggregate and lets no instance be created at all.
    */
   @Test
-  @DisplayName("processService.startWorkflow joins the local transaction (created on commit, gone on rollback)")
-  public void startWorkflowViaProcessServiceJoinsTransaction() {
+  @DisplayName("processService.startWorkflow creates the instance after the commit (nothing on rollback)")
+  public void startWorkflowViaProcessServiceHappensAfterTheCommit() {
 
-    // committed start creates the instance with the aggregate id as business key
     final var aggregateId = transactionTemplate.execute(status -> {
       final var aggregate = new TestAggregate();
       aggregate.setContent("via-process-service");
       final var saved = processService.startWorkflow(aggregate);
       assertEquals(
-          1,
+          0,
           runtimeService
               .createProcessInstanceQuery()
               .processInstanceBusinessKey(String.valueOf(saved.getId()))
               .tenantIdIn(MODULE_ID)
               .count(),
-          "process instance exists within the starting transaction");
+          "the process instance must not exist before the commit");
       return saved.getId();
     });
 
     assertNotNull(aggregateId);
+
+    // after the commit the outbox creates it, with the aggregate id as business key
+    // asked against the HISTORY: the instance may well have ended by then
+    AwaitPhaseTwo.until(
+        () -> processEngine
+            .getHistoryService()
+            .createHistoricProcessInstanceQuery()
+            .processInstanceBusinessKey(String.valueOf(aggregateId))
+            .tenantIdIn(MODULE_ID)
+            .count() == 1,
+        "the process instance of aggregate "
+            + aggregateId
+            + " was never created");
 
     // rolled-back start removes both the aggregate and the process instance
     final var rollbackIdHolder = new AtomicReference<Long>();
@@ -204,11 +224,12 @@ public class Camunda7StartWorkflowIT {
         "aggregate rolled back with the transaction");
     assertEquals(
         0,
-        runtimeService
-            .createProcessInstanceQuery()
+        processEngine
+            .getHistoryService()
+            .createHistoricProcessInstanceQuery()
             .processInstanceBusinessKey(String.valueOf(rolledBackId))
             .count(),
-        "process instance rolled back with the transaction");
+        "no process instance was ever created for the rolled-back start");
 
   }
 

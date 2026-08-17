@@ -49,7 +49,7 @@ public class Camunda7TaskProcessingTest {
       // own database: the module's shared H2 URL (DB_CLOSE_DELAY=-1) would leak
       // residual instances between test classes (the failing job's instance of
       // this test stays active on purpose)
-      .overrideConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-task-test;DB_CLOSE_DELAY=-1");
+      .overrideRuntimeConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-task-test;DB_CLOSE_DELAY=-1");
 
   @Inject
   QTaskWorkflowService workflowService;
@@ -127,11 +127,13 @@ public class Camunda7TaskProcessingTest {
 
     final var aggregateId = start("QTaskProcess");
 
+    // story 63: the instance is created AFTER the commit, so waiting for it to
+    // disappear would end before it ever existed - the results are the signal
     final var deadline = System.currentTimeMillis() + 15000;
-    while (countInstances(aggregateId) > 0) {
+    while (!"happy|error-raised|handled".equals(resultsOf(aggregateId))) {
       Assertions.assertTrue(
           System.currentTimeMillis() < deadline,
-          "QTaskProcess did not end in time; results so far: "
+          "QTaskProcess did not run through in time; results so far: "
               + resultsOf(aggregateId));
       Thread.sleep(100);
     }
@@ -144,7 +146,7 @@ public class Camunda7TaskProcessingTest {
   }
 
   @Test
-  @DisplayName("completeTask resumes the parked async task within the caller's JTA transaction")
+  @DisplayName("completeTask resumes the parked async task after the caller's transaction committed")
   public void completeTaskResumesProcess() throws Exception {
 
     final var aggregateId = start("QAsyncProcess");
@@ -188,6 +190,82 @@ public class Camunda7TaskProcessingTest {
       Thread.sleep(100);
     }
     Assertions.assertEquals("async-open|completing", resultsOf(aggregateId));
+
+  }
+
+  @Test
+  @DisplayName("The workflow is progressed AFTER the commit, not inside the caller's transaction (story 63)")
+  public void completeTaskProgressesAfterTheCommit() throws Exception {
+
+    final var aggregateId = start("QAsyncProcess");
+    final var taskId = awaitTaskId(aggregateId);
+
+    userTransaction.begin();
+    try {
+      final var aggregate = entityManager.find(QTaskAggregate.class, aggregateId);
+      workflowService.completeAsyncTask(aggregate, taskId);
+
+      // still inside the caller's transaction: the engine has NOT been touched -
+      // that is what makes the operation repeatable when it loses a conflict
+      Assertions.assertTrue(
+          parkedExecutionExists(taskId),
+          "the task was resumed inside the caller's transaction");
+      userTransaction.commit();
+    } catch (final Exception e) {
+      userTransaction.rollback();
+      throw e;
+    }
+
+    // after the commit the outbox dispatches it
+    final var deadline = System.currentTimeMillis() + 15000;
+    while (parkedExecutionExists(taskId)) {
+      Assertions.assertTrue(
+          System.currentTimeMillis() < deadline,
+          "the task was not resumed after the commit");
+      Thread.sleep(100);
+    }
+
+  }
+
+  /**
+   * Whether the parked execution of an asynchronous task is still there.
+   */
+  private boolean parkedExecutionExists(
+      final String taskId) {
+
+    return engineRegistry
+        .engineFor("c7")
+        .getRuntimeService()
+        .createExecutionQuery()
+        .executionId(taskId)
+        .count() > 0;
+
+  }
+
+  /**
+   * Waits until the async handler committed the task id into the aggregate.
+   */
+  private String awaitTaskId(
+      final Long aggregateId) throws Exception {
+
+    final var deadline = System.currentTimeMillis() + 15000;
+    String taskId = null;
+    while (taskId == null) {
+      Assertions.assertTrue(
+          System.currentTimeMillis() < deadline,
+          "the async handler did not commit the task id in time");
+      userTransaction.begin();
+      try {
+        final var aggregate = entityManager.find(QTaskAggregate.class, aggregateId);
+        taskId = aggregate != null
+            ? aggregate.getTaskId()
+            : null;
+      } finally {
+        userTransaction.rollback();
+      }
+      Thread.sleep(100);
+    }
+    return taskId;
 
   }
 

@@ -98,9 +98,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 final var engine = engineHolder(supplierContext, adapterId);
                 final var processService = new Camunda7ProcessService<>(
                     adapterId, engine.getRuntimeService(), engine.getTaskService(), engine
-                        .getRepositoryService(), engine.getHistoryService(), engine
-                            .usesSeparateDataSource(), supplierContext
-                                .bean(io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class));
+                        .getRepositoryService(), engine.getHistoryService(), supplierContext
+                            .bean(io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class));
                 processService.setScoping(
                     supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class),
                     configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));

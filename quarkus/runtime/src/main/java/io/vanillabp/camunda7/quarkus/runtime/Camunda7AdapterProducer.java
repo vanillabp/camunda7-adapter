@@ -46,7 +46,7 @@ public class Camunda7AdapterProducer {
           final var engine = engineRegistry.engineFor(adapterId);
           final var processService = new Camunda7ProcessService<>(
               adapterId, engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
-                  .getHistoryService(), engine.usesSeparateDataSource(), aggregateSync);
+                  .getHistoryService(), aggregateSync);
           processService.setScoping(scoping, configuredTenantIdOf(overlay, adapterId));
           return processService;
         })

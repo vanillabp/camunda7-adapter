@@ -43,7 +43,7 @@ public class Camunda7CallActivityTest {
           .addAsResource("c7-callactivity/processes/calling.bpmn", "c7-test/processes/calling.bpmn")
           .addAsResource("c7-callactivity/processes/called.bpmn", "c7-test/processes/called.bpmn")
           .addAsResource("workflow-module-descriptor/workflow-module", "META-INF/workflow-module"))
-      .overrideConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-callactivity-test;DB_CLOSE_DELAY=-1");
+      .overrideRuntimeConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-callactivity-test;DB_CLOSE_DELAY=-1");
 
   @Inject
   CallActivityWorkflowService workflowService;

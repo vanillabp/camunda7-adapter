@@ -151,9 +151,10 @@ public class Camunda7AdapterBootTest {
                   .toMap(io.vanillabp.integration.adapter.spi.MigratableProcessService::getAdapterId,
                       service -> service));
           Assertions.assertEquals(java.util.Set.of("c7", "c7-two"), processServices.keySet());
-          // shared datasource joins the caller's transaction (no two-phase commit),
-          // an own datasource cannot - such ids use the two-phase pattern
-          Assertions.assertFalse(processServices.get("c7").needsTwoPhaseCommitForStartingWorkflows());
+          // story 63: every Camunda 7 adapter id progresses the workflow after the
+          // commit, whether it shares the application's datasource or not - an
+          // operation which loses a concurrency conflict is repeatable only that way
+          Assertions.assertTrue(processServices.get("c7").needsTwoPhaseCommitForStartingWorkflows());
           Assertions.assertTrue(processServices.get("c7-two").needsTwoPhaseCommitForStartingWorkflows());
 
         });

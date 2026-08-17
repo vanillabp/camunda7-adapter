@@ -5,6 +5,9 @@ spring:
     hibernate:
       ddl-auto: create
 vanillabp:
+  outbox:
+    poll-interval: PT0.5S
+    attempt-frequency: PT1S
   adapters:
     c7:
       type: camunda7
