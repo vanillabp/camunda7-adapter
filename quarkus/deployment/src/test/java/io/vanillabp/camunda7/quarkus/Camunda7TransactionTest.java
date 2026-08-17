@@ -44,7 +44,12 @@ public class Camunda7TransactionTest {
           .addClass(TestWorkflowService.class)
           .addAsResource("application.yaml")
           .addAsResource("c7-test/processes/test-process.bpmn", "c7-test/processes/test-process.bpmn")
-          .addAsResource("workflow-module-descriptor/workflow-module", "META-INF/workflow-module"));
+          .addAsResource("workflow-module-descriptor/workflow-module", "META-INF/workflow-module"))
+      // an own database: the module's shared H2 URL (DB_CLOSE_DELAY=-1) carries the
+      // outbox table as well, so aggregate ids of other test classes would collide
+      // with these - and an outbox entry of the same idempotency key is deduplicated
+      // away, which since story 63 means the workflow is never started
+      .overrideRuntimeConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-transaction-test;DB_CLOSE_DELAY=-1");
 
   @Inject
   TestWorkflowService workflowService;
@@ -73,42 +78,46 @@ public class Camunda7TransactionTest {
   }
 
   @Test
-  public void startJoinsTheCallersJtaTransaction() throws Exception {
+  public void startHappensAfterTheCallersTransactionCommitted() throws Exception {
 
-    // pause job processing so committed instances stay observable (the trivial
+    // pause job processing so started instances stay observable (the trivial
     // ${true} service task would complete them asynchronously)
     final var engine = engineRegistry.engineFor("c7");
     engine.stopWorkflowProcessing(MODULE_ID);
     try {
 
-      // committed start: the instance is visible WITHIN the transaction and
-      // persists after the commit
+      // story 63: the instance is NOT created within the caller's transaction any
+      // more - it is created right after the commit, by the phase-two outbox, so an
+      // operation which loses a concurrency conflict can be repeated
       userTransaction.begin();
       final TestAggregate committedAggregate;
       try {
         committedAggregate = workflowService.startWorkflow("commit-test");
         Assertions.assertNotNull(committedAggregate.getId());
         Assertions.assertEquals(
-            1,
+            0,
             countInstances(String.valueOf(committedAggregate.getId())),
-            "the process instance is visible within the starting transaction");
+            "the process instance must not exist before the commit");
       } catch (final Exception e) {
         userTransaction.rollback();
         throw e;
       }
       userTransaction.commit();
-      Assertions.assertEquals(1, countInstances(String.valueOf(committedAggregate.getId())));
 
-      // rolled-back start: aggregate AND process instance are gone - the
-      // embedded-engine phase-one guarantee
+      final var deadline = System.currentTimeMillis() + 15000;
+      while (countInstances(String.valueOf(committedAggregate.getId())) == 0) {
+        Assertions.assertTrue(
+            System.currentTimeMillis() < deadline,
+            "the process instance was not started after the commit");
+        Thread.sleep(100);
+      }
+
+      // rolled-back start: aggregate AND outbox entry are gone, so no instance is
+      // ever created - the guarantee the two-phase pattern exists for
       userTransaction.begin();
       final var rolledBackAggregate = workflowService.startWorkflow("rollback-test");
       final var rolledBackId = rolledBackAggregate.getId();
       Assertions.assertNotNull(rolledBackId);
-      Assertions.assertEquals(
-          1,
-          countInstances(String.valueOf(rolledBackId)),
-          "the process instance is visible within the transaction before rolling back");
       userTransaction.rollback();
 
       // reading the aggregate needs an active transaction/persistence context
@@ -120,10 +129,12 @@ public class Camunda7TransactionTest {
       } finally {
         userTransaction.rollback();
       }
+      // long enough for the outbox poller to have run
+      Thread.sleep(1500);
       Assertions.assertEquals(
           0,
           countInstances(String.valueOf(rolledBackId)),
-          "the process instance was rolled back with the transaction");
+          "no process instance was started for a rolled-back transaction");
 
     } finally {
       engine.startWorkflowProcessing(MODULE_ID);

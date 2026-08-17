@@ -71,15 +71,18 @@ public class Camunda7SendSignalIT {
         .execute(status -> workflowService.startWorkflow().getId());
     assertNotNull(aggregateId);
 
+    // the instance itself is created by the phase-two outbox after the commit
+    final var instance = AwaitPhaseTwo.untilAvailable(
+        () -> runtimeService
+            .createProcessInstanceQuery()
+            .processInstanceBusinessKey(String.valueOf(aggregateId))
+            .singleResult(),
+        "the process instance of aggregate '%s' to be created".formatted(aggregateId));
+
     awaitUntil(
         () -> runtimeService
             .createEventSubscriptionQuery()
-            .processInstanceId(
-                runtimeService
-                    .createProcessInstanceQuery()
-                    .processInstanceBusinessKey(String.valueOf(aggregateId))
-                    .singleResult()
-                    .getId())
+            .processInstanceId(instance.getId())
             .eventType("signal")
             .count() > 0,
         "the workflow to wait at the signal catch event");
@@ -124,8 +127,8 @@ public class Camunda7SendSignalIT {
         }));
     assertEquals("test rollback", exception.getMessage());
 
-    // the engine shares the transaction, so the broadcast is gone with it: the
-    // workflow still waits and its task never ran
+    // the broadcast is scheduled in the outbox, which rolls back with the caller's
+    // transaction: the workflow still waits and its task never ran
     Thread.sleep(1500);
     assertNull(
         repository

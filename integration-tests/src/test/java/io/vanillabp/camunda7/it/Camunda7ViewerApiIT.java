@@ -30,7 +30,11 @@ import io.vanillabp.spi.process.WorkflowNotFoundException;
  * the deployed BPMN XML and the instance timeline - for a RUNNING and for an
  * ENDED workflow.
  */
-@SpringBootTest(classes = TestApplication.class)
+@SpringBootTest(classes = TestApplication.class, properties = {
+    // a database of its own: the phase-two outbox of a test class Spring keeps
+    // cached would otherwise dispatch the entries of the next one
+    "spring.datasource.url=jdbc:h2:mem:c7-viewer-api-it;DB_CLOSE_DELAY=-1"
+})
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
 public class Camunda7ViewerApiIT {
@@ -49,11 +53,22 @@ public class Camunda7ViewerApiIT {
 
   private ViewerTestAggregate startViewedWorkflow() {
 
-    return transactionTemplate.execute(status -> {
-      final var aggregate = new ViewerTestAggregate();
-      aggregate.setContent("viewer-test");
-      return viewerProcessService.startWorkflow(viewerAggregateRepository.save(aggregate));
+    final var aggregate = transactionTemplate.execute(status -> {
+      final var newAggregate = new ViewerTestAggregate();
+      newAggregate.setContent("viewer-test");
+      return viewerProcessService.startWorkflow(viewerAggregateRepository.save(newAggregate));
     });
+
+    // the instance is created by the phase-two outbox right after the commit, and
+    // there is nothing to view before it exists
+    AwaitPhaseTwo.until(
+        () -> runtimeService
+            .createProcessInstanceQuery()
+            .processInstanceBusinessKey(String.valueOf(aggregate.getId()))
+            .processDefinitionKey("ViewerParentProcess")
+            .count() == 1,
+        "the workflow of aggregate '%s' to be started".formatted(aggregate.getId()));
+    return aggregate;
 
   }
 

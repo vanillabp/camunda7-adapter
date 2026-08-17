@@ -1,6 +1,7 @@
 package io.vanillabp.camunda7.quarkus;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -14,6 +15,7 @@ import io.quarkus.test.QuarkusExtensionTest;
 import io.vanillabp.camunda7.quarkus.sample.TestAggregate;
 import io.vanillabp.camunda7.quarkus.sample.TestWorkflowService;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
+import io.vanillabp.spi.process.ProcessDefinition;
 import io.vanillabp.spi.process.ProcessDefinitionNotFoundException;
 import io.vanillabp.spi.process.ProcessService;
 import io.vanillabp.spi.process.WorkflowElementType;
@@ -43,7 +45,7 @@ public class Camunda7ViewerApiTest {
           .addAsResource("workflow-module-descriptor/workflow-module", "META-INF/workflow-module"))
       // own database: the module's shared H2 URL would leak instances between test
       // classes
-      .overrideConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-viewer-test;DB_CLOSE_DELAY=-1");
+      .overrideRuntimeConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-viewer-test;DB_CLOSE_DELAY=-1");
 
   @Inject
   TestWorkflowService workflowService;
@@ -68,13 +70,32 @@ public class Camunda7ViewerApiTest {
 
   }
 
+  private List<ProcessDefinition> awaitProcessDefinitions(
+      final TestAggregate aggregate) throws Exception {
+
+    final var deadline = System.currentTimeMillis() + 20000;
+    while (true) {
+      try {
+        return processService.getProcessDefinitions(aggregate, null);
+      } catch (final WorkflowNotFoundException e) {
+        if (System.currentTimeMillis() >= deadline) {
+          throw e;
+        }
+        Thread.sleep(100);
+      }
+    }
+
+  }
+
   @Test
   @DisplayName("Definitions, BPMN XML and history are served by the embedded engine")
   public void viewerApiIsServedByTheEmbeddedEngine() throws Exception {
 
     final var aggregate = startWorkflow();
 
-    final var definitions = processService.getProcessDefinitions(aggregate, null);
+    // since story 63 the instance is created by the phase-two outbox right AFTER the
+    // commit, so the viewing API knows the workflow a moment later than the call
+    final var definitions = awaitProcessDefinitions(aggregate);
 
     Assertions.assertEquals(1, definitions.size(), () -> "expected the workflow's definition but got: "
         + definitions);
@@ -124,8 +145,7 @@ public class Camunda7ViewerApiTest {
   public void unknownSubjectsRaiseGuidingErrors() {
 
     // an ID no workflow ever used - deliberately NOT persisted: the viewing API
-    // only reads the aggregate's ID, and a generated ID could collide with the
-    // business key of a workflow another test class left in the shared database
+    // only reads the aggregate's ID
     final var neverStarted = new TestAggregate();
     neverStarted.setId(987654321L);
     neverStarted.setContent("never-started");

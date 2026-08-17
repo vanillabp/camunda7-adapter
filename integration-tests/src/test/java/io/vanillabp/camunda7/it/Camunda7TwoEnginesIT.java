@@ -134,20 +134,21 @@ public class Camunda7TwoEnginesIT {
     assertNotNull(aggregateId);
 
     final var businessKey = String.valueOf(aggregateId);
-    assertEquals(
-        1,
-        sharedDataSourceEngine
-            .getRuntimeService()
-            .createProcessInstanceQuery()
+    // the instance is created by the phase-two outbox right after the commit, and it
+    // may have ended by the time the test looks - the history answers both
+    AwaitPhaseTwo.until(
+        () -> sharedDataSourceEngine
+            .getHistoryService()
+            .createHistoricProcessInstanceQuery()
             .processInstanceBusinessKey(businessKey)
             .tenantIdIn(MODULE_ID)
-            .count(),
-        "the instance lives in the first prioritized adapter's engine");
+            .count() == 1,
+        "the instance to appear in the first prioritized adapter's engine");
     assertEquals(
         0,
         separateDataSourceEngine
-            .getRuntimeService()
-            .createProcessInstanceQuery()
+            .getHistoryService()
+            .createHistoricProcessInstanceQuery()
             .processInstanceBusinessKey(businessKey)
             .tenantIdIn(MODULE_ID)
             .count(),

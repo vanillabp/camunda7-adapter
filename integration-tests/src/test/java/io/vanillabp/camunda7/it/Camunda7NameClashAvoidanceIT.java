@@ -128,12 +128,14 @@ public class Camunda7NameClashAvoidanceIT {
       return syncWorkflowService.startSyncProcess(aggregate).getId();
     });
 
-    final var instance = runtimeService
-        .createProcessInstanceQuery()
-        .processInstanceBusinessKey(String.valueOf(aggregateId))
-        .withoutTenantId()
-        .singleResult();
-    assertNotNull(instance, "the workflow has to be started without a tenant");
+    // the instance is created by the phase-two outbox right after the commit
+    final var instance = AwaitPhaseTwo.untilAvailable(
+        () -> runtimeService
+            .createProcessInstanceQuery()
+            .processInstanceBusinessKey(String.valueOf(aggregateId))
+            .withoutTenantId()
+            .singleResult(),
+        "the workflow of aggregate '%s' to be started without a tenant".formatted(aggregateId));
     assertEquals(
         PREFIX
             + "SyncProcess",
