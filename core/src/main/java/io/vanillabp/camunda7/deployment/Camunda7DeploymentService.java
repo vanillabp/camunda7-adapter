@@ -491,6 +491,12 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         .getResourcesByFilename()
         .containsKey(filename);
     if (!modelAlreadyScoped) {
+      // story 61: a call activity of this engine does not pass the business key -
+      // which holds the workflow aggregate's ID - unless the model says so. Injected
+      // BEFORE scoping, which rewrites the called elements: here the process IDs are
+      // still the ones the application knows
+      io.vanillabp.camunda7.wiring.Camunda7CallActivities
+          .propagateBusinessKey(model, workflowModuleId, workflowTaskInvoker);
       io.vanillabp.camunda7.wiring.Camunda7Scoping.apply(model, workflowModuleId, adapterId, scoping);
     }
     context.addResource(filename, model);
