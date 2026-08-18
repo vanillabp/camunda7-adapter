@@ -12,17 +12,40 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
 
 /**
- * Resolves top-level EL names of BPMN expressions against VanillaBP (Version-1
- * approach, ported): a name matching a wired task (by the current BPMN element or
- * by task definition) yields the handler - <code>camunda:expression</code> tasks
- * run the handler during evaluation, <code>camunda:delegateExpression</code> tasks
- * receive the {@link Camunda7WorkflowTaskBehavior} (so <code>&#64;TaskId</code>
- * tasks can stay open). Any other name is resolved as an attribute of the workflow
- * aggregate identified by the execution's business key (getter, boolean getter or
- * field - e.g. gateway conditions like <code>${riskAcceptable}</code>); unresolved
- * names fall through to the engine's remaining EL resolvers (e.g. platform beans).
+ * Resolves top-level EL names of BPMN expressions against the WIRED TASKS of VanillaBP: a
+ * name matching a task (by the current BPMN element or by task definition) yields the
+ * handler - <code>camunda:expression</code> tasks run the handler during evaluation,
+ * <code>camunda:delegateExpression</code> tasks receive the
+ * {@link Camunda7WorkflowTaskBehavior} (so <code>&#64;TaskId</code> tasks can stay open).
+ * Every other name falls through to the engine's remaining resolvers, which is where the
+ * process variables live.
+ * <p>
+ * <b>Attributes of the workflow aggregate are a MIGRATION FALLBACK here</b> (story 66,
+ * removed in 2.1). Until this story the resolver read the aggregate live, which made a
+ * model reading <code>${riskAcceptable}</code> work on Camunda 7 and fail on every remote
+ * BPMS - the opposite of what {@code @SyncWithBPMS} is for. The values are pushed as
+ * process variables at every sync point now, so the engine resolves them itself.
+ * <p>
+ * The fallback exists because an application upgrading to this version has workflows
+ * RUNNING which carry no such variables yet, and because version 1 resolved attributes
+ * without a getter as well (the sync model reads getters only). So the order is reversed
+ * compared to before: a VARIABLE of that name wins, and only where the engine has none
+ * does the resolver still read the aggregate - saying so once per name, with the way out.
+ * The startup check of the deployment service reports the same names while the application
+ * boots.
  */
 public class Camunda7TaskELResolver extends ELResolver {
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
+      .getLogger(Camunda7TaskELResolver.class);
+
+  /**
+   * Which live reads were reported already (workflow module, process and name) - the
+   * migration fallback of story 66 names a configuration gap, and one line per evaluation
+   * would bury it.
+   */
+  private final java.util.Set<String> liveReadsReported = java.util.concurrent.ConcurrentHashMap
+      .newKeySet();
 
   private final Camunda7TaskRegistry taskRegistry;
 
@@ -96,10 +119,11 @@ public class Camunda7TaskELResolver extends ELResolver {
         // shadow the attribute
         .filter(candidate -> candidate.type() != Camunda7TaskConnectable.Type.USER_TASK)
         // a connectable matched by ELEMENT catches EVERY name evaluated while an
-        // execution sits at its activity, including the condition of a conditional
-        // event reading the workflow aggregate. Where the aggregate has an attribute
-        // of that name, the attribute is what the model means - the task is served by
-        // its own name, or by the element while no attribute is in the way
+        // execution sits at its activity, including the condition of a conditional event
+        // or a gateway. Only a name which IS a task definition of this process may run a
+        // handler; anything else evaluated at that element is a variable and belongs to
+        // the engine's resolvers (story 66 - before it, the aggregate's attributes were
+        // the tie-breaker here)
         .filter(
             candidate -> taskRegistry
                 .isTaskDefinitionName(workflowModuleId, scopedBpmnProcessId, propertyName) || !workflowTaskInvoker
@@ -126,8 +150,12 @@ public class Camunda7TaskELResolver extends ELResolver {
       return null;
     }
 
-    // no wired task: resolve as workflow-aggregate attribute (business key =
-    // serialized aggregate ID); unresolved names fall through
+    // no wired task: the values shared by the aggregate are process variables since
+    // story 66, so the engine's own resolvers answer the name - unless this workflow still
+    // runs without them, which is what the migration fallback below is for
+    if (execution.hasVariable(propertyName)) {
+      return null;
+    }
     final var businessKey = execution.getBusinessKey();
     if (businessKey == null) {
       return null;
@@ -137,10 +165,47 @@ public class Camunda7TaskELResolver extends ELResolver {
         bpmnProcessId,
         businessKey,
         propertyName);
-    if (value != null) {
-      context.setPropertyResolved(true);
+    if (value == null) {
+      return null;
     }
+    reportLiveRead(workflowModuleId, bpmnProcessId, propertyName);
+    context.setPropertyResolved(true);
     return value;
+
+  }
+
+  /**
+   * Says ONCE per workflow module, process and name that an expression was answered by
+   * reading the aggregate instead of a process variable - the migration fallback of story
+   * 66, which version 2.1 removes.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID
+   * @param propertyName The attribute read
+   */
+  private void reportLiveRead(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String propertyName) {
+
+    if (!liveReadsReported.add("%s|%s|%s".formatted(workflowModuleId, bpmnProcessId, propertyName))) {
+      return;
+    }
+    log.warn(
+        """
+            Camunda7[{}]: the expression '{}' of BPMN process '{}' (workflow module '{}') was \
+            answered by reading the workflow aggregate directly, because the workflow carries no \
+            process variable of that name. That is the MIGRATION FALLBACK of VanillaBP 2.0, and \
+            version 2.1 REMOVES it - a workflow started with this version writes the variable at \
+            every sync point. To become independent of it: make the attribute a readable getter \
+            (the values shared with a BPMS are read from getters, never from fields) and make sure \
+            it is shared (@SyncWithBPMS on the getter, or an aggregate class which shares \
+            everything - the default). Workflows which were already running when you upgraded keep \
+            working through this fallback until they end.""",
+        adapterId,
+        propertyName,
+        bpmnProcessId,
+        workflowModuleId);
 
   }
 

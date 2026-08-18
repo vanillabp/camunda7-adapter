@@ -281,10 +281,46 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     // Provide an engine-wide default so BPMN models need not declare it individually
     // (a process may still override it via camunda:historyTimeToLive).
     configuration.setHistoryTimeToLive(properties.getHistoryTimeToLive());
+    // story 66: nested values shared by a workflow aggregate become object variables, and
+    // the format they are stored in is the application's choice - configured once at the
+    // adapter and applied to the engine here, so nobody has to touch the engine
+    // configuration for it. A workflow or a workflow module may override the format for
+    // the variables VanillaBP writes itself
+    if ((properties.getSerializationFormat() != null) && !properties.getSerializationFormat().isBlank()) {
+      configuration.setDefaultSerializationFormat(properties.getSerializationFormat());
+    }
     // an own table prefix makes two adapter ids distinct engines on ONE datasource
     // (the side-by-side migration setup on a single database, story 34)
     if ((properties.getTablePrefix() != null) && !properties.getTablePrefix().isBlank()) {
       configuration.setDatabaseTablePrefix(properties.getTablePrefix());
+    }
+
+    // story 66: the engine plugins - the way a serialization dataformat (camunda-xstream,
+    // SPIN) reaches an embedded engine. Two ways in: configured per adapter id
+    // ('vanillabp.adapters.<id>.engine-plugins', properties applied by Camunda itself), or
+    // contributed as a bean, which suits a plugin configuring itself from the
+    // application's properties and applies to every engine this adapter builds
+    final var plugins = new java.util.LinkedList<org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin>(
+        io.vanillabp.camunda7.engine.Camunda7EnginePlugins
+            .of(adapterId, properties.getEnginePlugins()));
+    plugins
+        .addAll(
+            applicationContext
+                .getBeanProvider(org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin.class)
+                .orderedStream()
+                .toList());
+    if (!plugins.isEmpty()) {
+      configuration
+          .getProcessEnginePlugins()
+          .addAll(plugins);
+      log.info(
+          "Camunda7[{}]: applying {} engine plugin(s) of the application: {}",
+          adapterId,
+          plugins.size(),
+          plugins
+              .stream()
+              .map(plugin -> plugin.getClass().getName())
+              .toList());
     }
 
     this.processEngine = configuration.buildProcessEngine();

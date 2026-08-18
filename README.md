@@ -291,15 +291,39 @@ workflow-aggregate attributes in BPMN expressions.
 
 ## Sharing the workflow aggregate
 
-The engine is embedded, so BPMN expressions are evaluated against the workflow aggregate
-ITSELF: the adapter's EL resolver reads it live, and a gateway may use any attribute. The
-default of this adapter is therefore that **nothing is shared**, and what an application
-does share with `@SyncWithBPMS` is written as Camunda process variables for operator
-context in Cockpit only. VanillaBP never reads those variables back.
+Since story 66 this adapter shares like every other BPMS: the values of the workflow
+aggregate are written as Camunda process variables, and the engine evaluates its
+expressions against them. Being embedded is no reason to deviate - a model reading
+something else works here and breaks on every remote BPMS, which is what `@SyncWithBPMS`
+exists to prevent. The adapter's default is therefore `AggregateSyncMode.FULL`, and an
+application which minimizes annotates. VanillaBP never reads the variables back; the
+aggregate stays the source of truth.
 
-They are written when the workflow is started and refreshed when an asynchronous task is
-completed or canceled, deliberately not after every `@WorkflowTask` method: an expression
-never depends on them, so refreshing on the hot path would cost without buying anything.
+They are written at every point the adapter talks to the engine on the application's
+behalf: starting a workflow (also by message), completing a `@WorkflowTask` method
+(including the BPMN-error path), completing or cancelling an asynchronous task, completing
+or cancelling a user task, correlating a message, and `aggregateChanged`. The task
+completion is the one story 66 was written for: a gateway right behind a service task
+decides on what that task just computed, so the values are written INSIDE the engine's
+transaction, right after the handler returned and before the activity is left. A broadcast
+signal writes nothing, since it reaches workflows of other aggregates.
+
+A scalar becomes a scalar variable, a nested value an object variable in the format the
+application configures (`vanillabp.adapters.<id>.serialization-format`, overridable per
+workflow module and per workflow) - which is what keeps `${order.customer.name}` working,
+because the engine deserializes before EL navigates. Without a format the engine falls back to Java serialization,
+which the adapter warns about once: a blob in Cockpit, and the engine's database holding
+serialized instances of the application's classes.
+
+A format needs a dataformat plugin (camunda-xstream, SPIN), and a plugin reaches an
+embedded engine this adapter builds under `vanillabp.adapters.<id>.engine-plugins`: a named
+section per plugin carrying `plugin-class` and its `properties`, which Camunda's
+`PropertyHelper` applies - the code which reads the `<property>` elements of a
+`bpm-platform.xml`, so the plugin's types are converted as documented. That is the one place
+which reads the same on both platforms, and it is per adapter id, which a side-by-side
+migration needs. A plugin needing more than a constructor without arguments is contributed
+as a `ProcessEnginePlugin` bean instead; those apply to every engine this adapter builds.
+
 The one place variables ARE read is `@TaskParam`, which takes the value from the task's
 input mapping, a hand-over the model asks for on purpose.
 
@@ -320,10 +344,17 @@ application shares nothing at all, a push would carry no values and thus be no c
 the adapter writes the technical variable `vanillabpAggregateChanged` holding the time of
 the push.
 
-Resolving an attribute in an expression is the EL resolver's job, and it answers only for
-names the aggregate really carries (`workflowAggregateHasProperty`). Before that check
-existed, every name evaluated at a wired task resolved to the task behavior instead of the
-aggregate's attribute.
+The EL resolver serves the WIRED TASKS. It still answers attribute names as well, but only
+as the **migration fallback** of story 66 and only where the engine has no variable of that
+name: workflows started with an older version carry none, and version 1 also resolved
+attributes without a getter or through an `isX()` returning a non-boolean. Each such read
+is logged once with the way out, and version 2.1 removes the fallback together with the SPI
+methods behind it (`workflowAggregateHasProperty`, `resolveWorkflowAggregateProperty`).
+
+While the application starts, `wireBpmn` reports every expression reading an attribute the
+aggregate does not share - naming element, expression, attribute and fix. It is a WARN and
+never a failed deployment: the check reads expressions, and one it misreads must not keep an
+application from starting.
 
 ## Signals
 

@@ -48,6 +48,15 @@ public class Camunda7AdapterProducer {
               adapterId, engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
                   .getHistoryService(), aggregateSync);
           processService.setScoping(scoping, configuredTenantIdOf(overlay, adapterId));
+          // story 66: which serialization format nested shared values are stored in,
+          // resolved per workflow with a fallback to the module and the adapter
+          final io.vanillabp.camunda7.sync.Camunda7SerializationFormats formats = (
+              workflowModuleId,
+              bpmnProcessId) -> serializationFormatOf(overlay, adapterId, workflowModuleId, bpmnProcessId);
+          processService.setSerializationFormats(formats);
+          engine
+              .getTaskRegistry()
+              .setSerializationFormats(formats);
           return processService;
         })
         .toList();
@@ -138,6 +147,70 @@ public class Camunda7AdapterProducer {
    * The tenant name configured for an adapter id or <code>null</code> - the workflow
    * module id names the tenant then (story 35).
    */
+  /**
+   * The serialization format configured for one workflow, most specific first: the
+   * workflow, its workflow module, the adapter (story 66).
+   *
+   * @param overlay The adapter's configuration overlay
+   * @param adapterId The adapter id
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID
+   * @return The format or <code>null</code> where none is configured
+   */
+  private static String serializationFormatOf(
+      final VanillaBpCamunda7Properties overlay,
+      final String adapterId,
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    final var module = workflowModuleId != null
+        ? overlay
+            .workflowModules()
+            .get(workflowModuleId)
+        : null;
+    final var workflow = (module != null) && (bpmnProcessId != null)
+        ? module
+            .workflows()
+            .get(bpmnProcessId)
+        : null;
+    return io.vanillabp.camunda7.sync.Camunda7SerializationFormats
+        .firstConfigured(
+            scopedFormat(workflow != null
+                ? workflow.adapters()
+                : null, adapterId),
+            scopedFormat(module != null
+                ? module.adapters()
+                : null, adapterId),
+            overlay
+                .adapters()
+                .containsKey(adapterId)
+                    ? overlay
+                        .adapters()
+                        .get(adapterId)
+                        .serializationFormat()
+                        .orElse(null)
+                    : null);
+
+  }
+
+  /**
+   * The format of one scope's adapter section, or <code>null</code>.
+   */
+  private static String scopedFormat(
+      final java.util.Map<String, VanillaBpCamunda7Properties.Camunda7ScopedKeys> adapters,
+      final String adapterId) {
+
+    final var scoped = adapters != null
+        ? adapters.get(adapterId)
+        : null;
+    return scoped != null
+        ? scoped
+            .serializationFormat()
+            .orElse(null)
+        : null;
+
+  }
+
   /**
    * The acknowledgement that identifiers are unique across workflow modules
    * (<code>accept-unscoped-identifiers</code>), <code>false</code> if unset.

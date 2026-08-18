@@ -50,6 +50,29 @@ public class Camunda7EngineProperties {
   private String tablePrefix;
 
   /**
+   * The serialization format nested values shared by a workflow aggregate are stored in
+   * (story 66), e.g. {@code application/xstream} (camunda-xstream) or
+   * {@code application/json} (SPIN). It is applied twice: to the engine's
+   * {@code defaultSerializationFormat}, so an application configures the format once, and
+   * per written variable, so a workflow module or a single workflow may override it
+   * ({@code vanillabp.workflow-modules.<module>.adapters.<id>.serialization-format},
+   * {@code vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.serialization-format}).
+   * <p>
+   * The matching dataformat has to be on the classpath - that dependency and its own
+   * settings belong to the application, VanillaBP only names the format.
+   */
+  private String serializationFormat;
+
+  /**
+   * The Camunda engine plugins of this adapter id, each a named section naming a class and
+   * carrying its own properties - which Camunda itself applies (see
+   * {@link Camunda7EnginePlugins}). This is how a serialization dataformat
+   * (camunda-xstream, SPIN) reaches an engine VanillaBP builds, and it is per adapter id,
+   * so two embedded engines can carry different plugins.
+   */
+  private java.util.Map<String, Camunda7EnginePluginProperties> enginePlugins = java.util.Map.of();
+
+  /**
    * The Camunda tenant a workflow module is deployed to under the name-clash
    * avoidance mode {@code by-adapter} (story 35). Unset (the default) means the
    * workflow module ID is the tenant - VanillaBP 1's behavior.
@@ -100,6 +123,26 @@ public class Camunda7EngineProperties {
   public void setTenantId(
       final String tenantId) {
     this.tenantId = tenantId;
+  }
+
+  public java.util.Map<String, Camunda7EnginePluginProperties> getEnginePlugins() {
+    return enginePlugins;
+  }
+
+  public void setEnginePlugins(
+      final java.util.Map<String, Camunda7EnginePluginProperties> enginePlugins) {
+    this.enginePlugins = enginePlugins == null
+        ? java.util.Map.of()
+        : enginePlugins;
+  }
+
+  public String getSerializationFormat() {
+    return serializationFormat;
+  }
+
+  public void setSerializationFormat(
+      final String serializationFormat) {
+    this.serializationFormat = serializationFormat;
   }
 
   public String getTablePrefix() {

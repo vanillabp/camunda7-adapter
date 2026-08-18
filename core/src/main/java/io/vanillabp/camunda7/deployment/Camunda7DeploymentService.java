@@ -572,6 +572,12 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             bpmnProcessId,
             Camunda7ConcurrentTokens.elementIdsOf(model, scopedBpmnProcessId));
 
+    // story 66: an expression reading an attribute the aggregate does not share
+    // evaluates to null, and Camunda 7 then takes the default flow without saying a
+    // word. The adapter knows the model, the core knows what is shared - together they
+    // can say it while the application starts
+    warnAboutUnsharedAggregateProperties(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
+
     // story 72: this engine reports the end of a workflow, so a @WorkflowEnded
     // method staying silent means the adapter was not wired - which used to be
     // invisible: the application booted, the workflow ran, the method was never
@@ -800,6 +806,62 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * @param scopedBpmnProcessId The process definition key the engine will know
    * @param model The BPMN model
    */
+  /**
+   * Reports every expression of the model which reads an attribute of the workflow
+   * aggregate that is NOT shared with the BPMS (story 66).
+   * <p>
+   * A WARN, not a failed deployment: the check reads expressions, and an expression it
+   * misreads must not keep an application from starting. What it finds is precise enough
+   * to act on - the element, the expression, the attribute and the annotation which fixes
+   * it - and a model which works produces nothing at all.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID as the application knows it
+   * @param scopedBpmnProcessId The process ID as the engine knows it
+   * @param model The deployed model
+   */
+  private void warnAboutUnsharedAggregateProperties(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String scopedBpmnProcessId,
+      final BpmnModelInstance model) {
+
+    final var identifiers = io.vanillabp.camunda7.sync.Camunda7ExpressionIdentifiers
+        .of(model, scopedBpmnProcessId);
+    if (identifiers.isEmpty()) {
+      return;
+    }
+    workflowTaskInvoker
+        .unsharedWorkflowAggregateProperties(
+            workflowModuleId,
+            bpmnProcessId,
+            identifiers.keySet(),
+            io.vanillabp.camunda7.processservice.Camunda7ProcessService.SYNC_MODE)
+        .forEach(name -> {
+          final var origin = identifiers.get(name);
+          log.warn(
+              """
+                  Camunda7[{}]: the expression '{}' of element '{}' (BPMN process '{}' of workflow \
+                  module '{}') reads '{}', which IS an attribute of the workflow aggregate but is \
+                  NOT shared with the BPMS - the engine evaluates it as null, so a condition \
+                  reading it takes the default flow without any error. Three ways out, pick the \
+                  one which applies: share the attribute (@SyncWithBPMS on its getter); give it a \
+                  readable getter if it has none, because the shared values are read from getX() \
+                  and from isX() returning boolean, never from a field and never from an isX() \
+                  returning something else (VanillaBP 1 read those, this version does not); or let \
+                  the expression read something the aggregate does share. Until you do, VanillaBP \
+                  2.0 still answers this expression by reading the aggregate directly - version \
+                  2.1 removes that fallback.""",
+              adapterId,
+              origin.expression(),
+              origin.elementId(),
+              bpmnProcessId,
+              workflowModuleId,
+              name);
+        });
+
+  }
+
   /**
    * Reports a <code>&#64;WorkflowEnded</code> method which this adapter id will never
    * call. Camunda 7 CAN report the end of a workflow, so the only way to get here is a

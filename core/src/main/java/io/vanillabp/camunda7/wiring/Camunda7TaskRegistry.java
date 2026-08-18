@@ -102,6 +102,41 @@ public class Camunda7TaskRegistry {
    */
   private final Map<String, String> signalNamesOfStartEvents = new ConcurrentHashMap<>();
 
+  /**
+   * Which serialization format nested shared values are stored in (story 66) - provided
+   * by the platform integration, which binds the configuration. The task path asks the
+   * registry because it has it at hand; <code>null</code> in tests, where the engine's
+   * default applies.
+   */
+  private io.vanillabp.camunda7.sync.Camunda7SerializationFormats serializationFormats;
+
+  /**
+   * @param serializationFormats The format resolution of the platform integration
+   */
+  public void setSerializationFormats(
+      final io.vanillabp.camunda7.sync.Camunda7SerializationFormats serializationFormats) {
+
+    this.serializationFormats = serializationFormats;
+
+  }
+
+  /**
+   * The configured format for nested shared values of one workflow, or <code>null</code>.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID
+   * @return The format or <code>null</code>
+   */
+  public String serializationFormatFor(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    return serializationFormats != null
+        ? serializationFormats.formatFor(workflowModuleId, bpmnProcessId)
+        : null;
+
+  }
+
   public void register(
       final Camunda7TaskConnectable connectable) {
 

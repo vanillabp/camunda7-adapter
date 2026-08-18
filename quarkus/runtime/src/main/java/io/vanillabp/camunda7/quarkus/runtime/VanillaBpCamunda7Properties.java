@@ -38,6 +38,73 @@ public interface VanillaBpCamunda7Properties {
   Map<String, Camunda7AdapterKeys> adapters();
 
   /**
+   * The workflow-module sections of the shared tree - only the Camunda 7 keys which are
+   * resolvable per scope are modeled here (story 66: the serialization format).
+   */
+  Map<String, Camunda7WorkflowModuleKeys> workflowModules();
+
+  /**
+   * The Camunda 7 keys of one <code>vanillabp.workflow-modules.&lt;module&gt;</code>
+   * section which may override what the adapter section says.
+   */
+  interface Camunda7WorkflowModuleKeys {
+
+    /**
+     * The per-adapter-id overrides of this workflow module.
+     */
+    Map<String, Camunda7ScopedKeys> adapters();
+
+    /**
+     * The workflows of this workflow module, keyed by BPMN process ID.
+     */
+    Map<String, Camunda7WorkflowKeys> workflows();
+
+  }
+
+  /**
+   * The Camunda 7 keys of one workflow.
+   */
+  interface Camunda7WorkflowKeys {
+
+    /**
+     * The per-adapter-id overrides of this workflow - the most specific level.
+     */
+    Map<String, Camunda7ScopedKeys> adapters();
+
+  }
+
+  /**
+   * One engine plugin of an adapter id (story 66).
+   */
+  interface Camunda7EnginePluginKeys {
+
+    /**
+     * The plugin's class, e.g. <code>org.camunda.xstream.ProcessEnginePlugin</code>.
+     */
+    Optional<String> pluginClass();
+
+    /**
+     * The plugin's own properties in kebab-case - Camunda converts them to the types the
+     * plugin declares.
+     */
+    Map<String, String> properties();
+
+  }
+
+  /**
+   * The Camunda 7 keys which may be set per workflow module and per workflow.
+   */
+  interface Camunda7ScopedKeys {
+
+    /**
+     * The serialization format of nested shared values for this scope (story 66).
+     */
+    Optional<String> serializationFormat();
+
+
+  }
+
+  /**
    * The Camunda 7 engine keys of one <code>vanillabp.adapters.&lt;id&gt;</code>
    * section.
    */
@@ -76,6 +143,25 @@ public interface VanillaBpCamunda7Properties {
      * schema creation honors the prefix).
      */
     Optional<String> tablePrefix();
+
+    /**
+     * OPTIONAL serialization format nested values shared by a workflow aggregate are
+     * stored in (story 66), e.g. <code>application/xstream</code> (camunda-xstream) or
+     * <code>application/json</code> (SPIN). Applied to the engine's
+     * <code>defaultSerializationFormat</code> and to the variables VanillaBP writes;
+     * overridable per workflow module and per workflow (see
+     * {@link VanillaBpCamunda7Properties#workflowModules()}). The matching dataformat is
+     * the application's dependency.
+     */
+    Optional<String> serializationFormat();
+
+    /**
+     * OPTIONAL Camunda engine plugins of this adapter id: named sections, each naming a
+     * class and carrying its own properties - which Camunda applies, exactly like the
+     * <code>&lt;property&gt;</code> elements of a <code>bpm-platform.xml</code> (story 66).
+     * This is how a serialization dataformat reaches the embedded engine.
+     */
+    Map<String, Camunda7EnginePluginKeys> enginePlugins();
 
     /**
      * OPTIONAL name of the Camunda tenant a workflow module is deployed to under the
