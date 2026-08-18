@@ -311,15 +311,18 @@ signal writes nothing, since it reaches workflows of other aggregates.
 A scalar becomes a scalar variable, a nested value an object variable in the format the
 application configures (`vanillabp.adapters.<id>.serialization-format`, overridable per
 workflow module and per workflow) - which is what keeps `${order.customer.name}` working,
-because the engine deserializes before EL navigates. The format needs a dataformat plugin
-(camunda-xstream, SPIN), and a plugin reaches an embedded engine this adapter builds in two
-ways: configured per adapter id under `vanillabp.adapters.<id>.engine-plugins` (a named
-section per plugin, carrying `plugin-class` and its `properties`, which Camunda's
+because the engine deserializes before EL navigates. Without a format the engine falls back to Java serialization,
+which the adapter warns about once: a blob in Cockpit, and the engine's database holding
+serialized instances of the application's classes.
+
+A format needs a dataformat plugin (camunda-xstream, SPIN), and a plugin reaches an
+embedded engine this adapter builds under `vanillabp.adapters.<id>.engine-plugins`: a named
+section per plugin carrying `plugin-class` and its `properties`, which Camunda's
 `PropertyHelper` applies - the code which reads the `<property>` elements of a
-`bpm-platform.xml`, so the plugin's types are converted as documented), or contributed as a `ProcessEnginePlugin` bean, which suits a plugin
-configuring itself from the application's properties and applies to every engine this
-adapter builds. Without a format the engine falls back to Java serialization,
-which the adapter warns about once.
+`bpm-platform.xml`, so the plugin's types are converted as documented. That is the one place
+which reads the same on both platforms, and it is per adapter id, which a side-by-side
+migration needs. A plugin needing more than a constructor without arguments is contributed
+as a `ProcessEnginePlugin` bean instead; those apply to every engine this adapter builds.
 
 The one place variables ARE read is `@TaskParam`, which takes the value from the task's
 input mapping, a hand-over the model asks for on purpose.
