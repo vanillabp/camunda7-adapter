@@ -295,14 +295,20 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       configuration.setDatabaseTablePrefix(properties.getTablePrefix());
     }
 
-    // story 66: engine plugins of the application - the way a serialization dataformat
-    // gets into an embedded engine (camunda-xstream, SPIN). Every plugin bean is applied
-    // to every engine this adapter builds; an application running two adapter ids with
-    // different plugins configures the engine of one of them itself
-    final var plugins = applicationContext
-        .getBeanProvider(org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin.class)
-        .orderedStream()
-        .toList();
+    // story 66: the engine plugins - the way a serialization dataformat (camunda-xstream,
+    // SPIN) reaches an embedded engine. Two ways in: configured per adapter id
+    // ('vanillabp.adapters.<id>.engine-plugins', properties applied by Camunda itself), or
+    // contributed as a bean, which suits a plugin configuring itself from the
+    // application's properties and applies to every engine this adapter builds
+    final var plugins = new java.util.LinkedList<org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin>(
+        io.vanillabp.camunda7.engine.Camunda7EnginePlugins
+            .of(adapterId, properties.getEnginePlugins()));
+    plugins
+        .addAll(
+            applicationContext
+                .getBeanProvider(org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin.class)
+                .orderedStream()
+                .toList());
     if (!plugins.isEmpty()) {
       configuration
           .getProcessEnginePlugins()

@@ -15,7 +15,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import io.vanillabp.camunda7.processservice.Camunda7ProcessService;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**

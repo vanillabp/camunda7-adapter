@@ -187,15 +187,21 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
       configuration.setDatabaseTablePrefix(properties.getTablePrefix());
     }
 
-    // story 66: engine plugins of the application - the way a serialization dataformat
-    // gets into an embedded engine (camunda-xstream, SPIN). Every plugin bean is applied
-    // to every engine this adapter builds
-    final var plugins = io.quarkus.arc.Arc
-        .container()
-        .listAll(org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin.class)
-        .stream()
-        .map(io.quarkus.arc.InstanceHandle::get)
-        .toList();
+    // story 66: the engine plugins - the way a serialization dataformat (camunda-xstream,
+    // SPIN) reaches an embedded engine. Two ways in: configured per adapter id
+    // ('vanillabp.adapters.<id>.engine-plugins', properties applied by Camunda itself), or
+    // contributed as a CDI bean, which applies to every engine this adapter builds
+    final var plugins = new java.util.LinkedList<org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin>(
+        io.vanillabp.camunda7.engine.Camunda7EnginePlugins
+            .of(adapterId, properties.getEnginePlugins()));
+    plugins
+        .addAll(
+            io.quarkus.arc.Arc
+                .container()
+                .listAll(org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin.class)
+                .stream()
+                .map(io.quarkus.arc.InstanceHandle::get)
+                .toList());
     if (!plugins.isEmpty()) {
       configuration
           .getProcessEnginePlugins()

@@ -74,6 +74,24 @@ public interface VanillaBpCamunda7Properties {
   }
 
   /**
+   * One engine plugin of an adapter id (story 66).
+   */
+  interface Camunda7EnginePluginKeys {
+
+    /**
+     * The plugin's class, e.g. <code>org.camunda.xstream.ProcessEnginePlugin</code>.
+     */
+    Optional<String> pluginClass();
+
+    /**
+     * The plugin's own properties in kebab-case - Camunda converts them to the types the
+     * plugin declares.
+     */
+    Map<String, String> properties();
+
+  }
+
+  /**
    * The Camunda 7 keys which may be set per workflow module and per workflow.
    */
   interface Camunda7ScopedKeys {
@@ -82,6 +100,7 @@ public interface VanillaBpCamunda7Properties {
      * The serialization format of nested shared values for this scope (story 66).
      */
     Optional<String> serializationFormat();
+
 
   }
 
@@ -135,6 +154,14 @@ public interface VanillaBpCamunda7Properties {
      * the application's dependency.
      */
     Optional<String> serializationFormat();
+
+    /**
+     * OPTIONAL Camunda engine plugins of this adapter id: named sections, each naming a
+     * class and carrying its own properties - which Camunda applies, exactly like the
+     * <code>&lt;property&gt;</code> elements of a <code>bpm-platform.xml</code> (story 66).
+     * This is how a serialization dataformat reaches the embedded engine.
+     */
+    Map<String, Camunda7EnginePluginKeys> enginePlugins();
 
     /**
      * OPTIONAL name of the Camunda tenant a workflow module is deployed to under the

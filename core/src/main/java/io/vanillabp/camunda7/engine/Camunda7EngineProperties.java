@@ -64,6 +64,15 @@ public class Camunda7EngineProperties {
   private String serializationFormat;
 
   /**
+   * The Camunda engine plugins of this adapter id, each a named section naming a class and
+   * carrying its own properties - which Camunda itself applies (see
+   * {@link Camunda7EnginePlugins}). This is how a serialization dataformat
+   * (camunda-xstream, SPIN) reaches an engine VanillaBP builds, and it is per adapter id,
+   * so two embedded engines can carry different plugins.
+   */
+  private java.util.Map<String, Camunda7EnginePluginProperties> enginePlugins = java.util.Map.of();
+
+  /**
    * The Camunda tenant a workflow module is deployed to under the name-clash
    * avoidance mode {@code by-adapter} (story 35). Unset (the default) means the
    * workflow module ID is the tenant - VanillaBP 1's behavior.
@@ -114,6 +123,17 @@ public class Camunda7EngineProperties {
   public void setTenantId(
       final String tenantId) {
     this.tenantId = tenantId;
+  }
+
+  public java.util.Map<String, Camunda7EnginePluginProperties> getEnginePlugins() {
+    return enginePlugins;
+  }
+
+  public void setEnginePlugins(
+      final java.util.Map<String, Camunda7EnginePluginProperties> enginePlugins) {
+    this.enginePlugins = enginePlugins == null
+        ? java.util.Map.of()
+        : enginePlugins;
   }
 
   public String getSerializationFormat() {

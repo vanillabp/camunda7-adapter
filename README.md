@@ -312,9 +312,13 @@ A scalar becomes a scalar variable, a nested value an object variable in the for
 application configures (`vanillabp.adapters.<id>.serialization-format`, overridable per
 workflow module and per workflow) - which is what keeps `${order.customer.name}` working,
 because the engine deserializes before EL navigates. The format needs a dataformat plugin
-(camunda-xstream, SPIN), and any `ProcessEnginePlugin` bean of the application is applied
-to the engines this adapter builds, which is how such a plugin reaches an embedded engine
-it does not create itself. Without a format the engine falls back to Java serialization,
+(camunda-xstream, SPIN), and a plugin reaches an embedded engine this adapter builds in two
+ways: configured per adapter id under `vanillabp.adapters.<id>.engine-plugins` (a named
+section per plugin, carrying `plugin-class` and its `properties`, which Camunda's
+`PropertyHelper` applies - the code which reads the `<property>` elements of a
+`bpm-platform.xml`, so the plugin's types are converted as documented), or contributed as a `ProcessEnginePlugin` bean, which suits a plugin
+configuring itself from the application's properties and applies to every engine this
+adapter builds. Without a format the engine falls back to Java serialization,
 which the adapter warns about once.
 
 The one place variables ARE read is `@TaskParam`, which takes the value from the task's

@@ -120,6 +120,33 @@ public class Camunda7EngineProducer {
     keys.historyTimeToLive().ifPresent(properties::setHistoryTimeToLive);
     keys.tablePrefix().ifPresent(properties::setTablePrefix);
     keys.serializationFormat().ifPresent(properties::setSerializationFormat);
+    // the named plugin sections travel onto the platform-neutral model, so the core builds
+    // and configures them the same way on both platforms (story 66)
+    properties
+        .setEnginePlugins(
+            keys
+                .enginePlugins()
+                .entrySet()
+                .stream()
+                .collect(
+                    java.util.stream.Collectors
+                        .toMap(
+                            java.util.Map.Entry::getKey,
+                            entry -> {
+                              final var plugin = new io.vanillabp.camunda7.engine.Camunda7EnginePluginProperties();
+                              plugin
+                                  .setPluginClass(
+                                      entry
+                                          .getValue()
+                                          .pluginClass()
+                                          .orElse(null));
+                              plugin
+                                  .setProperties(
+                                      entry
+                                          .getValue()
+                                          .properties());
+                              return plugin;
+                            })));
     return properties;
 
   }
