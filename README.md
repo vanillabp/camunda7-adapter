@@ -422,6 +422,19 @@ Camunda **7.24** is the final feature release of Camunda 7 (October 2025, LTS). 
 Camunda 7 community edition is **end-of-life** — no further community releases are
 expected. This adapter pins Camunda `7.24.x`.
 
+The pin is fixed and this adapter has no release lines, unlike the
+[Camunda 8 adapter](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter#release-lines),
+whose artifacts carry the cluster minor in their version. Camunda 8 needs lines because a
+new minor arrives every six months and the client a build was compiled against is the lowest
+cluster version it accepts. Camunda 7 has no next minor: what is still coming are enterprise
+environment update releases twice a year until April 2030, and the engine runs embedded, so
+the version an application uses is the version it ships. `renovate.json` therefore holds
+`7.24.x` and anything above it needs a human, which is also the reason there is nothing to
+gate.
+
+The fork adapters for Operaton and CIB seven arrive as repositories of their own, so they
+bring whatever versioning their forks need.
+
 Camunda 7 runs **embedded** inside the application's JVM and shares the same database and
 the same transaction as the business code. Consequently starting a workflow happens
 completely within the local transaction (no two-phase commit / transaction outbox), and
