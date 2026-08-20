@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
 
+
 /**
  * Story 66: the serialization format of nested shared values is resolved per workflow,
  * with a fallback to the workflow module and to the adapter.
