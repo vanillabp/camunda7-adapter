@@ -213,6 +213,99 @@ public class Camunda7AdapterBootTest {
   }
 
   @Test
+  public void aTablePrefixWithSchemaUpdateFailsWithGuidingMessage() {
+
+    // story 47: Camunda's schema management ignores the prefix and would create a set
+    // of unprefixed ACT_* tables in the shared database. The check runs before the
+    // engine is built, so the application learns about it instead of collecting stray
+    // tables and a MyBatis stack trace
+    this.contextRunner
+        .withPropertyValues(
+            "spring.config.location=classpath:application.yaml",
+            "spring.datasource.url=jdbc:h2:mem:camunda7-prefix-schema-update-test;DB_CLOSE_DELAY=-1",
+            "vanillabp.adapters.c7.table-prefix=NEW_")
+        .withInitializer(new ConfigDataApplicationContextInitializer())
+        .withConfiguration(
+            AutoConfigurations.of(
+                org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
+                org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
+                Camunda7AdapterConfiguration.class,
+                Camunda7ProcessServiceConfiguration.class,
+                WorkflowModuleAutoConfiguration.class,
+                SpringBootMigrationAdapterAutoConfiguration.class))
+        .run(context -> {
+
+          final var message = rootCauseMessage(context.getStartupFailure());
+          Assertions.assertTrue(message.contains("'NEW_'"), () -> message);
+          Assertions.assertTrue(message.contains("'database-schema-update: true'"), () -> message);
+          Assertions
+              .assertTrue(
+                  message.contains("vanillabp.adapters.c7.database-schema-update: false"),
+                  () -> message);
+          Assertions.assertTrue(message.contains("vanillabp.adapters.c7.data-source-name"), () -> message);
+
+          // and nothing was created while failing - the check runs before the engine
+          try (var connection = java.sql.DriverManager
+              .getConnection("jdbc:h2:mem:camunda7-prefix-schema-update-test;DB_CLOSE_DELAY=-1")) {
+            try (var tables = connection.getMetaData().getTables(null, null, "ACT%", new String[]{
+                "TABLE"
+            })) {
+              Assertions.assertFalse(tables.next(), "no ACT_* table may have been created");
+            }
+          }
+
+        });
+
+  }
+
+  @Test
+  public void missingPrefixedTablesFailWithGuidingMessage() {
+
+    // story 47: the prefixed engine is switched to 'the tables exist already', and
+    // they do not - the message names them and both ways on
+    this.contextRunner
+        .withPropertyValues(
+            "spring.config.location=classpath:application.yaml",
+            "spring.datasource.url=jdbc:h2:mem:camunda7-prefix-missing-test;DB_CLOSE_DELAY=-1",
+            "vanillabp.adapters.c7.table-prefix=NEW_",
+            "vanillabp.adapters.c7.database-schema-update=false")
+        .withInitializer(new ConfigDataApplicationContextInitializer())
+        .withConfiguration(
+            AutoConfigurations.of(
+                org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
+                org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
+                Camunda7AdapterConfiguration.class,
+                Camunda7ProcessServiceConfiguration.class,
+                WorkflowModuleAutoConfiguration.class,
+                SpringBootMigrationAdapterAutoConfiguration.class))
+        .run(context -> {
+
+          final var message = rootCauseMessage(context.getStartupFailure());
+          Assertions.assertTrue(message.contains("NEW_ACT_RU_EXECUTION"), () -> message);
+          Assertions.assertTrue(message.contains("the application's default datasource"), () -> message);
+          Assertions.assertTrue(message.contains("vanillabp.adapters.c7.data-source-name"), () -> message);
+
+        });
+
+  }
+
+  /**
+   * @param startupFailure The failure of a context which had to fail
+   * @return The message of its innermost cause
+   */
+  private static String rootCauseMessage(
+      final Throwable startupFailure) {
+
+    Assertions.assertNotNull(startupFailure, "boot has to fail with a guiding message");
+    var cause = startupFailure;
+    while (cause.getCause() != null) {
+      cause = cause.getCause();
+    }
+    return String.valueOf(cause.getMessage());
+
+  }
+
+  @Test
   public void configuredAdapterWithoutDataSourceFailsWithGuidingMessage() {
 
     // a configured camunda7 adapter WITHOUT any DataSource: the boot fails with a

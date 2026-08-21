@@ -32,11 +32,16 @@ package io.vanillabp.camunda7.engine;
  *       applies (this adapter's default mode); default <code>false</code>;</li>
  *   <li><code>table-prefix</code> - OPTIONAL prefix of the engine's database tables
  *       (engine setting <code>databaseTablePrefix</code>). It lets two adapter ids
- *       share ONE datasource while running separate engines - exactly the
- *       side-by-side migration setup on a single database. The tables of each
- *       prefix have to exist (the engine's schema creation honors the prefix, so
- *       <code>database-schema-update</code> creates them; a prefix pointing at a
- *       schema, e.g. <code>MY_SCHEMA.</code>, requires that schema to exist).</li>
+ *       share ONE datasource while running separate engines - the side-by-side
+ *       migration setup on a single database. <b>The tables of the prefix have to
+ *       exist before the application starts</b>: Camunda's schema management
+ *       ignores the prefix and would create a set of unprefixed
+ *       <code>ACT_*</code> tables instead (its own words in
+ *       {@code ProcessEngineConfigurationImpl#setDatabaseTablePrefix}, recorded by
+ *       {@code Camunda7TablePrefixEngineBehaviourTest}). A prefixed adapter id
+ *       therefore also needs <code>database-schema-update: false</code>, and
+ *       {@link Camunda7TablePrefixSchema} says so while the application boots
+ *       rather than letting the engine fail on its first query.</li>
  * </ul>
  */
 public class Camunda7EngineProperties {

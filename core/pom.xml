@@ -51,6 +51,13 @@
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- the embedded engine is cheap on H2, which is what lets the core record what
+         Camunda 7 itself does with a table prefix (see Camunda7TablePrefixSchema) -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

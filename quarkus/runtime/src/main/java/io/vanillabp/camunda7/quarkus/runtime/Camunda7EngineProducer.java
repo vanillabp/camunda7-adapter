@@ -179,7 +179,8 @@ public class Camunda7EngineProducer {
                   vanillabp.adapters.%s.data-source-name: <datasource name>
                 Use the reserved value 'default' for the application's default datasource. \
                 (Two adapter ids may also share one datasource if each uses its own \
-                'vanillabp.adapters.<id>.table-prefix'.)"""
+                'vanillabp.adapters.<id>.table-prefix' - Camunda does not create prefixed tables, \
+                so those have to exist beforehand.)"""
                 .formatted(adapterId, declaredDataSources, adapterId));
       }
     }

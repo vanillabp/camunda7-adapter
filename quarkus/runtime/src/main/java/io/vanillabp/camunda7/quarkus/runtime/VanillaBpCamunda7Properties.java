@@ -139,8 +139,11 @@ public interface VanillaBpCamunda7Properties {
      * OPTIONAL prefix of the engine's database tables (engine setting
      * <code>databaseTablePrefix</code>). It lets two adapter ids share ONE
      * datasource while running separate engines - the side-by-side migration setup
-     * on a single database. The tables of each prefix have to exist (the engine's
-     * schema creation honors the prefix).
+     * on a single database. The tables of the prefix have to exist before the
+     * application starts, and <code>database-schema-update</code> has to be
+     * <code>false</code>: Camunda's schema management ignores the prefix and would
+     * create a set of unprefixed <code>ACT_*</code> tables instead (story 47, see
+     * {@code Camunda7TablePrefixSchema}).
      */
     Optional<String> tablePrefix();
 
