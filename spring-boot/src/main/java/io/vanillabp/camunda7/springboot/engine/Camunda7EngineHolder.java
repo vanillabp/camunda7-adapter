@@ -240,6 +240,12 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       transactionManager = applicationTransactionManager;
     }
 
+    // story 47: an adapter id running on a table prefix needs its tables to exist -
+    // Camunda's schema management ignores the prefix and would create a set of
+    // unprefixed ACT_* tables here. Asked BEFORE the engine is built, so those tables
+    // are never written
+    io.vanillabp.camunda7.engine.Camunda7TablePrefixSchema.validate(adapterId, properties, dataSource);
+
     // idiomatic job executor: SpringJobExecutor on a managed thread pool instead of
     // the engine-default DefaultJobExecutor (raw threads, activated at engine build)
     this.taskExecutor = new ThreadPoolTaskExecutor();
@@ -290,7 +296,8 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       configuration.setDefaultSerializationFormat(properties.getSerializationFormat());
     }
     // an own table prefix makes two adapter ids distinct engines on ONE datasource
-    // (the side-by-side migration setup on a single database, story 34)
+    // (the side-by-side migration setup on a single database, story 34). The tables
+    // of the prefix exist - Camunda7TablePrefixSchema asked about that above
     if ((properties.getTablePrefix() != null) && !properties.getTablePrefix().isBlank()) {
       configuration.setDatabaseTablePrefix(properties.getTablePrefix());
     }

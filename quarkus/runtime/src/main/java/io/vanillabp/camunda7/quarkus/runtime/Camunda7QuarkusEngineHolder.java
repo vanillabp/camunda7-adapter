@@ -137,6 +137,12 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     this.usesSeparateDataSource = usesSeparateDataSource;
     this.deliversWorkflowEnded = workflowEndedInvoker != null;
 
+    // story 47: an adapter id running on a table prefix needs its tables to exist -
+    // Camunda's schema management ignores the prefix and would create a set of
+    // unprefixed ACT_* tables here. Asked BEFORE the engine is built, so those tables
+    // are never written
+    io.vanillabp.camunda7.engine.Camunda7TablePrefixSchema.validate(adapterId, properties, dataSource);
+
     final var parseListener = new Camunda7AsyncBpmnParseListener(
         new io.vanillabp.camunda7.wiring.Camunda7TaskCancellationListener(
             workflowTaskInvoker, taskRegistry), new io.vanillabp.camunda7.wiring.Camunda7UserTaskEventListener(
@@ -182,7 +188,8 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
       configuration.setDefaultSerializationFormat(properties.getSerializationFormat());
     }
     // an own table prefix makes two adapter ids distinct engines on ONE datasource
-    // (the side-by-side migration setup on a single database, story 34)
+    // (the side-by-side migration setup on a single database, story 34). The tables
+    // of the prefix exist - Camunda7TablePrefixSchema asked about that above
     if ((properties.getTablePrefix() != null) && !properties.getTablePrefix().isBlank()) {
       configuration.setDatabaseTablePrefix(properties.getTablePrefix());
     }

@@ -26,6 +26,7 @@ adapter SPI (`io.vanillabp.adapter:migration-adapter-spi`) against the Camunda 7
 | `Camunda7TaskCancellationListener` + `Camunda7UserTaskEventListener` | Deliver `@TaskEvent` CREATED/CANCELED for service and user tasks.                                                                 |
 | `Camunda7JobExecutorLifecycle`                                       | Starts the engine-global job executor with the first, stops it with the last workflow module.                                     |
 | `Camunda7InstanceIdentity`                                           | Decides whether two adapter ids of this type are distinguishable (datasource or `table-prefix`).                                  |
+| `Camunda7TablePrefixSchema`                                          | The startup check of an id running on a `table-prefix`: Camunda creates no prefixed tables, so they have to be there.             |
 
 ## Adapter type vs. id
 

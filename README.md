@@ -67,8 +67,10 @@ vanillabp:
 The same type may be configured under several ids (e.g. two Camunda 7 engines side by
 side during a migration) - **each id gets its OWN embedded engine** (named
 `vanillabp-camunda7-<id>`). Since two embedded engines must never share one database
-schema (they would be the same engine state), every additional id needs its own
-datasource - the boot fails with a guiding message otherwise.
+schema (they would be the same engine state), every additional id needs either a
+datasource of its own or a
+[table prefix of its own](#two-engines-on-one-database-table-prefix) - the boot fails with
+a guiding message otherwise.
 
 Per-adapter-id settings (all optional, at the canonical location
 `vanillabp.adapters.<id>.*`):
@@ -92,6 +94,10 @@ vanillabp:
       # DataSource bean; Quarkus: the name of a declared named Agroal datasource
       # (quarkus.datasource.<name>.*).
       data-source-name: legacy
+      # OPTIONAL: the engine's table prefix, which lets two ids run as two engines on
+      # ONE datasource. Camunda does not create prefixed tables, so they have to exist
+      # and database-schema-update has to be false - see below.
+      table-prefix: NEW_
 ```
 
 On Spring Boot, declare the additional datasource bean with
@@ -174,6 +180,62 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used). The
 A `DataSource` and a `PlatformTransactionManager` must be present (a Camunda 7
 application always needs a database) unless every configured id brings its own
 datasource.
+
+### Two engines on one database: `table-prefix`
+
+`vanillabp.adapters.<id>.table-prefix` sets Camunda's `databaseTablePrefix`, which is how
+two adapter ids become two engines on ONE datasource - the side-by-side migration setup on
+a single database. Every statement the engine issues at runtime goes through MyBatis,
+which prepends the prefix, and that part works. Creating the tables is the part Camunda
+leaves out, and it says so in its own API,
+`ProcessEngineConfigurationImpl#setDatabaseTablePrefix`:
+
+> the prefix is not respected by automatic database schema management. If you use
+> `DB_SCHEMA_UPDATE_CREATE_DROP` or `DB_SCHEMA_UPDATE_TRUE`, activiti will create the
+> database tables using the default names, regardless of the prefix configured here.
+
+No database behaves differently here: the schema management executes the DDL files shipped
+with the engine (`org/camunda/bpm/engine/db/create/activiti.<database>.create.*.sql`)
+statement by statement, and those statements name the tables verbatim in every dialect.
+`Camunda7TablePrefixEngineBehaviourTest` in the core module holds the record - with a
+prefix and `database-schema-update: true`, the engine creates a full set of unprefixed
+`ACT_*` tables and then dies on its first query against the prefixed `ACT_GE_PROPERTY`,
+which is what was observed while building story 46.
+
+A prefixed adapter id therefore means: its tables are there already.
+
+```yaml
+vanillabp:
+  adapters:
+    c7:
+      type: camunda7
+    c7-new:
+      type: camunda7
+      table-prefix: NEW_
+      database-schema-update: false
+```
+
+`Camunda7TablePrefixSchema` asks about that before the engine is built, so a wrong
+configuration costs neither a MyBatis stack trace nor a set of stray tables in the shared
+database. A prefix together with a creating `database-schema-update` ends the boot, and so
+does a prefix whose tables are missing; both messages name the prefix, the datasource, the
+missing tables and the two ways on. `Camunda7TablePrefixIT` runs the working setup: two
+adapter ids on one H2 database, one of them prefixed, both deploying the workflow module
+and starting workflows which stay in their own engine.
+
+**Why the adapter does not create the tables.** It could transform Camunda's statements,
+and the integration test's `PrefixedEngineSchema` does - after two attempts which looked
+right and were not. Renaming every `ACT_` renames the columns `ACT_ID_` and
+`ACT_INST_ID_` along, and the first query fails on a column which is not there; taking
+"ends with an underscore" for a column leaves the index `ACT_IDX_EVENT_SUBSCR_CONFIG_`
+unrenamed, where it collides with the unprefixed engine of the same database. Neither
+mistake shows up before something runs. Carrying that rename for seven engine components,
+six dialects and every engine upgrade would make VanillaBP the owner of a schema whose
+version bookkeeping (`ACT_GE_SCHEMA_LOG`) stays Camunda's regardless. So the rename
+belongs to whoever owns the schema, applied with Liquibase or Flyway the way the wiki's
+[Creating the engine tables yourself](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Configuration#creating-the-engine-tables-yourself)
+describes - and where nobody wants to own it, `data-source-name` gives the adapter id a
+database of its own, where the engine creates and upgrades its schema as usual.
 
 ## Task processing (execution model)
 
@@ -534,18 +596,6 @@ the engine's own execution (`camunda:expression`/`camunda:delegateExpression`, s
 [Task processing](#task-processing-execution-model)), and the external-task API is a
 second delivery mechanism with its own lock, retry and completion model. Nobody asked for
 it yet, so there is no timeline.
-
-### `table-prefix`
-
-`vanillabp.adapters.<id>.table-prefix` is meant to let two adapter ids share one datasource
-while running separate engines, and it does not start an engine today: with a prefix
-configured, `database-schema-update: true` creates no tables and the boot fails on the
-engine's own query against the prefixed `ACT_GE_PROPERTY`. The failure comes from a QUERY,
-not from a rejected `CREATE`, which points at the engine's schema check rather than at the
-DDL. Story 47 verifies what Camunda supports here and then delivers either the schema
-creation for prefixed engines or a guiding startup check plus documentation saying so.
-Until then, keep several adapter ids apart by their datasource
-([Embedded-engine wiring](#embedded-engine-wiring)).
 
 ### New jobs wait for the next acquisition cycle
 

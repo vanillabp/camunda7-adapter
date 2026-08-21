@@ -17,7 +17,9 @@ import java.util.function.Function;
  * or</li>
  * <li>different engine table prefixes
  * (<code>vanillabp.adapters.&lt;id&gt;.table-prefix</code>) - which lets two engines
- * share ONE datasource, exactly the migration setup on a single database.</li>
+ * share ONE datasource, exactly the migration setup on a single database. Such an
+ * engine needs a schema which exists already, see
+ * {@link Camunda7TablePrefixSchema}.</li>
  * </ul>
  *
  * @param dataSourceName The configured datasource name or <code>null</code> for the
@@ -93,7 +95,9 @@ public record Camunda7InstanceIdentity(
                 - give each one its own database/schema by referencing an own datasource \
               ('vanillabp.adapters.<id>.data-source-name'), or
                 - let them share one datasource but use separate engine tables \
-              ('vanillabp.adapters.<id>.table-prefix' - the tables of each prefix have to exist),
+              ('vanillabp.adapters.<id>.table-prefix'). Camunda does not create prefixed tables, so \
+              such an id needs its tables created beforehand and \
+              'vanillabp.adapters.<id>.database-schema-update: false',
               or remove all but one of these adapters."""
               .formatted(
                   String.join("', '", idsSharingIt),
