@@ -302,29 +302,20 @@ never completes the task: `ProcessService#completeUserTask` maps to
 engines, two-phase on separate-datasource adapter ids. `awarenessOfUserTask`
 locates a task by its task ID plus a business-key check and the same scope check.
 
-**What the awareness probes answer for (story 104):** the election contract of
-`MigratableProcessService` (story 105) says an adapter answers only for the
-workflows and tasks of its OWN scope, and a Camunda 7 business key is the
-workflow-aggregate id, which is unique per aggregate type and not across an
-engine. So all three probes compare what the WIRING registered — the process
-definition keys of this adapter id's workflow modules and the tenant each module
-runs in (`Camunda7TaskRegistry.workflowModulesByScopedProcessId`) — before they
-answer `ACTIVE`; `awarenessOfWorkflowForRedispatch` inherits it through the SPI
-default, and the history query behind a `COMPLETED` is scoped the same way. The
-scope comes from the wiring and not from the deployment on purpose: Camunda
-deploys nothing when the models did not change, so a restart without a model
-change would leave a deployment-based record empty. An adapter which wired
-nothing (tests) answers as it did before.
-
-What this cannot tell apart is two workflow modules of the SAME adapter id: both
-are its own scope, and the probes are not told which module is being asked
-about. A foreign-module instance carrying the same aggregate id therefore still
-answers `ACTIVE`. Inside one BPMS that costs nothing, because the election picks
-this adapter either way and the operation is then executed with the module and
-process of the call; in a migration it can win the election against the BPMS
-which really holds the workflow. Closing it needs the workflow module in the
-probe signature, which story 105 deliberately deferred — this is the case which
-makes it worth reopening.
+**What the awareness probes answer for (stories 104 and 107):** the election
+contract of `MigratableProcessService` says an adapter answers only for the scope
+it is ASKED about, and a Camunda 7 business key is the workflow-aggregate id,
+which is unique per aggregate type and not across an engine. The probes therefore
+narrow every query by the `WorkflowScope` the core hands them: the process
+definition keys its BPMN processes are known by (`processDefinitionKeyIn`,
+secondary processes of the same `@WorkflowService` included) plus the tenant its
+workflow module runs in (`tenantIdIn`, or `withoutTenantId` where the mode uses
+none). That holds for running instances and for the history query behind a
+`COMPLETED`, the two task probes verify the instance the same way in addition to
+the business key, and `awarenessOfWorkflowForRedispatch` inherits it through the
+SPI default. So a workflow of another workflow module, of another tenant or of a
+process this application never wired is `UNKNOWN_TO_BPMS`, and the election
+continues to the BPMS which really holds it.
 
 **Message correlation (story 23):** `correlateMessage` runs entirely within the
 caller's transaction (tenant = workflow module, business key = aggregate ID) - a

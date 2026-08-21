@@ -48,9 +48,6 @@ public class Camunda7AdapterProducer {
               adapterId, engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
                   .getHistoryService(), aggregateSync);
           processService.setScoping(scoping, configuredTenantIdOf(overlay, adapterId));
-          // story 104: what the wiring registered is the scope this adapter id answers
-          // awareness probes for
-          processService.setTaskRegistry(engine.getTaskRegistry());
           // story 66: which serialization format nested shared values are stored in,
           // resolved per workflow with a fallback to the module and the adapter
           final io.vanillabp.camunda7.sync.Camunda7SerializationFormats formats = (

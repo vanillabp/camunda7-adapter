@@ -10,13 +10,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import io.vanillabp.camunda7.wiring.Camunda7TaskRegistry;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Story 104: the awareness probes of this adapter answer for ITS OWN scope, which is
- * what the election contract of {@code MigratableProcessService} demands (story 105).
+ * Stories 104 and 107: the awareness probes of this adapter answer for the scope they are
+ * ASKED about, which is what the election contract of {@code MigratableProcessService}
+ * demands (story 105).
  * <p>
  * A Camunda 7 business key is the workflow-aggregate id, and an engine may hold
  * processes this adapter never wired: models of another application sharing the
@@ -29,10 +29,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * of its workflow modules, and the tenant each module runs in. The engine here is a real
  * one, in memory, because the queries doing the comparison are the subject.
  * <p>
- * <b>What this cannot fix</b>, and story 104 says so in its result: two workflow modules
- * of the SAME adapter are both its own scope, so a foreign-module instance carrying the
- * same aggregate id is still answered {@code ACTIVE}. The probe is not told which module
- * is being asked about, which only the deferred SPI change of story 105 would supply.
+ * Story 104 could only compare what the adapter had DEPLOYED, so two workflow modules of
+ * one adapter were both its own scope and a foreign-module instance with the same
+ * aggregate id was still claimed. Since story 107 the probe is told which workflow module
+ * and which BPMN processes are meant, and that case is the third test below.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7AwarenessScopeTest {
@@ -55,13 +55,33 @@ public class Camunda7AwarenessScopeTest {
    */
   private static final String FOREIGN_TENANT = "someone-else";
 
+  /**
+   * A second process of the same {@code @WorkflowService} ({@code secondaryBpmnProcesses}):
+   * it runs on the same workflow aggregate, so an instance of it is a legitimate answer as
+   * long as the scope names it.
+   */
+  private static final String SECONDARY_PROCESS = "SecondaryProcess";
+
   private static final String AGGREGATE_ID = "1";
 
   private ProcessEngine engine;
 
   private Camunda7ProcessService<Object> processService;
 
-  private Camunda7TaskRegistry registry;
+  /**
+   * What a probe of the own workflow module is asked about.
+   */
+  private static final io.vanillabp.integration.adapter.spi.WorkflowScope SCOPE = io.vanillabp.integration.adapter.spi.WorkflowScope
+      .of(MODULE, OWN_PROCESS);
+
+  /**
+   * Another workflow module of the SAME adapter id, with a process of its own. Without a
+   * name-clash-avoidance support the module id is the tenant, so this is what a second
+   * module looks like to the engine.
+   */
+  private static final String OTHER_MODULE = "other-module";
+
+  private static final String OTHER_MODULE_PROCESS = "OtherModuleProcess";
 
   /**
    * A process with a user task, so an instance stays running and offers both a task and
@@ -97,19 +117,15 @@ public class Camunda7AwarenessScopeTest {
     // the engine refuses to parse a model without one, and a test needs no cleanup policy
     configuration.setHistoryTimeToLive("P30D");
     engine = configuration.buildProcessEngine();
-    deploy(OWN_TENANT, OWN_PROCESS, FOREIGN_PROCESS);
+    deploy(OWN_TENANT, OWN_PROCESS, FOREIGN_PROCESS, SECONDARY_PROCESS);
+    // another workflow module of the same adapter id
+    deploy(OTHER_MODULE, OTHER_MODULE_PROCESS);
     // the same process key in the tenant of somebody else - what the scope has to tell
     // apart although the definition key is identical
     deploy(FOREIGN_TENANT, OWN_PROCESS);
-    registry = new Camunda7TaskRegistry();
-    registry.setAdapterId("c7");
-    // what the wiring of THIS adapter registered: one workflow module, one process.
-    // The foreign process exists in the engine and was never wired here.
-    registry.registerProcess(MODULE, OWN_PROCESS, OWN_PROCESS);
     processService = new Camunda7ProcessService<>(
         "c7", engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
             .getHistoryService());
-    processService.setTaskRegistry(registry);
 
   }
 
@@ -182,7 +198,7 @@ public class Camunda7AwarenessScopeTest {
 
     assertEquals(
         WorkflowAwareness.ACTIVE,
-        processService.awarenessOfWorkflow(null, AGGREGATE_ID),
+        processService.awarenessOfWorkflow(SCOPE, null, AGGREGATE_ID),
         "the adapter holds this workflow");
 
   }
@@ -195,7 +211,7 @@ public class Camunda7AwarenessScopeTest {
 
     assertEquals(
         WorkflowAwareness.UNKNOWN_TO_BPMS,
-        processService.awarenessOfWorkflow(null, AGGREGATE_ID),
+        processService.awarenessOfWorkflow(SCOPE, null, AGGREGATE_ID),
         "the business key matches and the process is not this adapter's - the election has to continue");
 
   }
@@ -209,7 +225,7 @@ public class Camunda7AwarenessScopeTest {
 
     assertEquals(
         WorkflowAwareness.COMPLETED,
-        processService.awarenessOfWorkflow(null, AGGREGATE_ID),
+        processService.awarenessOfWorkflow(SCOPE, null, AGGREGATE_ID),
         "an ended workflow of this adapter is reported as ended, not as unknown");
 
     final var foreign = start(FOREIGN_PROCESS);
@@ -220,7 +236,7 @@ public class Camunda7AwarenessScopeTest {
 
     assertEquals(
         WorkflowAwareness.UNKNOWN_TO_BPMS,
-        processService.awarenessOfWorkflow(null, AGGREGATE_ID),
+        processService.awarenessOfWorkflow(SCOPE, null, AGGREGATE_ID),
         "the history of a foreign process says nothing about this adapter");
 
   }
@@ -238,7 +254,7 @@ public class Camunda7AwarenessScopeTest {
 
     assertEquals(
         WorkflowAwareness.UNKNOWN_TO_BPMS,
-        processService.awarenessOfUserTask(AGGREGATE_ID, foreignTask.getId()),
+        processService.awarenessOfUserTask(SCOPE, AGGREGATE_ID, foreignTask.getId()),
         "a task key of this engine is addressable and still not this adapter's business");
 
     final var own = start(OWN_PROCESS);
@@ -250,7 +266,7 @@ public class Camunda7AwarenessScopeTest {
 
     assertEquals(
         WorkflowAwareness.ACTIVE,
-        processService.awarenessOfUserTask(AGGREGATE_ID, ownTask.getId()));
+        processService.awarenessOfUserTask(SCOPE, AGGREGATE_ID, ownTask.getId()));
 
   }
 
@@ -262,14 +278,14 @@ public class Camunda7AwarenessScopeTest {
 
     assertEquals(
         WorkflowAwareness.UNKNOWN_TO_BPMS,
-        processService.awarenessOfTask(AGGREGATE_ID, foreign),
+        processService.awarenessOfTask(SCOPE, AGGREGATE_ID, foreign),
         "the execution of a foreign workflow is not this adapter's task");
 
     final var own = start(OWN_PROCESS);
 
     assertEquals(
         WorkflowAwareness.ACTIVE,
-        processService.awarenessOfTask(AGGREGATE_ID, own));
+        processService.awarenessOfTask(SCOPE, AGGREGATE_ID, own));
 
   }
 
@@ -281,7 +297,54 @@ public class Camunda7AwarenessScopeTest {
 
     assertEquals(
         WorkflowAwareness.UNKNOWN_TO_BPMS,
-        processService.awarenessOfWorkflow(null, "another-aggregate"));
+        processService.awarenessOfWorkflow(SCOPE, null, "another-aggregate"));
+
+  }
+
+  @Test
+  @DisplayName("A workflow of ANOTHER workflow module of this adapter is not claimed")
+  public void anotherModuleOfTheSameAdapterIsNotClaimed() {
+
+    // the case story 104 had to leave open: both modules belong to this adapter id, and
+    // only the scope of the CALL says which one is meant
+    start(OTHER_MODULE_PROCESS, OTHER_MODULE);
+
+    assertEquals(
+        WorkflowAwareness.UNKNOWN_TO_BPMS,
+        processService.awarenessOfWorkflow(SCOPE, null, AGGREGATE_ID),
+        "the aggregate id is the same and the workflow module is not the one asked about");
+    assertEquals(
+        WorkflowAwareness.ACTIVE,
+        processService
+            .awarenessOfWorkflow(
+                io.vanillabp.integration.adapter.spi.WorkflowScope.of(OTHER_MODULE, OTHER_MODULE_PROCESS),
+                null,
+                AGGREGATE_ID),
+        "and asked for its own module it is found");
+
+  }
+
+  @Test
+  @DisplayName("A secondary process of the same workflow service is part of the scope")
+  public void aSecondaryProcessIsClaimed() {
+
+    // a @WorkflowService may declare secondaryBpmnProcesses: they run on the same
+    // workflow aggregate, so the scope names them and an instance of one is an answer
+    start(SECONDARY_PROCESS);
+
+    assertEquals(
+        WorkflowAwareness.UNKNOWN_TO_BPMS,
+        processService.awarenessOfWorkflow(SCOPE, null, AGGREGATE_ID),
+        "a scope naming only the primary process does not see it");
+    assertEquals(
+        WorkflowAwareness.ACTIVE,
+        processService
+            .awarenessOfWorkflow(
+                new io.vanillabp.integration.adapter.spi.WorkflowScope(
+                    MODULE, java.util.List.of(OWN_PROCESS, SECONDARY_PROCESS)),
+                null,
+                AGGREGATE_ID),
+        "the scope of the real process service names both, and then it is this workflow");
 
   }
 
@@ -293,25 +356,10 @@ public class Camunda7AwarenessScopeTest {
 
     assertEquals(
         WorkflowAwareness.UNKNOWN_TO_BPMS,
-        processService.awarenessOfWorkflow(null, AGGREGATE_ID),
+        processService.awarenessOfWorkflow(SCOPE, null, AGGREGATE_ID),
         "the definition key is the adapter's own and the tenant is somebody else's");
 
   }
 
-  @Test
-  @DisplayName("Without a wiring registry the adapter answers as it did before story 104")
-  public void withoutARegistryNothingChanges() {
-
-    final var unwired = new Camunda7ProcessService<>(
-        "c7", engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
-            .getHistoryService());
-    start(FOREIGN_PROCESS);
-
-    assertEquals(
-        WorkflowAwareness.ACTIVE,
-        unwired.awarenessOfWorkflow(null, AGGREGATE_ID),
-        "an adapter which wired nothing cannot tell scopes apart and says what it always said");
-
-  }
 
 }

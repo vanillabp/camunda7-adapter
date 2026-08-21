@@ -246,23 +246,6 @@ public class Camunda7TaskRegistry {
   }
 
   /**
-   * Which workflow module every process definition key of THIS adapter id belongs to,
-   * as the wiring registered it (story 104).
-   * <p>
-   * This is the scope of the adapter instance, and the awareness probes answer for
-   * nothing else. It comes from the wiring rather than from the deployment, because
-   * Camunda deploys nothing when the models did not change: a restart without a model
-   * change reports no definitions at all, while the wiring runs on every boot.
-   *
-   * @return The workflow module per process definition key, empty before the wiring ran
-   */
-  public Map<String, String> workflowModulesByScopedProcessId() {
-
-    return Map.copyOf(workflowModuleIdsByScopedProcessId);
-
-  }
-
-  /**
    * The PLAIN BPMN process id of a process definition key the engine reported.
    *
    * @param workflowModuleId The workflow module ID
