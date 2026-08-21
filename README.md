@@ -285,8 +285,8 @@ within the caller's transaction (embedded engine, shared datasource): a rollback
 leaves the task open - business data and engine state stay consistent
 automatically. Adapter IDs on their OWN datasource (`data-source-name`) run the
 completion two-phase through the outbox instead (same rule as workflow starts).
-`awarenessOfTask` locates a task by its globally unique execution ID plus a
-business-key check. `@TaskEvent CANCELED` IS delivered on Camunda 7: an END
+`awarenessOfTask` locates a task by its execution ID plus a business-key check
+and a SCOPE check (see below). `@TaskEvent CANCELED` IS delivered on Camunda 7: an END
 execution listener attached at parse time invokes handlers subscribing to
 lifecycle events when the open task's activity is canceled (interrupting
 boundary event, instance termination), within the cancellation's transaction.
@@ -300,7 +300,31 @@ never completes the task: `ProcessService#completeUserTask` maps to
 `TaskService.complete`, `#cancelUserTask` to `TaskService.handleBpmnError`
 (error-boundary routing) - within the caller's transaction on shared-datasource
 engines, two-phase on separate-datasource adapter ids. `awarenessOfUserTask`
-locates a task by its globally unique task ID plus a business-key check.
+locates a task by its task ID plus a business-key check and the same scope check.
+
+**What the awareness probes answer for (story 104):** the election contract of
+`MigratableProcessService` (story 105) says an adapter answers only for the
+workflows and tasks of its OWN scope, and a Camunda 7 business key is the
+workflow-aggregate id, which is unique per aggregate type and not across an
+engine. So all three probes compare what the WIRING registered — the process
+definition keys of this adapter id's workflow modules and the tenant each module
+runs in (`Camunda7TaskRegistry.workflowModulesByScopedProcessId`) — before they
+answer `ACTIVE`; `awarenessOfWorkflowForRedispatch` inherits it through the SPI
+default, and the history query behind a `COMPLETED` is scoped the same way. The
+scope comes from the wiring and not from the deployment on purpose: Camunda
+deploys nothing when the models did not change, so a restart without a model
+change would leave a deployment-based record empty. An adapter which wired
+nothing (tests) answers as it did before.
+
+What this cannot tell apart is two workflow modules of the SAME adapter id: both
+are its own scope, and the probes are not told which module is being asked
+about. A foreign-module instance carrying the same aggregate id therefore still
+answers `ACTIVE`. Inside one BPMS that costs nothing, because the election picks
+this adapter either way and the operation is then executed with the module and
+process of the call; in a migration it can win the election against the BPMS
+which really holds the workflow. Closing it needs the workflow module in the
+probe signature, which story 105 deliberately deferred — this is the case which
+makes it worth reopening.
 
 **Message correlation (story 23):** `correlateMessage` runs entirely within the
 caller's transaction (tenant = workflow module, business key = aggregate ID) - a

@@ -154,6 +154,91 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private String configuredTenantId;
 
   /**
+   * What the wiring of THIS adapter id registered: which process definition keys belong
+   * to which workflow module (story 104). It is the scope the awareness probes answer
+   * for, and <code>null</code> in tests - the probes then answer as they did before,
+   * which is what a setup without a second BPMS never notices.
+   */
+  private io.vanillabp.camunda7.wiring.Camunda7TaskRegistry taskRegistry;
+
+  /**
+   * @param taskRegistry The wiring registry of this adapter id
+   */
+  public void setTaskRegistry(
+      final io.vanillabp.camunda7.wiring.Camunda7TaskRegistry taskRegistry) {
+
+    this.taskRegistry = taskRegistry;
+
+  }
+
+  /**
+   * One scope of this adapter instance: the process definition keys of one workflow
+   * module, and the tenant they run in (<code>null</code> where the module's mode uses
+   * none).
+   *
+   * @param tenantId The Camunda tenant or <code>null</code>
+   * @param scopedProcessIds The process definition keys the engine knows them by
+   */
+  private record OwnScope(
+                          String tenantId,
+                          java.util.Set<String> scopedProcessIds) {
+  }
+
+  /**
+   * The scopes this adapter instance owns, one per workflow module (story 104).
+   * <p>
+   * <b>Why the probes need this.</b> The election asks every adapter whether it holds a
+   * workflow, and Camunda 7 used to answer by business key alone. A business key is the
+   * workflow-aggregate id, which is unique per aggregate TYPE and not across an
+   * application: two workflow modules of one engine whose aggregates count from one
+   * carry the same key. While Camunda 7 is the only BPMS that answer costs nothing,
+   * because the election picks this adapter either way; in a migration it wins the
+   * election for a workflow which lives in the other BPMS. The rule is written down in
+   * the election contract of {@code MigratableProcessService} (story 105).
+   * <p>
+   * Two adapter ids cannot share an engine here ({@code Camunda7InstanceIdentity}
+   * demands a different datasource or table prefix), so unlike Camunda 8 this is about
+   * the modules of one engine, not about a neighbour adapter.
+   *
+   * @return The scopes, empty where the wiring registered nothing (tests)
+   */
+  private java.util.List<OwnScope> ownScopes() {
+
+    if (taskRegistry == null) {
+      return java.util.List.of();
+    }
+    final var byModule = new java.util.LinkedHashMap<String, java.util.Set<String>>();
+    taskRegistry
+        .workflowModulesByScopedProcessId()
+        .forEach((
+            scopedProcessId,
+            workflowModuleId) -> byModule
+                .computeIfAbsent(workflowModuleId, module -> new java.util.LinkedHashSet<>())
+                .add(scopedProcessId));
+    return byModule
+        .entrySet()
+        .stream()
+        .map(entry -> new OwnScope(tenantIdOf(entry.getKey()), entry.getValue()))
+        .toList();
+
+  }
+
+  /**
+   * Narrows a runtime query down to one scope of this adapter instance.
+   */
+  private static org.camunda.bpm.engine.runtime.ProcessInstanceQuery within(
+      final org.camunda.bpm.engine.runtime.ProcessInstanceQuery query,
+      final OwnScope scope) {
+
+    final var scoped = query
+        .processDefinitionKeyIn(scope.scopedProcessIds().toArray(new String[0]));
+    return scope.tenantId() != null
+        ? scoped.tenantIdIn(scope.tenantId())
+        : scoped.withoutTenantId();
+
+  }
+
+  /**
    * Sets the name-clash-avoidance support and the configured tenant name (the
    * platform modules construct this service and inject them afterwards).
    *
@@ -490,10 +575,11 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String taskId) {
 
-    // the task ID of a Camunda 7 @TaskId handler is the parked execution's ID -
-    // globally unique within the engine, so no tenant/process scoping is needed
-    // (the business key is verified so a foreign engine's execution ID can never
-    // match a different workflow)
+    // the task ID of a Camunda 7 @TaskId handler is the parked execution's ID, unique
+    // within the engine. That the business key matches rules out an unrelated
+    // aggregate; what it does NOT rule out is a workflow of another workflow module of
+    // this engine carrying the same aggregate id, so the instance has to be one of this
+    // adapter's own scopes as well (story 104)
     try {
       final var execution = runtimeService
           .createExecutionQuery()
@@ -502,14 +588,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       if (execution == null) {
         return WorkflowAwareness.UNKNOWN_TO_BPMS;
       }
-      final var processInstance = runtimeService
-          .createProcessInstanceQuery()
-          .processInstanceId(execution.getProcessInstanceId())
-          .singleResult();
-      if ((processInstance == null) || !String.valueOf(workflowAggregateId).equals(processInstance.getBusinessKey())) {
-        return WorkflowAwareness.UNKNOWN_TO_BPMS;
-      }
-      return WorkflowAwareness.ACTIVE;
+      return awarenessOfInstance(execution.getProcessInstanceId(), workflowAggregateId);
     } catch (final org.camunda.bpm.engine.ProcessEngineException e) {
       // an embedded engine sharing the application's datasource practically cannot
       // be unavailable; an engine on its OWN datasource can - never fall back to
@@ -538,19 +617,36 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // was cleaned up an ended instance is indistinguishable from a never-existing
     // one - both map to UNKNOWN_TO_BPMS (the caller's guiding error explains the
     // causes).
+    // Story 104: both queries run PER SCOPE of this adapter instance. A business key is
+    // the aggregate id, which is unique per aggregate type and not across an
+    // application, so the unscoped question answers ACTIVE for the workflow of another
+    // workflow module of this engine which happens to count from the same number.
     try {
-      final var active = runtimeService
-          .createProcessInstanceQuery()
-          .processInstanceBusinessKey(String.valueOf(workflowAggregateId))
-          .count() > 0;
+      final var businessKey = String.valueOf(workflowAggregateId);
+      final var scopes = ownScopes();
+      if (scopes.isEmpty()) {
+        return awarenessOfWorkflowUnscoped(businessKey);
+      }
+      final var active = scopes
+          .stream()
+          .anyMatch(scope -> within(
+              runtimeService
+                  .createProcessInstanceQuery()
+                  .processInstanceBusinessKey(businessKey),
+              scope)
+              .count() > 0);
       if (active) {
         return WorkflowAwareness.ACTIVE;
       }
-      final var ended = historyService
-          .createHistoricProcessInstanceQuery()
-          .processInstanceBusinessKey(String.valueOf(workflowAggregateId))
-          .finished()
-          .count() > 0;
+      final var ended = scopes
+          .stream()
+          .anyMatch(scope -> withinHistory(
+              historyService
+                  .createHistoricProcessInstanceQuery()
+                  .processInstanceBusinessKey(businessKey)
+                  .finished(),
+              scope)
+              .count() > 0);
       return ended
           ? WorkflowAwareness.COMPLETED
           : WorkflowAwareness.UNKNOWN_TO_BPMS;
@@ -563,6 +659,86 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
           e);
       return WorkflowAwareness.BPMS_UNAVAILABLE;
     }
+
+  }
+
+  /**
+   * The answer of the times before story 104, used where the wiring registered nothing
+   * (tests): the business key alone.
+   */
+  private WorkflowAwareness awarenessOfWorkflowUnscoped(
+      final String businessKey) {
+
+    final var active = runtimeService
+        .createProcessInstanceQuery()
+        .processInstanceBusinessKey(businessKey)
+        .count() > 0;
+    if (active) {
+      return WorkflowAwareness.ACTIVE;
+    }
+    final var ended = historyService
+        .createHistoricProcessInstanceQuery()
+        .processInstanceBusinessKey(businessKey)
+        .finished()
+        .count() > 0;
+    return ended
+        ? WorkflowAwareness.COMPLETED
+        : WorkflowAwareness.UNKNOWN_TO_BPMS;
+
+  }
+
+  /**
+   * Narrows a history query down to one scope of this adapter instance.
+   */
+  private static org.camunda.bpm.engine.history.HistoricProcessInstanceQuery withinHistory(
+      final org.camunda.bpm.engine.history.HistoricProcessInstanceQuery query,
+      final OwnScope scope) {
+
+    final var scoped = query
+        .processDefinitionKeyIn(scope.scopedProcessIds().toArray(new String[0]));
+    return scope.tenantId() != null
+        ? scoped.tenantIdIn(scope.tenantId())
+        : scoped.withoutTenantId();
+
+  }
+
+  /**
+   * Whether the process instance behind a task belongs to this adapter's scope AND
+   * carries the expected business key (story 104). Both are needed: the business key
+   * rules out an unrelated aggregate, the scope rules out the same aggregate id in
+   * another workflow module of this engine.
+   *
+   * @param processInstanceId The instance the task belongs to
+   * @param workflowAggregateId The aggregate the caller means
+   * @return {@link WorkflowAwareness#ACTIVE} if this adapter may claim the task
+   */
+  private WorkflowAwareness awarenessOfInstance(
+      final String processInstanceId,
+      final Object workflowAggregateId) {
+
+    final var businessKey = String.valueOf(workflowAggregateId);
+    final var scopes = ownScopes();
+    if (scopes.isEmpty()) {
+      final var processInstance = runtimeService
+          .createProcessInstanceQuery()
+          .processInstanceId(processInstanceId)
+          .singleResult();
+      return (processInstance != null) && businessKey.equals(processInstance.getBusinessKey())
+          ? WorkflowAwareness.ACTIVE
+          : WorkflowAwareness.UNKNOWN_TO_BPMS;
+    }
+    final var own = scopes
+        .stream()
+        .anyMatch(scope -> within(
+            runtimeService
+                .createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .processInstanceBusinessKey(businessKey),
+            scope)
+            .count() > 0);
+    return own
+        ? WorkflowAwareness.ACTIVE
+        : WorkflowAwareness.UNKNOWN_TO_BPMS;
 
   }
 
@@ -637,8 +813,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String taskId) {
 
-    // user-task IDs (ACT_RU_TASK) are globally unique within the engine - the
-    // business key is verified like in awarenessOfTask
+    // user-task IDs (ACT_RU_TASK) are unique within the engine - the business key AND
+    // the scope are verified like in awarenessOfTask (story 104)
     try {
       final var task = taskService
           .createTaskQuery()
@@ -647,14 +823,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       if (task == null) {
         return WorkflowAwareness.UNKNOWN_TO_BPMS;
       }
-      final var processInstance = runtimeService
-          .createProcessInstanceQuery()
-          .processInstanceId(task.getProcessInstanceId())
-          .singleResult();
-      if ((processInstance == null) || !String.valueOf(workflowAggregateId).equals(processInstance.getBusinessKey())) {
-        return WorkflowAwareness.UNKNOWN_TO_BPMS;
-      }
-      return WorkflowAwareness.ACTIVE;
+      return awarenessOfInstance(task.getProcessInstanceId(), workflowAggregateId);
     } catch (final org.camunda.bpm.engine.ProcessEngineException e) {
       log.warn(
           "Camunda7[{}]: could not determine awareness of user task '{}' - reporting BPMS_UNAVAILABLE",
