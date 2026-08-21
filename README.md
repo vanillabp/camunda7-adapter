@@ -633,11 +633,16 @@ the number the badges above show). It also compares every module producing a `ja
 the two aggregates, so a module added to the build without being added to its report cannot stay
 unnoticed.
 
-The two thresholds differ, and the reason is worth knowing. Coverage is measured per platform, but
-the adapter core is platform-neutral: whatever exercises it counts only on the platform its tests run
-on, and almost everything which exercises this core is the Spring Boot integration-test suite with
-its embedded engine. The Quarkus threshold is therefore a floor against regression, not the 90 %
-rule, until how to count a platform-neutral adapter core is decided.
+Both platforms run the documented features end to end against a real embedded engine: Spring Boot in
+`integration-tests`, Quarkus in `quarkus/integration-tests`. That duplication is deliberate. The
+adapter core is platform-neutral, but a core being correct says nothing about a platform's glue ever
+calling it, so a core line a platform never reaches names a feature that platform never runs.
+
+The two thresholds still differ by what one suite can produce and the other cannot: the startup check
+for old process versions (story 57) needs several boots against one database, each with a different
+model, and a Quarkus prod-mode test boots its application once per test class. The Quarkus suite's
+class comment lists that and the three other cases it deliberately does not repeat. Everything else
+is within a point or two of the Spring Boot numbers.
 
 ## Noteworthy & Contributors
 

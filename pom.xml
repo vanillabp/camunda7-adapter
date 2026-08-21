@@ -31,6 +31,7 @@
     <module>spring-boot-webapps</module>
     <module>quarkus/runtime</module>
     <module>quarkus/deployment</module>
+    <module>quarkus/integration-tests</module>
     <module>integration-tests</module>
     <module>test-coverage-report</module>
   </modules>
@@ -51,11 +52,14 @@
     <jacoco.version>0.8.15</jacoco.version>
     <!-- the line each platform's aggregated report has to stay above, in PERCENT of
          covered instructions - enforced by test-coverage-report/coverage-gate. The rule
-         is 90; the Quarkus line is lower because the platform-neutral adapter core is
-         exercised by the Spring Boot integration tests and counts as uncovered on the
-         other platform. It is a floor against regression until that is decided. -->
+         is 90; the Quarkus line is lower because the startup check for old process
+         versions (story 57) needs several boots against one database, which a Quarkus
+         prod-mode test cannot produce - see the Quarkus suite's class comment for the
+         complete list. The Quarkus end-to-end suite of story 100 reaches 85.0, and the
+         line sits just below that so a run-to-run difference does not break a build
+         nothing changed in. It is never lowered to make a build pass. -->
     <coverage.threshold.spring-boot>90</coverage.threshold.spring-boot>
-    <coverage.threshold.quarkus>69</coverage.threshold.quarkus>
+    <coverage.threshold.quarkus>84</coverage.threshold.quarkus>
     <spi-for-java.version>1.2.0-SNAPSHOT</spi-for-java.version>
     <adapter-platform.version>2.0.0-SNAPSHOT</adapter-platform.version>
     <camunda.version>7.24.0</camunda.version>
