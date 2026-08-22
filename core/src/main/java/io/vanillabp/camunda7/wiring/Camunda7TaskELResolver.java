@@ -73,6 +73,12 @@ public class Camunda7TaskELResolver extends ELResolver {
 
   }
 
+  // both calls into the deprecated half of WorkflowTaskInvoker are the migration
+  // fallback of story 66, and this resolver is the only production caller of it: the
+  // 'removal' lint is mandatory and @Deprecated on a caller does not silence it, so
+  // without this the adapter reported the same two warnings in every build. Goes away
+  // in 2.1 together with the fallback.
+  @SuppressWarnings("removal")
   @Override
   public Object getValue(
       final ELContext context,

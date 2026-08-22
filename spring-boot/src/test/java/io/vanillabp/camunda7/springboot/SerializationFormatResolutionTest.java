@@ -7,14 +7,17 @@ import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.vanillabp.camunda7.engine.Camunda7EngineProperties;
+import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 
 /**
  * Story 66: the serialization format of nested shared values is resolved per workflow,
  * with a fallback to the workflow module and to the adapter.
  */
+@ExtendWith(SuppressOutputExtension.class)
 public class SerializationFormatResolutionTest {
 
   private static final String ADAPTER = "c7";

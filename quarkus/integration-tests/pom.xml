@@ -90,6 +90,13 @@
         <configuration>
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+            <!-- INFO and not WARN: what a level drops reaches no handler and therefore no
+                 capture either, so a failing test would replay nothing worth reading. The
+                 price is paid in the green build, by what is logged before the first
+                 extension callback - the augmentation of a prod-mode test logs into a log
+                 context of its own which no extension in this JVM reaches, one line per
+                 class (story 109). -->
+            <quarkus.log.level>INFO</quarkus.log.level>
             <maven.home>${maven.home}</maven.home>
             <maven.repo>${settings.localRepository}</maven.repo>
             <!--suppress UnresolvedMavenProperty - filled by goal jacoco-maven-plugin:prepare-agent in the root POM -->

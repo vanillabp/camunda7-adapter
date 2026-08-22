@@ -14,12 +14,16 @@ import java.util.Map;
 import org.camunda.bpm.engine.variable.value.ObjectValue;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Story 66: how the values a workflow aggregate shares become Camunda 7 variables - a
  * scalar stays comparable, a nested structure becomes an object variable in the
  * configured serialization format (which is what keeps dot-notated expressions working).
  */
+@ExtendWith(SuppressOutputExtension.class)
 public class Camunda7VariablesTest {
 
   @Test

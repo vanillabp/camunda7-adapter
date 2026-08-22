@@ -9,11 +9,15 @@ import java.util.Set;
 import org.camunda.bpm.model.bpmn.Bpmn;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Story 66: which identifiers the startup check has to ask the core about - the names a
  * model's conditions, timers and multi-instance collections read.
  */
+@ExtendWith(SuppressOutputExtension.class)
 public class Camunda7ExpressionIdentifiersTest {
 
   @Test
