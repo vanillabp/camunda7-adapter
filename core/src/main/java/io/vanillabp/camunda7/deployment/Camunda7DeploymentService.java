@@ -350,16 +350,26 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * Camunda 7 defaults to {@code none} although its engine is multi-tenant: it keeps
-   * workflow modules apart in more than one way (a tenant, prefixed identifiers, or an
-   * engine of its own per module), and which one an application wants is not something
-   * to presume. The choice is asked for by
-   * {@link #warnAboutUnscopedIdentifiers(String, boolean)} instead.
+   * Camunda 7 keeps the SPI's default, {@code by-adapter}, which on this engine means a
+   * tenant named after the workflow module: exactly what VanillaBP 1 deployed when
+   * nothing was configured. An application upgrading from version 1 without touching
+   * its configuration therefore finds the workflows it started back then, and that is
+   * the whole reason this is not a decision the adapter makes for itself.
+   * <p>
+   * It costs nothing on this engine: a tenant id is an attribute of the deployment, so
+   * the engine accepts any name and creates nothing (see {@link Camunda7TenantCheck}).
+   * The alternatives are named where they matter - by
+   * {@link #warnAboutUnscopedIdentifiers(String, boolean)} once a module runs
+   * unscoped, and by the wiki for an application which would rather prefix its
+   * identifiers or give a module an engine of its own.
+   * <p>
+   * Held by {@code Camunda7DeploymentServiceTest} (story 106; it asserted {@code none}
+   * between 2026-08-11 and 2026-08-22, which was the defect).
    */
   @Override
   public io.vanillabp.integration.adapter.spi.NameClashAvoidance defaultNameClashAvoidance() {
 
-    return io.vanillabp.integration.adapter.spi.NameClashAvoidance.NONE;
+    return io.vanillabp.integration.adapter.spi.NameClashAvoidance.BY_ADAPTER;
 
   }
 

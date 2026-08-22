@@ -17,7 +17,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What the Camunda 7 adapter contributes to the name-clash-avoidance model (story
  * 35): the mode applying without configuration, and how an unscoped workflow module
  * is reported - the alternatives to {@link NameClashAvoidance#NONE} are Camunda 7's,
- * so the message is the adapter's.
+ * so the message is the adapter's. The default is {@link NameClashAvoidance#BY_ADAPTER}
+ * because version 1 deployed a tenant per workflow module (story 106).
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7DeploymentServiceTest {
@@ -111,13 +112,14 @@ public class Camunda7DeploymentServiceTest {
   }
 
   @Test
-  @DisplayName("Without configuration the mode is NONE - Camunda 7 has more than one way to isolate")
-  public void defaultsToNone() {
+  @DisplayName("Without configuration the mode is BY_ADAPTER - what version 1 deployed")
+  public void defaultsToByAdapter() {
 
     assertEquals(
-        NameClashAvoidance.NONE,
+        NameClashAvoidance.BY_ADAPTER,
         serviceOfAdapterId("camunda7").defaultNameClashAvoidance(),
-        "a tenant, prefixes or an own engine are all possible, so none of them is presumed");
+        "version 1 deployed every workflow module into a tenant named after it, so an application "
+            + "upgrading without touching its configuration has to find its workflows again");
 
   }
 
