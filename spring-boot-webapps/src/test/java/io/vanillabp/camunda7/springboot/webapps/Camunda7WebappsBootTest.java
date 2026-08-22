@@ -69,6 +69,22 @@ public class Camunda7WebappsBootTest {
   }
 
   @Test
+  @DisplayName("The engine auto-configuration of Camunda is switched off in a booted application")
+  public void camundasOwnAutoConfigurationIsOff() {
+
+    // the unit test of the post processor proves what it contributes, this one proves
+    // that it RUNS. Interface and spring.factories key have to name the same type, and
+    // measured: naming the old key while implementing the new interface fails the boot
+    // with "not assignable to factory type", so this test is what catches a half-done
+    // migration (story 113)
+    assertEquals(
+        "false",
+        context.getEnvironment().getProperty(Camunda7WebappsEnvironmentPostProcessor.CAMUNDA_BPM_ENABLED),
+        "without it Camunda's starter builds a second engine on the same datasource");
+
+  }
+
+  @Test
   @DisplayName("A visitor of /camunda is sent into a web application of this engine")
   public void webappsAreServed() {
 
