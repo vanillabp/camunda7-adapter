@@ -30,6 +30,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7AwarenessTest {
 
+  /**
+   * What a probe is asked about (story 107).
+   */
+  private static final io.vanillabp.integration.adapter.spi.WorkflowScope SCOPE = io.vanillabp.integration.adapter.spi.WorkflowScope
+      .of("test-module", "TestProcess");
+
   private static AggregatePersistenceAware<String> persistence() {
 
     return new AggregatePersistenceAware<>() {
@@ -82,9 +88,9 @@ public class Camunda7AwarenessTest {
 
     // UNKNOWN_TO_BPMS would let the election move on to the next adapter and start or
     // complete the workflow a second time somewhere else
-    assertEquals(WorkflowAwareness.BPMS_UNAVAILABLE, testee.awarenessOfTask("4711", "execution-1"));
-    assertEquals(WorkflowAwareness.BPMS_UNAVAILABLE, testee.awarenessOfUserTask("4711", "user-task-1"));
-    assertEquals(WorkflowAwareness.BPMS_UNAVAILABLE, testee.awarenessOfWorkflow(persistence(), "4711"));
+    assertEquals(WorkflowAwareness.BPMS_UNAVAILABLE, testee.awarenessOfTask(SCOPE, "4711", "execution-1"));
+    assertEquals(WorkflowAwareness.BPMS_UNAVAILABLE, testee.awarenessOfUserTask(SCOPE, "4711", "user-task-1"));
+    assertEquals(WorkflowAwareness.BPMS_UNAVAILABLE, testee.awarenessOfWorkflow(SCOPE, persistence(), "4711"));
 
   }
 

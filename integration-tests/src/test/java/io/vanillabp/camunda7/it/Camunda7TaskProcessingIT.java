@@ -49,7 +49,21 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 @SuppressOutputExtension.SuppressBackgroundOutput
 public class Camunda7TaskProcessingIT {
 
+
   private static final String MODULE_ID = "c7-it";
+
+  /**
+   * What a probe is asked about (story 107): this test's workflow module and the BPMN
+   * processes its {@code @WorkflowService} serves. The probes answer for that scope and
+   * for nothing else, so a test calling them directly has to name it the way the platform
+   * would.
+   */
+  private static final io.vanillabp.integration.adapter.spi.WorkflowScope SCOPE = new io.vanillabp.integration.adapter.spi.WorkflowScope(
+      MODULE_ID, java.util.List
+          .of(
+              "TaskProcess", "ErrorProcess", "FailProcess", "AsyncProcess", "MultiInstanceProcess",
+              "AsyncCancelProcess", "CancelEventProcess", "MixedProcess", "UserTaskProcess",
+              "SilentUserTaskProcess", "MessageProcess"));
 
   @Autowired
   private RuntimeService runtimeService;
@@ -429,15 +443,15 @@ public class Camunda7TaskProcessingIT {
     // ACTIVE: execution exists and the business key matches
     assertEquals(
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.ACTIVE,
-        c7ProcessService.awarenessOfTask(aggregateId, taskId));
+        c7ProcessService.awarenessOfTask(SCOPE, aggregateId, taskId));
     // UNKNOWN: no such execution
     assertEquals(
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
-        c7ProcessService.awarenessOfTask(aggregateId, "999999999"));
+        c7ProcessService.awarenessOfTask(SCOPE, aggregateId, "999999999"));
     // UNKNOWN: execution exists but belongs to ANOTHER workflow aggregate
     assertEquals(
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
-        c7ProcessService.awarenessOfTask(-1L, taskId));
+        c7ProcessService.awarenessOfTask(SCOPE, -1L, taskId));
 
     // phase two tolerates a gone task (stale outbox entry - warned no-op)
     transactionTemplate.executeWithoutResult(status -> {
@@ -451,7 +465,7 @@ public class Camunda7TaskProcessingIT {
     // user-task awareness edge cases
     assertEquals(
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
-        c7ProcessService.awarenessOfUserTask(aggregateId, "999999999"));
+        c7ProcessService.awarenessOfUserTask(SCOPE, aggregateId, "999999999"));
 
     // correlation phase-two tolerance (story 23): no waiting subscription and an
     // already-started instance are warned no-ops, never errors
@@ -464,7 +478,7 @@ public class Camunda7TaskProcessingIT {
     // workflow awareness edge: unknown aggregate
     assertEquals(
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
-        c7ProcessService.awarenessOfWorkflow(null, -1L));
+        c7ProcessService.awarenessOfWorkflow(SCOPE, null, -1L));
 
     // cleanup: complete the still-open task
     transactionTemplate.executeWithoutResult(status -> {
@@ -522,10 +536,10 @@ public class Camunda7TaskProcessingIT {
 
     assertEquals(
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.ACTIVE,
-        c7ProcessService.awarenessOfUserTask(aggregateId, taskId));
+        c7ProcessService.awarenessOfUserTask(SCOPE, aggregateId, taskId));
     assertEquals(
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
-        c7ProcessService.awarenessOfUserTask(-1L, taskId));
+        c7ProcessService.awarenessOfUserTask(SCOPE, -1L, taskId));
 
     transactionTemplate.executeWithoutResult(status -> {
       final var aggregate = repository.findById(aggregateId).orElseThrow();

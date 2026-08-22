@@ -285,8 +285,8 @@ within the caller's transaction (embedded engine, shared datasource): a rollback
 leaves the task open - business data and engine state stay consistent
 automatically. Adapter IDs on their OWN datasource (`data-source-name`) run the
 completion two-phase through the outbox instead (same rule as workflow starts).
-`awarenessOfTask` locates a task by its globally unique execution ID plus a
-business-key check. `@TaskEvent CANCELED` IS delivered on Camunda 7: an END
+`awarenessOfTask` locates a task by its execution ID plus a business-key check
+and a SCOPE check (see below). `@TaskEvent CANCELED` IS delivered on Camunda 7: an END
 execution listener attached at parse time invokes handlers subscribing to
 lifecycle events when the open task's activity is canceled (interrupting
 boundary event, instance termination), within the cancellation's transaction.
@@ -300,7 +300,22 @@ never completes the task: `ProcessService#completeUserTask` maps to
 `TaskService.complete`, `#cancelUserTask` to `TaskService.handleBpmnError`
 (error-boundary routing) - within the caller's transaction on shared-datasource
 engines, two-phase on separate-datasource adapter ids. `awarenessOfUserTask`
-locates a task by its globally unique task ID plus a business-key check.
+locates a task by its task ID plus a business-key check and the same scope check.
+
+**What the awareness probes answer for (stories 104 and 107):** the election
+contract of `MigratableProcessService` says an adapter answers only for the scope
+it is ASKED about, and a Camunda 7 business key is the workflow-aggregate id,
+which is unique per aggregate type and not across an engine. The probes therefore
+narrow every query by the `WorkflowScope` the core hands them: the process
+definition keys its BPMN processes are known by (`processDefinitionKeyIn`,
+secondary processes of the same `@WorkflowService` included) plus the tenant its
+workflow module runs in (`tenantIdIn`, or `withoutTenantId` where the mode uses
+none). That holds for running instances and for the history query behind a
+`COMPLETED`, the two task probes verify the instance the same way in addition to
+the business key, and `awarenessOfWorkflowForRedispatch` inherits it through the
+SPI default. So a workflow of another workflow module, of another tenant or of a
+process this application never wired is `UNKNOWN_TO_BPMS`, and the election
+continues to the BPMS which really holds it.
 
 **Message correlation (story 23):** `correlateMessage` runs entirely within the
 caller's transaction (tenant = workflow module, business key = aggregate ID) - a
