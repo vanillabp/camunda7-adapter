@@ -90,6 +90,12 @@
         <configuration>
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+            <!-- The augmentation of a prod-mode test logs into a log context of its own,
+                 which no extension of the test JVM reaches, so its INFO line printed into
+                 the log of a green build (story 109). WARN is where that stops and a real
+                 problem still speaks. The application under test keeps its own log file,
+                 which is where a failure of the forked JVM is read. -->
+            <quarkus.log.level>WARN</quarkus.log.level>
             <maven.home>${maven.home}</maven.home>
             <maven.repo>${settings.localRepository}</maven.repo>
             <!--suppress UnresolvedMavenProperty - filled by goal jacoco-maven-plugin:prepare-agent in the root POM -->
