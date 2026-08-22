@@ -12,11 +12,15 @@ import org.camunda.bpm.engine.impl.cfg.AbstractProcessEnginePlugin;
 import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Story 66: the engine plugins an adapter id configures - and that their properties are
  * converted by CAMUNDA, the same way a <code>bpm-platform.xml</code> would.
  */
+@ExtendWith(SuppressOutputExtension.class)
 public class Camunda7EnginePluginsTest {
 
   /**
