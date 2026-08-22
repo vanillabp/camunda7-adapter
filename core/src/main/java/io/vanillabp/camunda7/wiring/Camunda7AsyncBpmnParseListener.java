@@ -80,8 +80,15 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
     if (!workflowEndedHandlerExists.test(processDefinition.getTenantId(), processDefinition.getKey())) {
       return;
     }
+    // 'addListener' and not the deprecated 'addExecutionListener', which does nothing but
+    // delegate here, and not 'addBuiltInListener' either: a built-in listener is the
+    // ENGINE's own and is the only kind which still runs when a caller skips custom
+    // listeners (AbstractEventAtomicOperation asks getBuiltInListeners then). Moving the
+    // notification there would make it fire on a forced deletion as well, which is a
+    // behaviour change, and the cancellation and start listeners below register the same
+    // way (story 115)
     processDefinition
-        .addExecutionListener(
+        .addListener(
             org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_END,
             workflowEndedListener);
 
