@@ -317,6 +317,19 @@ SPI default. So a workflow of another workflow module, of another tenant or of a
 process this application never wired is `UNKNOWN_TO_BPMS`, and the election
 continues to the BPMS which really holds it.
 
+The write behind `aggregateChanged` answers for the same scope (story 112). It is
+the half where getting it wrong costs more than a wrong answer: in Camunda 7 a
+variable write is what makes the engine re-evaluate conditional events, and the
+push writes a technical marker even for an aggregate which shares nothing, so an
+unscoped write would ADVANCE a workflow of another module, of another adapter id
+during a migration, or of another application on that database. The global-scope
+branch therefore narrows by definition key and tenant like the probes do, two
+instances within one scope end the operation with a message naming them instead of
+a `singleResult()` stack trace, and "the workflow is gone" - the tolerated case of
+an at-least-once phase two - is judged within the scope as well. The branch writing
+into the scope of a parked task needs no comparison: it is addressed by an
+execution id the engine handed out, which names exactly one execution.
+
 **Message correlation (story 23):** `correlateMessage` runs entirely within the
 caller's transaction (tenant = workflow module, business key = aggregate ID) - a
 rollback leaves the instance waiting. A correlation id matches via the V1

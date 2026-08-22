@@ -1,6 +1,8 @@
 package io.vanillabp.camunda7.processservice;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.camunda.bpm.engine.ProcessEngine;
 import org.camunda.bpm.engine.impl.cfg.StandaloneInMemProcessEngineConfiguration;
@@ -361,5 +363,121 @@ public class Camunda7AwarenessScopeTest {
 
   }
 
+  /**
+   * Story 112: the same question for the WRITE behind {@code aggregateChanged}, which the
+   * probes' fix had missed. It is the worse half of the defect - a probe answering for a
+   * foreign workflow reports something wrong, a write into one ADVANCES it, because a
+   * variable write is what makes Camunda 7 re-evaluate conditional events.
+   * <p>
+   * The aggregate shares nothing here (no sync model in this service), so what the push
+   * writes is the technical marker. That is deliberate: it is the case which reaches a
+   * foreign instance even when the two applications have not a single field in common.
+   */
+  private void push(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String taskId) {
+
+    processService
+        .aggregateChangedPhaseTwo(
+            workflowModuleId,
+            bpmnProcessId,
+            persistence(),
+            AGGREGATE_ID,
+            taskId);
+
+  }
+
+  private static io.vanillabp.integration.spi.AggregatePersistenceAware<Object> persistence() {
+
+    return new io.vanillabp.integration.spi.AggregatePersistenceAware<>() {
+
+      @Override
+      public Object loadById(
+          final Object workflowAggregateId) {
+        return workflowAggregateId;
+      }
+
+    };
+
+  }
+
+  private boolean wasWrittenTo(
+      final String processInstanceId) {
+
+    return engine
+        .getRuntimeService()
+        .getVariables(processInstanceId)
+        .containsKey(Camunda7ProcessService.AGGREGATE_CHANGED_MARKER);
+
+  }
+
+  @Test
+  @DisplayName("A changed aggregate is pushed into the own workflow, not into the one of another module")
+  public void aPushReachesTheOwnWorkflowOnly() {
+
+    final var own = start(OWN_PROCESS);
+    final var otherModule = engine
+        .getRuntimeService()
+        .createProcessInstanceByKey(OTHER_MODULE_PROCESS)
+        .processDefinitionTenantId(OTHER_MODULE)
+        .businessKey(AGGREGATE_ID)
+        .execute()
+        .getId();
+
+    push(MODULE, OWN_PROCESS, null);
+
+    assertTrue(wasWrittenTo(own), "the workflow of the calling scope receives the values");
+    assertFalse(
+        wasWrittenTo(otherModule),
+        "the workflow of the other module counts aggregate ids from the same number, and a write "
+            + "there would re-evaluate ITS conditional events");
+
+  }
+
+  @Test
+  @DisplayName("A push whose own workflow ended is tolerated instead of reaching a foreign one")
+  public void aPushOfAnEndedWorkflowIsTolerated() {
+
+    final var own = start(OWN_PROCESS);
+    final var foreign = start(OWN_PROCESS, FOREIGN_TENANT);
+    finish(own);
+
+    // phase two is at-least-once, so this is the redelivery of a push whose workflow has
+    // meanwhile ended: nothing to write, and above all nothing to write ELSEWHERE
+    push(MODULE, OWN_PROCESS, null);
+
+    assertFalse(
+        wasWrittenTo(foreign),
+        "the workflow of another tenant is not the tolerated case, it is a foreign workflow");
+
+  }
+
+  @Test
+  @DisplayName("In a migration the push goes into the workflow of its own adapter id")
+  public void aPushInAMigrationStaysWithItsAdapterId() {
+
+    // two adapter ids on one engine, which is what a migration between two Camunda 7
+    // installations of one database looks like: the second id runs the same workflow
+    // module under a tenant of its own (story 35), and both count aggregate ids alike
+    final var foreignAdapterTenant = "c7-prefixed";
+    deploy(foreignAdapterTenant, OWN_PROCESS);
+    final var own = start(OWN_PROCESS);
+    final var otherAdapterId = engine
+        .getRuntimeService()
+        .createProcessInstanceByKey(OWN_PROCESS)
+        .processDefinitionTenantId(foreignAdapterTenant)
+        .businessKey(AGGREGATE_ID)
+        .execute()
+        .getId();
+
+    push(MODULE, OWN_PROCESS, null);
+
+    assertTrue(wasWrittenTo(own), "the workflow of this adapter id receives the values");
+    assertFalse(
+        wasWrittenTo(otherAdapterId),
+        "the workflow deployed by the other adapter id is none of this one's business");
+
+  }
 
 }

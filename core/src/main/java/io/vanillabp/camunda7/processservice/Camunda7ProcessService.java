@@ -1334,7 +1334,10 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * @param taskId The parked execution whose scope receives the values, or
    *        <code>null</code> for the workflow's global scope
    * @param tolerateGoneWorkflow Whether a workflow gone by now is tolerated (phase
-   *        two is at-least-once) instead of failing
+   *        two is at-least-once) instead of failing. Judged within the scope of the
+   *        call since story 112: before that a foreign workflow carrying the same
+   *        business key made an ended workflow look present, and the redelivered push
+   *        then wrote there instead of being skipped
    */
   private void pushAggregate(
       final String businessKey,
@@ -1375,6 +1378,15 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
             businessKey);
         return;
       }
+      // no scope comparison on this path, and that is a decision rather than an
+      // omission (story 112): the caller names a task it was told about through
+      // '@TaskId', and a Camunda 7 execution id is a UUID the engine hands out per
+      // execution, so it addresses exactly one execution of one instance. That is
+      // unlike Camunda 8, where a job or user-task KEY ignores the tenant and a
+      // second adapter id on the same cluster can therefore be asked about a task of
+      // its own (story 103). What the branch below cannot rely on is the business
+      // key, which is why only it needs the filter.
+      //
       // the scope the task RUNS IN - the process, an embedded subprocess, or the one
       // iteration of a multi-instance embedded subprocess it belongs to. Writing on
       // the task's own execution would reach a boundary conditional event and nothing
@@ -1387,10 +1399,41 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       return;
     }
 
-    final var processInstance = runtimeService
-        .createProcessInstanceQuery()
-        .processInstanceBusinessKey(businessKey)
-        .singleResult();
+    // narrowed to the scope of the CALL (story 112): a business key is the
+    // workflow-aggregate id, unique per aggregate type and not across an engine, so the
+    // key alone also matches a workflow of another workflow module, of another adapter id
+    // during a migration, or of another application sharing the database. Writing there
+    // would not only report the wrong thing, it would ADVANCE that workflow, because a
+    // variable write is what makes Camunda 7 re-evaluate conditional events - and this
+    // method writes even for an aggregate sharing nothing (the marker above)
+    final var candidates = within(
+        runtimeService.createProcessInstanceQuery().processInstanceBusinessKey(businessKey),
+        io.vanillabp.integration.adapter.spi.WorkflowScope.of(workflowModuleId, bpmnProcessId))
+        .list();
+    if (candidates.size() > 1) {
+      // one business key is one aggregate, so two instances of one scope carrying it is a
+      // broken assumption rather than an ambiguity to resolve. It used to arrive as a
+      // 'ProcessEngineException' from singleResult() naming neither the aggregate nor the
+      // instances
+      throw new IllegalStateException(
+          ("Camunda7[%s]: aggregate '%s' of '%s/%s' is carried by %d workflows at once (%s)! A "
+              + "workflow-aggregate id belongs to ONE workflow, so its changed values cannot be "
+              + "pushed - check whether something started a second workflow with the same "
+              + "aggregate.")
+              .formatted(
+                  adapterId,
+                  businessKey,
+                  workflowModuleId,
+                  bpmnProcessId,
+                  candidates.size(),
+                  candidates
+                      .stream()
+                      .map(org.camunda.bpm.engine.runtime.ProcessInstance::getId)
+                      .collect(java.util.stream.Collectors.joining(", "))));
+    }
+    final var processInstance = candidates.isEmpty()
+        ? null
+        : candidates.get(0);
     if (processInstance == null) {
       if (!tolerateGoneWorkflow) {
         throw new io.vanillabp.spi.process.WorkflowNotFoundException(
