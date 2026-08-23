@@ -352,16 +352,19 @@ decides how a workflow module's identifiers are scoped. `by-adapter` deploys int
 Camunda tenant named after the workflow module (`tenant-id` overrides the name), which is
 the Version-1 behaviour; `use-prefix` deploys without a tenant and the adapter rewrites
 process ids, `camunda:calledElement` references, message and signal names, escalation and
-error codes; `none`, the default of THIS adapter, scopes nothing.
+error codes; `none` scopes nothing.
 
 Two decisions worth recording:
 
-- **The default is `none`, although the engine is multi-tenant.** Camunda 7 offers three
-  ways of keeping modules apart (a tenant, prefixed identifiers, an engine per module),
-  and picking one for the application would presume its operating model. The adapter WARNs
-  per workflow module instead, naming all three, until `accept-unscoped-identifiers`
-  acknowledges that the identifiers are unique. The acknowledgement is a statement about
-  the application, not a log level, which is why it is not simply a logger configuration.
+- **The default is `by-adapter`, the tenant per workflow module.** It is what version 1
+  deployed, so an application upgrading without touching its configuration finds its
+  running workflows again, and it costs this engine nothing (a tenant id is an attribute
+  of the deployment, see below). The default stood at `none` between 2026-08-11 and
+  2026-08-22, which broke exactly that upgrade path - story 106. Where an application
+  chooses `none`, the adapter WARNs per workflow module and names all three ways of
+  keeping modules apart, until `accept-unscoped-identifiers` acknowledges that the
+  identifiers are unique. The acknowledgement is a statement about the application, not a
+  log level, which is why it is not simply a logger configuration.
 - **Task definitions are NOT prefixed**, unlike on Camunda 8. A Camunda 7 task definition
   is the expression text of the task (`camunda:expression`/`camunda:delegateExpression`)
   respectively the `camunda:formKey`, and it is resolved WITHIN the process by VanillaBP's

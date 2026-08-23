@@ -78,7 +78,7 @@ public class Camunda7WorkflowViewerTest {
   @DisplayName("A workflow module without a tenant asks without one - Camunda rejects a null tenant id")
   public void aModuleWithoutTenantIsQueriedWithoutTenant() {
 
-    // 'name-clash-avoidance: none' is the DEFAULT of this adapter, and then there is no
+    // a workflow module reached with 'name-clash-avoidance: none' (or 'use-prefix') has no
     // tenant at all. Passing null to tenantIdIn does not mean "any tenant" - the engine
     // throws NullValueException('tenantIds contains null value'), which used to make every
     // viewer call of a default-configured application fail.
