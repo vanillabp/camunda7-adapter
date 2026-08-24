@@ -190,7 +190,7 @@ public class Camunda7AdapterBootTest {
 
           Assertions.assertNotNull(context.getStartupFailure(), "boot has to fail with a guiding message");
 
-          var cause = (Throwable) context.getStartupFailure();
+          var cause = context.getStartupFailure();
           while (cause.getCause() != null) {
             cause = cause.getCause();
           }
@@ -324,7 +324,7 @@ public class Camunda7AdapterBootTest {
 
           Assertions.assertNotNull(context.getStartupFailure(), "boot has to fail with a guiding message");
 
-          var cause = (Throwable) context.getStartupFailure();
+          var cause = context.getStartupFailure();
           while (cause.getCause() != null) {
             cause = cause.getCause();
           }

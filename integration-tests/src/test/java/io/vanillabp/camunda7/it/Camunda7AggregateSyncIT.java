@@ -102,7 +102,7 @@ public class Camunda7AggregateSyncIT {
         .list()
         .stream()
         .collect(Collectors.toMap(
-            variable -> variable.getName(),
+            org.camunda.bpm.engine.runtime.VariableInstance::getName,
             variable -> String.valueOf(variable.getValue())));
 
   }
@@ -167,7 +167,7 @@ public class Camunda7AggregateSyncIT {
         .processInstanceId(historicInstance.getId())
         .list()
         .stream()
-        .map(variable -> variable.getName())
+        .map(org.camunda.bpm.engine.history.HistoricVariableInstance::getName)
         .toList();
     // FULL is the default of every adapter, so every attribute of this
     // unannotated aggregate is a variable the model may read

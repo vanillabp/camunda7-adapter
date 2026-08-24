@@ -48,6 +48,9 @@ import lombok.extern.slf4j.Slf4j;
  * dispatches task executions through the core's {@code WorkflowTaskInvoker}.
  */
 @Slf4j
+// no Lombok here: the accessors are the deliberate surface of this class,
+// and generating them would hide which of its fields are meant to be read
+@SuppressWarnings("LombokSetterMayBeUsed")
 public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnModelInstance, Camunda7ProcessingContext> {
 
   /**
@@ -806,17 +809,6 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * Reports the start events the engine fires on its own (timer, signal,
-   * conditional) to the core, which validates the application's
-   * <code>&#64;WorkflowStartedByBpms</code> methods against them, and remembers the
-   * PLAIN signal names for the listener attached at parse time.
-   *
-   * @param workflowModuleId The workflow module ID
-   * @param bpmnProcessId The plain BPMN process ID
-   * @param scopedBpmnProcessId The process definition key the engine will know
-   * @param model The BPMN model
-   */
-  /**
    * Reports every expression of the model which reads an attribute of the workflow
    * aggregate that is NOT shared with the BPMS.
    * <p>
@@ -907,6 +899,17 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
   }
 
+  /**
+   * Reports the start events the engine fires on its own (timer, signal,
+   * conditional) to the core, which validates the application's
+   * <code>&#64;WorkflowStartedByBpms</code> methods against them, and remembers the
+   * PLAIN signal names for the listener attached at parse time.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The plain BPMN process ID
+   * @param scopedBpmnProcessId The process definition key the engine will know
+   * @param model The BPMN model
+   */
   private void wireBpmsInitiatedStarts(
       final String workflowModuleId,
       final String bpmnProcessId,

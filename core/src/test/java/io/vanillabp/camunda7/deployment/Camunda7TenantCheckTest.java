@@ -87,7 +87,7 @@ public class Camunda7TenantCheckTest {
             "loan-approval",
             identityServiceKnowing("banking", "insurance")));
 
-    assertEquals(1, warnings.size(), () -> warnings.toString());
+    assertEquals(1, warnings.size(), warnings::toString);
     final var message = warnings.getFirst();
     assertTrue(message.contains("'loan-approval'"), () -> message);
     assertTrue(message.contains("banking"), () -> message);

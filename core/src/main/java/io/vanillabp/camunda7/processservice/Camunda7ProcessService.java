@@ -43,6 +43,9 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #startProcessInstance(String, String, Object)}.
  */
 @Slf4j
+// no Lombok here: the accessors are the deliberate surface of this class,
+// and generating them would hide which of its fields are meant to be read
+@SuppressWarnings("LombokSetterMayBeUsed")
 public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   private final String adapterId;
@@ -406,7 +409,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   /**
    * Starts a Camunda 7 process instance inside the caller's transaction. The
    * <b>business key</b> is the workflow-aggregate ID as a string, the <b>tenant ID</b> is
-   * the workflow module ID (matching how {@link Camunda7DeploymentService} deployed the
+   * the workflow module ID (matching how {@code Camunda7DeploymentService} deployed the
    * process). Because the embedded engine shares the application's data source and
    * transaction, the created instance is committed or rolled back together with the
    * business data.
@@ -1214,8 +1217,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
                   workflowModuleId,
                   correlationId == null
                       ? ""
-                      : " with correlation id '%s' (the waiting execution expects the one stored in "
-                          + "its local variable '%s')".formatted(
+                      : (" with correlation id '%s' (the waiting execution expects the one stored in "
+                          + "its local variable '%s')").formatted(
                               correlationId,
                               correlationIdVariableName(bpmnProcessId, messageName))));
     }
@@ -1318,8 +1321,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Writes the aggregate's shared values into the workflow (see
-   * {@link #operatorContext}) and lets the engine re-evaluate what waits for a
-   * change.
+   * {@link #aggregateForOperatorContext}) and lets the engine re-evaluate what waits
+   * for a change.
    * <p>
    * Camunda 7 evaluates conditional events when a variable of their scope changes,
    * so the write itself is the trigger - and it has to happen even for an aggregate

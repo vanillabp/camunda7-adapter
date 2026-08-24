@@ -228,12 +228,12 @@ public class Camunda7CallActivitiesTest {
 
     final var businessKeys = businessKeysOf(preparedModel(), "assessRiskWithOwnKey");
 
-    assertEquals(1, businessKeys.size(), () -> businessKeys.toString());
+    assertEquals(1, businessKeys.size(), businessKeys::toString);
     assertTrue(
         businessKeys
             .getFirst()
             .contains("otherKey"),
-        () -> businessKeys.toString());
+        businessKeys::toString);
 
   }
 

@@ -2,6 +2,9 @@ package io.vanillabp.camunda7.engine;
 
 import java.util.Map;
 
+import lombok.Getter;
+import lombok.Setter;
+
 /**
  * One engine plugin of an adapter id: which class, and the properties Camunda
  * applies to it.
@@ -21,24 +24,13 @@ import java.util.Map;
  *             allowed-types: my.project.**,other.project.**
  * </pre>
  */
+@Getter
+@Setter
 public class Camunda7EnginePluginProperties {
 
   private String pluginClass;
 
   private Map<String, String> properties = Map.of();
-
-  public String getPluginClass() {
-    return pluginClass;
-  }
-
-  public void setPluginClass(
-      final String pluginClass) {
-    this.pluginClass = pluginClass;
-  }
-
-  public Map<String, String> getProperties() {
-    return properties;
-  }
 
   public void setProperties(
       final Map<String, String> properties) {

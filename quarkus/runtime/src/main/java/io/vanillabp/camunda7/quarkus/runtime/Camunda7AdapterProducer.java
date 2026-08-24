@@ -144,10 +144,6 @@ public class Camunda7AdapterProducer {
 
 
   /**
-   * The tenant name configured for an adapter id or <code>null</code> - the workflow
-   * module id names the tenant then.
-   */
-  /**
    * The serialization format configured for one workflow, most specific first: the
    * workflow, its workflow module, the adapter.
    *
@@ -229,6 +225,10 @@ public class Camunda7AdapterProducer {
 
   }
 
+  /**
+   * The tenant name configured for an adapter id or <code>null</code> - the workflow
+   * module id names the tenant then.
+   */
   private static String configuredTenantIdOf(
       final VanillaBpCamunda7Properties overlay,
       final String adapterId) {

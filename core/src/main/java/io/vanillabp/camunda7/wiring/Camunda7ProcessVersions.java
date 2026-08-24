@@ -31,6 +31,9 @@ import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
  * elsewhere - the query only ever runs where a version TAG is involved.</li>
  * </ul>
  */
+// no Lombok here: the accessors are the deliberate surface of this class,
+// and generating them would hide which of its fields are meant to be read
+@SuppressWarnings("LombokSetterMayBeUsed")
 public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
 
   private final RepositoryService repositoryService;

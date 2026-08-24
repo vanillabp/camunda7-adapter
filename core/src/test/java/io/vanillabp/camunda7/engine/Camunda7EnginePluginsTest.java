@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
+import lombok.Setter;
 
 /**
  * The engine plugins an adapter id configures - and that their properties are
@@ -26,6 +27,7 @@ public class Camunda7EnginePluginsTest {
   /**
    * Stands in for a dataformat plugin: it has the property types such a plugin has.
    */
+  @Setter
   public static class TestPlugin extends AbstractProcessEnginePlugin {
 
     private String encoding;
@@ -33,21 +35,6 @@ public class Camunda7EnginePluginsTest {
     private boolean ignoreUnknownElements;
 
     private int maxDepth;
-
-    public void setEncoding(
-        final String encoding) {
-      this.encoding = encoding;
-    }
-
-    public void setIgnoreUnknownElements(
-        final boolean ignoreUnknownElements) {
-      this.ignoreUnknownElements = ignoreUnknownElements;
-    }
-
-    public void setMaxDepth(
-        final int maxDepth) {
-      this.maxDepth = maxDepth;
-    }
 
     @Override
     public void preInit(

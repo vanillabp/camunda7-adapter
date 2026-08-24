@@ -88,7 +88,6 @@ public class Camunda7StartWorkflowIT {
 
   @Test
   @DisplayName("Starting inside a transaction creates a process instance with business key = aggregate id")
-  @SuppressWarnings("unchecked")
   public void startInsideTransactionCreatesInstanceWithBusinessKey() {
 
     final var aggregateId = transactionTemplate.execute(status -> {
@@ -118,7 +117,6 @@ public class Camunda7StartWorkflowIT {
 
   @Test
   @DisplayName("Rolling back the transaction removes both the aggregate and the process instance")
-  @SuppressWarnings("unchecked")
   public void rollbackRemovesAggregateAndProcessInstance() {
 
     final var aggregateIdHolder = new AtomicReference<Long>();

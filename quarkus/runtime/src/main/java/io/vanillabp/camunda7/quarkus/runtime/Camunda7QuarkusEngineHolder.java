@@ -37,6 +37,9 @@ import jakarta.transaction.TransactionManager;
  *       Boot).</li>
  * </ul>
  */
+// no Lombok here: the accessors are the deliberate surface of this class,
+// and generating them would hide which of its fields are meant to be read
+@SuppressWarnings("LombokGetterMayBeUsed")
 public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLifecycle, AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(Camunda7QuarkusEngineHolder.class);
@@ -64,27 +67,6 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
   private volatile boolean closed = false;
 
   /**
-   * Builds the engine for one adapter id.
-   *
-   * @param adapterId The adapter id
-   * @param properties The adapter id's engine settings
-   *        (<code>vanillabp.adapters.&lt;id&gt;.*</code>)
-   * @param dataSource The Agroal datasource the engine runs on
-   * @param usesSeparateDataSource Whether the datasource is a NAMED one (not the
-   *        application's default) - such ids start workflows two-phase (see the
-   *        process service)
-   * @param transactionManager The CDI (Narayana) transaction manager
-   */
-  /**
-   * Whether the application asked to be told about the end of workflows of the
-   * process definition the engine is parsing.
-   *
-   * @param workflowEndedInvoker The core's invoker
-   * @param tenantId The tenant of the deployment (may be <code>null</code>)
-   * @param processDefinitionKey The process definition key the engine parses
-   * @return Whether an end listener has to be attached
-   */
-  /**
    * Whether this engine reports the end of a workflow, which it does when the core
    * handed over its invoker. False means every <code>&#64;WorkflowEnded</code> method
    * of a process deployed here stays silent - the deployment service says so instead
@@ -98,6 +80,15 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
 
   }
 
+  /**
+   * Whether the application asked to be told about the end of workflows of the
+   * process definition the engine is parsing.
+   *
+   * @param workflowEndedInvoker The core's invoker
+   * @param tenantId The tenant of the deployment (may be <code>null</code>)
+   * @param processDefinitionKey The process definition key the engine parses
+   * @return Whether an end listener has to be attached
+   */
   private boolean workflowEndedHandlerExists(
       final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker,
       final String tenantId,
@@ -122,6 +113,15 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
    * <code>&#64;WorkflowEnded</code> method was simply never called. What
    * an engine does not support is the adapter's decision, not something a forgotten
    * argument decides.
+   *
+   * @param adapterId The adapter id
+   * @param properties The adapter id's engine settings
+   *        (<code>vanillabp.adapters.&lt;id&gt;.*</code>)
+   * @param dataSource The Agroal datasource the engine runs on
+   * @param usesSeparateDataSource Whether the datasource is a NAMED one (not the
+   *        application's default) - the engine cannot join the caller's transaction
+   *        then, which the task delivery has to account for
+   * @param transactionManager The CDI (Narayana) transaction manager
    */
   public Camunda7QuarkusEngineHolder(
       final String adapterId,

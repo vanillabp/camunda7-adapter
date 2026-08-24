@@ -40,19 +40,11 @@ public class Camunda7ProcessingContext {
   }
 
   /**
-   * Remembers the given BPMN model for deployment. Adding the same file name again (once
-   * per executable process of a multi-process file) keeps a single model instance.
-   *
-   * @param filename The BPMN file name (used as the deployment resource name)
-   * @param model The parsed BPMN model
-   */
-  /**
    * The PLAIN BPMN process ids of the module's executable processes, collected in
    * {@code prepareBpmn} - the input of the collision check (two processes must
    * not end up under the same prefixed identifier, see decision 3 in the
    * repository's README.md).
    */
-  @lombok.Getter
   private final java.util.List<String> deployedProcessIds = new java.util.LinkedList<>();
 
   /**
@@ -69,6 +61,13 @@ public class Camunda7ProcessingContext {
 
   }
 
+  /**
+   * Remembers the given BPMN model for deployment. Adding the same file name again (once
+   * per executable process of a multi-process file) keeps a single model instance.
+   *
+   * @param filename The BPMN file name (used as the deployment resource name)
+   * @param model The parsed BPMN model
+   */
   public void addResource(
       final String filename,
       final BpmnModelInstance model) {

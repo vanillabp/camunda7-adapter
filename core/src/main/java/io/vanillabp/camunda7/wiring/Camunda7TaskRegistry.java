@@ -13,6 +13,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Keyed by (tenant ID = workflow module ID, BPMN process ID) - one engine serves
  * several workflow modules.
  */
+// no Lombok here: the accessors are the deliberate surface of this class,
+// and generating them would hide which of its fields are meant to be read
+@SuppressWarnings({
+    "LombokGetterMayBeUsed", "LombokSetterMayBeUsed"
+})
 public class Camunda7TaskRegistry {
 
   private record RegistryKey(

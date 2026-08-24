@@ -51,6 +51,9 @@ import lombok.extern.slf4j.Slf4j;
  * </ul>
  */
 @Slf4j
+// no Lombok here: the accessors are the deliberate surface of this class,
+// and generating them would hide which of its fields are meant to be read
+@SuppressWarnings("LombokGetterMayBeUsed")
 public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle, ApplicationContextAware, InitializingBean, AutoCloseable {
 
   private final String adapterId;
@@ -92,19 +95,6 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
   private volatile boolean closed = false;
 
-  /**
-   * Prepares the engine holder for one adapter id (the engine itself is built in
-   * {@link #afterPropertiesSet()}).
-   *
-   * @param adapterId The adapter id
-   * @param properties The adapter id's engine settings
-   *        (<code>vanillabp.adapters.&lt;id&gt;.*</code>)
-   * @param applicationDataSource The application's datasource (unused - may be
-   *        <code>null</code> - if <code>data-source-name</code> is configured)
-   * @param applicationTransactionManager The application's transaction manager
-   *        (unused - may be <code>null</code> - if <code>data-source-name</code> is
-   *        configured)
-   */
   /**
    * The core's entry point for workflows the engine starts on its own (timer, signal
    * or conditional start events). May be <code>null</code> - the engine then attaches
@@ -175,15 +165,6 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   }
 
   /**
-   * Whether the application asked to be told about the end of workflows of the
-   * process definition the engine is parsing. The wiring already registered which
-   * workflow module and plain process id the definition key belongs to.
-   *
-   * @param tenantId The tenant of the deployment (may be <code>null</code>)
-   * @param processDefinitionKey The process definition key the engine parses
-   * @return Whether an end listener has to be attached
-   */
-  /**
    * Whether this engine reports the end of a workflow, which it does when the core
    * handed over its invoker. False means every <code>&#64;WorkflowEnded</code> method
    * of a process deployed here stays silent - the deployment service says so instead
@@ -197,6 +178,15 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
   }
 
+  /**
+   * Whether the application asked to be told about the end of workflows of the
+   * process definition the engine is parsing. The wiring already registered which
+   * workflow module and plain process id the definition key belongs to.
+   *
+   * @param tenantId The tenant of the deployment (may be <code>null</code>)
+   * @param processDefinitionKey The process definition key the engine parses
+   * @return Whether an end listener has to be attached
+   */
   private boolean workflowEndedHandlerExists(
       final String tenantId,
       final String processDefinitionKey) {

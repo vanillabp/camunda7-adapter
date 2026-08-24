@@ -376,9 +376,7 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
     // the walk collects innermost first - the SPI contract is outermost first
     final var outermostFirst = new LinkedHashMap<String, MultiInstanceValue>();
-    result
-        .reversed()
-        .forEach(outermostFirst::put);
+    outermostFirst.putAll(result.reversed());
     return outermostFirst;
 
   }

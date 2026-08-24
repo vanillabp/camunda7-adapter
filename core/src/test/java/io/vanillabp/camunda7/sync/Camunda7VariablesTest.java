@@ -60,8 +60,8 @@ public class Camunda7VariablesTest {
                 .of(
                     "amount", new BigDecimal("19.99"),
                     "huge", new BigInteger("42"),
-                    "ratio", Float.valueOf(1.5f),
-                    "grade", Character.valueOf('A')),
+                    "ratio", 1.5f,
+                    "grade", 'A'),
             "application/xstream");
 
     // a model comparing a number means arithmetic - as text '19.99' would not compare
