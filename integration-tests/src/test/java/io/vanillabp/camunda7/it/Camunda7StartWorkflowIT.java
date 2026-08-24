@@ -29,7 +29,7 @@ import io.vanillabp.spi.process.ProcessService;
  *   <li>BPMN resources are deployed with the workflow module ID as the Camunda tenant ID,</li>
  *   <li>starting a workflow creates a process instance whose business key equals the
  *       aggregate ID - through the adapter's own method within the transaction, through
- *       the VanillaBP user API right after the commit (story 63), and</li>
+ *       the VanillaBP user API right after the commit, and</li>
  *   <li>rolling back the surrounding transaction removes BOTH the aggregate and the process
  *       instance (the embedded-engine guarantee).</li>
  * </ol>
@@ -167,7 +167,7 @@ public class Camunda7StartWorkflowIT {
   /**
    * The canonical end-to-end path through the VanillaBP user API: starting a workflow via
    * {@link ProcessService#startWorkflow(Object)} schedules the instance, which is created
-   * right after the transaction committed (story 63), and rolling the transaction back
+   * right after the transaction committed, and rolling the transaction back
    * removes the aggregate and lets no instance be created at all.
    */
   @Test

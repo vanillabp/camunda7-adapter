@@ -48,7 +48,7 @@ public class Camunda7AdapterProducer {
               adapterId, engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
                   .getHistoryService(), aggregateSync);
           processService.setScoping(scoping, configuredTenantIdOf(overlay, adapterId));
-          // story 66: which serialization format nested shared values are stored in,
+          // Which serialization format nested shared values are stored in,
           // resolved per workflow with a fallback to the module and the adapter
           final io.vanillabp.camunda7.sync.Camunda7SerializationFormats formats = (
               workflowModuleId,
@@ -90,7 +90,7 @@ public class Camunda7AdapterProducer {
               engine
                   .getProcessEngine()
                   .getIdentityService());
-          // story 57: how many workflows still run on an older version
+          // How many workflows still run on an older version
           deploymentService.setRuntimeService(
               engine
                   .getProcessEngine()
@@ -120,7 +120,7 @@ public class Camunda7AdapterProducer {
   /**
    * What makes an adapter id a distinct engine: its datasource and table prefix
    * (see {@code Camunda7InstanceIdentity}) - the adapter SPI hook
-   * {@code validateDistinctAdapterInstances} compares them (story 34).
+   * {@code validateDistinctAdapterInstances} compares them.
    */
   private static io.vanillabp.camunda7.engine.Camunda7InstanceIdentity instanceIdentityOf(
       final VanillaBpCamunda7Properties overlay,
@@ -145,11 +145,11 @@ public class Camunda7AdapterProducer {
 
   /**
    * The tenant name configured for an adapter id or <code>null</code> - the workflow
-   * module id names the tenant then (story 35).
+   * module id names the tenant then.
    */
   /**
    * The serialization format configured for one workflow, most specific first: the
-   * workflow, its workflow module, the adapter (story 66).
+   * workflow, its workflow module, the adapter.
    *
    * @param overlay The adapter's configuration overlay
    * @param adapterId The adapter id

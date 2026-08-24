@@ -27,21 +27,21 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
 
   /**
    * Notifies optional <code>&#64;WorkflowTask</code> handlers about user-task
-   * lifecycle events (story 24) - attached to user tasks for the engine's global
+   * lifecycle events - attached to user tasks for the engine's global
    * CREATE and DELETE task-listener events.
    */
   private final Camunda7UserTaskEventListener userTaskEventListener;
 
   /**
    * Builds the workflow aggregate of a workflow the engine started on its own -
-   * attached to timer, signal and conditional start events (story 41). May be
+   * attached to timer, signal and conditional start events. May be
    * <code>null</code>: an engine built without it simply does not serve such
    * processes.
    */
   private final java.util.function.Function<io.vanillabp.spi.service.BpmsStartTrigger.Kind, org.camunda.bpm.engine.delegate.ExecutionListener> bpmsInitiatedStartListenerFactory;
 
   /**
-   * Tells the application that a workflow ended (story 43) - attached to the PROCESS
+   * Tells the application that a workflow ended - attached to the PROCESS
    * scope, but only where a <code>&#64;WorkflowEnded</code> method exists. May be
    * <code>null</code>: an engine built without it never notifies.
    */
@@ -54,7 +54,7 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
   private java.util.function.BiPredicate<String, String> workflowEndedHandlerExists;
 
   /**
-   * Hands over the end-of-workflow notification (story 43).
+   * Hands over the end-of-workflow notification.
    *
    * @param workflowEndedListener The listener to attach
    * @param workflowEndedHandlerExists Whether a process definition needs it
@@ -86,7 +86,7 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
     // listeners (AbstractEventAtomicOperation asks getBuiltInListeners then). Moving the
     // notification there would make it fire on a forced deletion as well, which is a
     // behaviour change, and the cancellation and start listeners below register the same
-    // way (story 115)
+    // way
     processDefinition
         .addListener(
             org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_END,
@@ -202,7 +202,7 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
       final ActivityImpl activity) {
 
     asyncAfterOnly(activity);
-    // user-task lifecycle notifications (story 24): the engine's global CREATE
+    // user-task lifecycle notifications: the engine's global CREATE
     // and DELETE task-listener events reach optional @WorkflowTask handlers -
     // BUILT-IN listeners run before any modeller-defined ones (V1 semantics)
     final var taskDefinition = ((org.camunda.bpm.engine.impl.bpmn.behavior.UserTaskActivityBehavior) activity

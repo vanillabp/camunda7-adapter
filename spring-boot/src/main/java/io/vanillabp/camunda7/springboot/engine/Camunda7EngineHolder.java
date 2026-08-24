@@ -113,7 +113,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   private io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker;
 
   /**
-   * The core's entry point for workflows which ended (story 43). May be
+   * The core's entry point for workflows which ended. May be
    * <code>null</code> - the engine then attaches no end listener.
    */
   private final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker;
@@ -123,8 +123,9 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    * offers - the same rule as on Quarkus. A convenience constructor (or a setter
    * called later) leaves an invoker at <code>null</code>, which switches a feature
    * off silently: the engine attaches no end listener, the application boots without
-   * a warning and a <code>&#64;WorkflowEnded</code> method is never called (story
-   * 72).
+   * a warning and a <code>&#64;WorkflowEnded</code> method is never called.
+   * <p>
+   * The engine itself is built in {@link #afterPropertiesSet()}.
    *
    * @param adapterId The adapter id
    * @param properties The adapter id's engine settings
@@ -186,7 +187,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    * Whether this engine reports the end of a workflow, which it does when the core
    * handed over its invoker. False means every <code>&#64;WorkflowEnded</code> method
    * of a process deployed here stays silent - the deployment service says so instead
-   * of leaving the application waiting (story 72).
+   * of leaving the application waiting.
    *
    * @return Whether the end listener was attached
    */
@@ -240,7 +241,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       transactionManager = applicationTransactionManager;
     }
 
-    // story 47: an adapter id running on a table prefix needs its tables to exist -
+    // An adapter id running on a table prefix needs its tables to exist -
     // Camunda's schema management ignores the prefix and would create a set of
     // unprefixed ACT_* tables here. Asked BEFORE the engine is built, so those tables
     // are never written
@@ -287,7 +288,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     // Provide an engine-wide default so BPMN models need not declare it individually
     // (a process may still override it via camunda:historyTimeToLive).
     configuration.setHistoryTimeToLive(properties.getHistoryTimeToLive());
-    // story 66: nested values shared by a workflow aggregate become object variables, and
+    // Nested values shared by a workflow aggregate become object variables, and
     // the format they are stored in is the application's choice - configured once at the
     // adapter and applied to the engine here, so nobody has to touch the engine
     // configuration for it. A workflow or a workflow module may override the format for
@@ -296,13 +297,13 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       configuration.setDefaultSerializationFormat(properties.getSerializationFormat());
     }
     // an own table prefix makes two adapter ids distinct engines on ONE datasource
-    // (the side-by-side migration setup on a single database, story 34). The tables
+    // (the side-by-side migration setup on a single database). The tables
     // of the prefix exist - Camunda7TablePrefixSchema asked about that above
     if ((properties.getTablePrefix() != null) && !properties.getTablePrefix().isBlank()) {
       configuration.setDatabaseTablePrefix(properties.getTablePrefix());
     }
 
-    // story 66: the engine plugins - the way a serialization dataformat (camunda-xstream,
+    // The engine plugins - the way a serialization dataformat (camunda-xstream,
     // SPIN) reaches an embedded engine. Two ways in: configured per adapter id
     // ('vanillabp.adapters.<id>.engine-plugins', properties applied by Camunda itself), or
     // contributed as a bean, which suits a plugin configuring itself from the

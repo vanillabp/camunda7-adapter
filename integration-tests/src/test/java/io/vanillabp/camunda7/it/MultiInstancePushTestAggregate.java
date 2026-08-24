@@ -13,8 +13,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The aggregate of the multi-instance half of the aggregateChanged integration test
- * (story 44): the workflow parks in every iteration of a multi-instance
+ * The aggregate of the multi-instance half of the aggregateChanged integration test:
+ * the workflow parks in every iteration of a multi-instance
  * embedded subprocess, so the test can push into the scope of ONE iteration and see
  * that only that iteration's event subprocess reacts.
  */

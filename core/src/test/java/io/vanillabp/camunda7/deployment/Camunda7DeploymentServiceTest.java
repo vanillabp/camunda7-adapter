@@ -14,11 +14,11 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What the Camunda 7 adapter contributes to the name-clash-avoidance model (story
- * 35): the mode applying without configuration, and how an unscoped workflow module
+ * What the Camunda 7 adapter contributes to the name-clash-avoidance model: the mode
+ * applying without configuration, and how an unscoped workflow module
  * is reported - the alternatives to {@link NameClashAvoidance#NONE} are Camunda 7's,
  * so the message is the adapter's. The default is {@link NameClashAvoidance#BY_ADAPTER}
- * because version 1 deployed a tenant per workflow module (story 106).
+ * because version 1 deployed a tenant per workflow module.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7DeploymentServiceTest {

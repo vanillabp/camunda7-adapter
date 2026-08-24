@@ -13,7 +13,7 @@ import io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Unit test of the {@link Camunda7EngineHolder}'s job-executor lifecycle (story 26e):
+ * Unit test of the {@link Camunda7EngineHolder}'s job-executor lifecycle:
  * the engine is built with the executor INACTIVE (deferred activation); the executor
  * is engine-global while start/stop is notified per workflow module, so the started
  * modules are reference-counted - the executor stops only when the LAST started

@@ -9,8 +9,7 @@ import jakarta.inject.Inject;
 
 /**
  * One workflow aggregate, two BPMN processes: the called process is declared as a
- * secondary process of the class declaring the process to be started - the form
- * story 60 leaves.
+ * secondary process of the class declaring the process to be started.
  */
 @ApplicationScoped
 @WorkflowService(

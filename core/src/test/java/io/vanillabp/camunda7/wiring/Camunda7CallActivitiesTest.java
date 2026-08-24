@@ -22,7 +22,7 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Story 61: Camunda 7 does not pass its business key - which carries the workflow
+ * Camunda 7 does not pass its business key - which carries the workflow
  * aggregate's ID - to a called process. VanillaBP injects the propagation while
  * preparing the BPMN, but only where it is right.
  */
@@ -91,7 +91,7 @@ public class Camunda7CallActivitiesTest {
 
     }
 
-    // story 66's fallback, deprecated for removal in 2.1: a test double implements it
+    // the migration fallback, deprecated for removal in 2.1: a test double implements it
     // as long as the interface declares it, and the mandatory 'removal' lint needs the
     // suppression - @Deprecated on the override does not silence it
     @Deprecated(forRemoval = true)

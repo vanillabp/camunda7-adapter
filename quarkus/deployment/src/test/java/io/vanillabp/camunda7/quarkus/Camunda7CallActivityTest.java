@@ -18,7 +18,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.transaction.UserTransaction;
 
 /**
- * Story 61: Camunda 7 does not pass its business key to a called process, and the
+ * Camunda 7 does not pass its business key to a called process, and the
  * business key is where VanillaBP keeps the workflow aggregate's ID. Without it the
  * first task of the called process failed while resolving the aggregate, with the
  * persistence's own message - naming neither the call activity nor the business key

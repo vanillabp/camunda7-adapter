@@ -95,7 +95,7 @@
                  price is paid in the green build, by what is logged before the first
                  extension callback - the augmentation of a prod-mode test logs into a log
                  context of its own which no extension in this JVM reaches, one line per
-                 class (story 109). -->
+                 class. -->
             <quarkus.log.level>INFO</quarkus.log.level>
             <maven.home>${maven.home}</maven.home>
             <maven.repo>${settings.localRepository}</maven.repo>
@@ -109,7 +109,7 @@
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
         <configuration>
-          <!-- the adapter reads a task handler's parameter names (story 99) -->
+          <!-- the adapter reads a task handler's parameter names -->
           <parameters>true</parameters>
         </configuration>
       </plugin>

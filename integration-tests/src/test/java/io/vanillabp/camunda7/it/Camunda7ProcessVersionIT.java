@@ -12,7 +12,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * End-to-end test of <code>&#64;WorkflowTask(version = ...)</code> (story 48) against a
+ * End-to-end test of <code>&#64;WorkflowTask(version = ...)</code> against a
  * real embedded Camunda 7 engine with TWO deployed versions of one process: the
  * workflow started while only version 1 exists is served by the method of version 1,
  * and a workflow started after a second version was deployed is served by the method

@@ -86,7 +86,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   private final Camunda7TaskRegistry taskRegistry;
 
   /**
-   * The core's entry point for workflows the engine starts on its own (story 41):
+   * The core's entry point for workflows the engine starts on its own:
    * the start events of a process are reported here while wiring. May be
    * <code>null</code> (tests) - nothing is reported then.
    */
@@ -134,7 +134,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * The core's name-clash-avoidance model (story 35): decides whether a workflow
+   * The core's name-clash-avoidance model: decides whether a workflow
    * module is isolated by the Camunda TENANT ({@code by-adapter}, version 1's
    * behavior), by PREFIXING the identifiers ({@code use-prefix} - no tenant) or not at
    * all ({@code none}, this adapter's default). May be <code>null</code> (tests).
@@ -258,7 +258,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * The Camunda tenant a workflow module is deployed to - the module id under
-   * {@code by-adapter}, none under {@code use-prefix}/{@code none} (story 35).
+   * {@code by-adapter}, none under {@code use-prefix}/{@code none}.
    */
   private String tenantIdOf(
       final String workflowModuleId) {
@@ -317,20 +317,20 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     this.workflowTaskInvoker = workflowTaskInvoker;
     this.taskRegistry = taskRegistry;
     this.instanceIdentities = instanceIdentities;
-    // story 48: what the engine's process definitions are versioned as - the
+    // What the engine's process definitions are versioned as - the
     // registry hands it to every listener building an invocation context
     this.processVersions = new io.vanillabp.camunda7.wiring.Camunda7ProcessVersions(
         repositoryService, this::scopedProcessId, this::tenantIdOf, this::tasksOfDeployedModel);
     if (taskRegistry != null) {
       taskRegistry.setProcessVersions(processVersions);
-      // every inbound delivery reports which adapter it came from (story 54)
+      // every inbound delivery reports which adapter it came from
       taskRegistry.setAdapterId(adapterId);
     }
 
   }
 
   /**
-   * The versions of this engine's process definitions (story 48): the source of the
+   * The versions of this engine's process definitions: the source of the
    * version reported with every task, start and end, and the catalog the core resolves
    * version TAGS through.
    */
@@ -363,8 +363,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * unscoped, and by the wiki for an application which would rather prefix its
    * identifiers or give a module an engine of its own.
    * <p>
-   * Held by {@code Camunda7DeploymentServiceTest} (story 106; it asserted {@code none}
-   * between 2026-08-11 and 2026-08-22, which was the defect).
+   * Held by {@code Camunda7DeploymentServiceTest}, which asserted {@code none}
+   * between 2026-08-11 and 2026-08-22 - that was the defect.
    */
   @Override
   public io.vanillabp.integration.adapter.spi.NameClashAvoidance defaultNameClashAvoidance() {
@@ -492,7 +492,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     final var context = existingContext != null
         ? existingContext
         : new Camunda7ProcessingContext(workflowModuleId);
-    // story 35: rewrite the identifiers the engine resolves across process
+    // Rewrite the identifiers the engine resolves across process
     // definitions BEFORE wiring - a no-op unless the mode is 'use-prefix'. The core
     // calls prepareBpmn once per executable PROCESS while all processes of a file
     // share ONE model, so scoping has to happen once per FILE - otherwise a
@@ -501,7 +501,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         .getResourcesByFilename()
         .containsKey(filename);
     if (!modelAlreadyScoped) {
-      // story 61: a call activity of this engine does not pass the business key -
+      // A call activity of this engine does not pass the business key -
       // which holds the workflow aggregate's ID - unless the model says so. Injected
       // BEFORE scoping, which rewrites the called elements: here the process IDs are
       // still the ones the application knows
@@ -531,7 +531,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     final var connectables = new LinkedList<Camunda7TaskConnectable>();
     // the model carries the identifiers the ENGINE will know (prepareBpmn rewrote
     // them), while the core is keyed by the plain ones - so the model is searched
-    // by the scoped id and the invoker is called with the plain one (story 35)
+    // by the scoped id and the invoker is called with the plain one
     final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
     collectTasks(model, workflowModuleId, bpmnProcessId, scopedBpmnProcessId, filename, specs, connectables);
 
@@ -539,7 +539,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // deployment-failure policy for non-first-priority adapter ids
     workflowTaskInvoker.validateTaskWiring(workflowModuleId, bpmnProcessId, specs);
 
-    // story 50: a task wired by 'camunda:expression' completes as soon as the
+    // A task wired by 'camunda:expression' completes as soon as the
     // expression returns, so a method declaring @TaskId can never keep it open.
     // The engine's EL resolver says the same at runtime, but only once a workflow
     // reaches the task - asking the core here moves the verdict to the boot. The
@@ -568,12 +568,12 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // back from the engine's process-definition key is registered explicitly
     taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
 
-    // story 48: the engine can be asked which versions of this process it has, which
+    // The engine can be asked which versions of this process it has, which
     // is what a version specification naming a version TAG needs
     workflowTaskInvoker
         .registerProcessVersions(adapterId, workflowModuleId, bpmnProcessId, processVersions);
 
-    // story 59: which elements can put a second token into a running workflow - two
+    // Which elements can put a second token into a running workflow - two
     // tokens are two writers on the workflow aggregate, and the core knows whether
     // that aggregate can survive them
     workflowTaskInvoker
@@ -582,13 +582,13 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             bpmnProcessId,
             Camunda7ConcurrentTokens.elementIdsOf(model, scopedBpmnProcessId));
 
-    // story 66: an expression reading an attribute the aggregate does not share
+    // An expression reading an attribute the aggregate does not share
     // evaluates to null, and Camunda 7 then takes the default flow without saying a
     // word. The adapter knows the model, the core knows what is shared - together they
     // can say it while the application starts
     warnAboutUnsharedAggregateProperties(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
 
-    // story 72: this engine reports the end of a workflow, so a @WorkflowEnded
+    // This engine reports the end of a workflow, so a @WorkflowEnded
     // method staying silent means the adapter was not wired - which used to be
     // invisible: the application booted, the workflow ran, the method was never
     // called and nothing was logged
@@ -607,7 +607,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * The engine's runtime service, used by the startup check of story 57 to ask how
+   * The engine's runtime service, used by the startup check to ask how
    * many workflows still run on an old version of a process. Set by the platform
    * integration, like the identity service.
    *
@@ -622,7 +622,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * The process definition the engine considers current for that process - what this
-   * application runs on when its resources were deployed before (story 57).
+   * application runs on when its resources were deployed before.
    */
   private org.camunda.bpm.engine.repository.ProcessDefinition latestVersionOf(
       final String workflowModuleId,
@@ -641,8 +641,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * The tasks of a model the engine still holds, read for the startup check of story
-   * 57 - the same extraction the deployed model goes through, so both directions
+   * The tasks of a model the engine still holds, read for the old-versions startup
+   * check - the same extraction the deployed model goes through, so both directions
    * cannot disagree about what a task is.
    *
    * @param workflowModuleId The workflow module ID
@@ -675,7 +675,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * validates against, and - for the model this boot deploys - into the connectables
    * the engine's EL resolver looks up at runtime.
    * <p>
-   * Story 57 reads the models of OLDER versions the engine still holds and asks the
+   * The startup check reads the models of OLDER versions the engine still holds and asks the
    * core whether the application still serves them, which is why this sits in its own
    * method: both directions have to see a model exactly the same way, and a second
    * implementation would drift.
@@ -735,7 +735,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
           }
         });
 
-    // user tasks (story 24): the task definition is the camunda:formKey; a
+    // user tasks: the task definition is the camunda:formKey; a
     // matching @WorkflowTask method is OPTIONAL (notification only) - the spec
     // still marks matching methods as wired
     model
@@ -818,7 +818,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    */
   /**
    * Reports every expression of the model which reads an attribute of the workflow
-   * aggregate that is NOT shared with the BPMS (story 66).
+   * aggregate that is NOT shared with the BPMS.
    * <p>
    * A WARN, not a failed deployment: the check reads expressions, and an expression it
    * misreads must not keep an application from starting. What it finds is precise enough
@@ -876,8 +876,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * Reports a <code>&#64;WorkflowEnded</code> method which this adapter id will never
    * call. Camunda 7 CAN report the end of a workflow, so the only way to get here is a
    * missing wire between the platform module and the engine - it happened
-   * (story 72: the Quarkus producer did not hand the invoker over, and nothing said
-   * so). The deployment is not failed over it: the workflow itself runs, only the
+   * once: the Quarkus producer did not hand the invoker over, and nothing said
+   * so. The deployment is not failed over it: the workflow itself runs, only the
    * notification is missing.
    *
    * Visible for tests.
@@ -939,7 +939,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
               .findFirst()
               .ifPresent(definition -> {
                 // the model carries the SCOPED signal name where identifiers are
-                // prefixed (story 35) - the application is told the plain one
+                // prefixed - the application is told the plain one
                 final var scopedSignalName = definition.getSignal() == null
                     ? null
                     : definition.getSignal().getName();
@@ -981,7 +981,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * Removes the workflow module's prefix from an identifier the model carries, so
-   * the application sees what it modelled (story 35). Without scoping, or without a
+   * the application sees what it modelled. Without scoping, or without a
    * prefix, the identifier is returned unchanged.
    *
    * @param workflowModuleId The workflow module ID
@@ -1016,7 +1016,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     // one deployment per workflow module; tenant id = workflow module id isolates BPMN
     // process ids between modules; duplicate filtering avoids redeploying unchanged models
-    // story 35: whether the module is isolated by a tenant is the mode's decision
+    // Whether the module is isolated by a tenant is the mode's decision
     validateTenantConfiguration();
     final var tenantId = tenantIdOf(workflowModuleId);
     if (tenantId != null) {
@@ -1048,8 +1048,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         .forEach(deploymentBuilder::addModelInstance);
 
     // deployWithResult reports the definitions the engine created, i.e. the version
-    // it assigned to every model deployed now - story 48 feeds them into the version
-    // catalog, so the version deployed by THIS boot needs no query at all
+    // it assigned to every model deployed now - they feed the version catalog, so the
+    // version deployed by THIS boot needs no query at all
     final var deployment = deploymentBuilder.deployWithResult();
     final var deployedDefinitions = deployment.getDeployedProcessDefinitions();
     if (deployedDefinitions != null) {
@@ -1063,7 +1063,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                     definition.getId(),
                     definition.getVersion(),
                     definition.getVersionTag());
-            // story 57: the border between the model this boot brought and the older
+            // The border between the model this boot brought and the older
             // versions the engine still holds
             workflowTaskInvoker
                 .registerDeployedVersion(
@@ -1076,7 +1076,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     // Camunda deploys nothing when the resources did not change, so a restart without
     // a model change reports no definitions at all. The version this application runs
-    // on is the engine's latest one then, and story 57's check needs it on EVERY boot,
+    // on is the engine's latest one then, and the old-versions check needs it on EVERY boot,
     // not only on the one which changed something.
     bpmsProcessingContext
         .getDeployedProcessIds()
@@ -1108,7 +1108,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             : "<none>",
         deployment.getId());
 
-    // story 48: the deployment is done, so the version tags the application's
+    // The deployment is done, so the version tags the application's
     // annotations name can be resolved against what the engine has now
     workflowTaskInvoker.resolveProcessVersions(workflowModuleId);
 

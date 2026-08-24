@@ -123,13 +123,15 @@ deployed to the embedded engine of every prioritized adapter.
   decided by the name-clash-avoidance mode, see
   [Keeping workflow modules apart](#keeping-workflow-modules-apart). Duplicate filtering
   is enabled, so unchanged models are not redeployed on every boot.
-- **Starting a workflow (in the local transaction).** The embedded engine shares the
-  application's data source and transaction manager, so a started process instance is
-  committed or rolled back **together with the workflow aggregate**. The
-  workflow-aggregate ID becomes the Camunda **business key**, and the tenant is whatever
-  the [name-clash-avoidance mode](#keeping-workflow-modules-apart) says. There is no
-  two-phase commit and no transaction outbox
-  (`needsTwoPhaseCommitForStartingWorkflows()` is `false`).
+- **Starting a workflow (two-phase).** The workflow-aggregate ID becomes the Camunda
+  **business key**, and the tenant is whatever the
+  [name-clash-avoidance mode](#keeping-workflow-modules-apart) says. Phase one asks the
+  engine, phase two creates the instance after the caller's commit, dispatched by the
+  phase-two outbox and skipping an instance which is already there
+  (`needsTwoPhaseCommitForStartingWorkflows()` is `true` for every adapter id, see
+  [decision 2](#2-a-workflow-is-progressed-after-the-callers-commit)). An application
+  using this adapter therefore needs a phase-two outbox, which the VanillaBP platform
+  integration provides for JPA/JDBC and MongoDB setups.
 - **Asynchronous continuations (job executor).** Each engine runs an idiomatic
   `SpringJobExecutor` on a managed thread pool (thread names contain the adapter id).
   Activation is deferred: the executor starts when the deployment pipeline starts
@@ -137,21 +139,10 @@ deployed to the embedded engine of every prioritized adapter.
   once the last workflow module stopped - before the engine closes. (An immediate
   wake-up after commits creating jobs - Version 1's `WakeupJobExecutor` - is a planned
   follow-up; until then new jobs are picked up by the executor's regular acquisition.)
-- **Transaction caveat for ids with an OWN (named) datasource.** An engine on a
-  named datasource CANNOT join the caller's transaction (its engine commands commit
-  on an adapter-internal transaction manager bound to that datasource). Starting
-  workflows through such an adapter id therefore uses VanillaBP's regular
-  **two-phase start**
-  (`needsTwoPhaseCommitForStartingWorkflows()` is `true`): phase one does nothing
-  against the engine, phase two - dispatched via the phase-two outbox after the
-  caller's commit - starts the instance idempotently (skipped if a running instance
-  with the same business key/tenant exists; like every outbox-based operation this
-  keeps an at-least-once residual window). This prevents ghost process instances that
-  a phase-one start would leave behind on rollback. The in-transaction guarantee above
-  applies ONLY to ids sharing the application's datasource - acceptable for the
-  migration scenario, where the OLD engine mostly continues existing instances. Note
-  that an application using such an adapter id needs a phase-two outbox (provided by
-  the VanillaBP platform integration for JPA/JDBC and MongoDB setups).
+- **Adapter ids with an OWN (named) datasource.** An engine on a named datasource
+  cannot join the caller's transaction at all - its commands commit on an
+  adapter-internal transaction manager bound to that datasource. Nothing changes for
+  them: every progressing operation runs after the caller's commit anyway.
 
 ### Embedded-engine wiring
 
@@ -200,7 +191,7 @@ statement by statement, and those statements name the tables verbatim in every d
 `Camunda7TablePrefixEngineBehaviourTest` in the core module holds the record - with a
 prefix and `database-schema-update: true`, the engine creates a full set of unprefixed
 `ACT_*` tables and then dies on its first query against the prefixed `ACT_GE_PROPERTY`,
-which is what was observed while building story 46.
+which is what Camunda does here.
 
 A prefixed adapter id therefore means: its tables are there already.
 
@@ -265,7 +256,7 @@ Outcomes:
   *Delegate expression* (an *Expression* task completes when the expression
   returns and could never stay open).
 
-**The application does not start on that last defect (story 50).** While wiring,
+**The application does not start on that last defect.** While wiring,
 the adapter asks the core whether the method serving a task completes
 asynchronously (`WorkflowTaskInvoker#workflowTaskCompletesAsynchronously`,
 answered by the `WorkflowTaskRegistry` from the method's `@TaskId` parameter) and
@@ -277,32 +268,31 @@ case is deliberately silent: *Delegate expression* serves a method without
 `@TaskId` just as well, because the behavior leaves the activity when the handler
 returns.
 
-**Completing/canceling async tasks (`ProcessService#completeTask`/`#cancelTask`,
-story 22):** the `@TaskId` value is the parked execution's ID; completing signals
+**Completing/canceling async tasks (`ProcessService#completeTask`/`#cancelTask`):**
+the `@TaskId` value is the parked execution's ID; completing signals
 that execution, canceling signals it with the adapter's cancel marker and the
-behavior propagates the BPMN error (error-boundary routing). Both run ENTIRELY
-within the caller's transaction (embedded engine, shared datasource): a rollback
-leaves the task open - business data and engine state stay consistent
-automatically. Adapter IDs on their OWN datasource (`data-source-name`) run the
-completion two-phase through the outbox instead (same rule as workflow starts).
+behavior propagates the BPMN error (error-boundary routing). Both are two-phase:
+phase one asks whether the task is still there, so a caller learns about a gone task
+where it called, and phase two signals the execution after the commit, dispatched by
+the outbox. A rollback therefore leaves the task open.
 `awarenessOfTask` locates a task by its execution ID plus a business-key check
 and a SCOPE check (see below). `@TaskEvent CANCELED` IS delivered on Camunda 7: an END
 execution listener attached at parse time invokes handlers subscribing to
 lifecycle events when the open task's activity is canceled (interrupting
 boundary event, instance termination), within the cancellation's transaction.
 
-**User tasks (story 24):** the user task's `camunda:formKey` is the task
+**User tasks:** the user task's `camunda:formKey` is the task
 definition; a matching `@WorkflowTask` method is an OPTIONAL notification handler
 invoked on the engine's global CREATE and DELETE task-listener events (CREATED /
 CANCELED via `@TaskEvent`, the task's ID via `@TaskId`) - attached as BUILT-IN
 listeners at parse time, so they run before modeller-defined ones. The handler
 never completes the task: `ProcessService#completeUserTask` maps to
 `TaskService.complete`, `#cancelUserTask` to `TaskService.handleBpmnError`
-(error-boundary routing) - within the caller's transaction on shared-datasource
-engines, two-phase on separate-datasource adapter ids. `awarenessOfUserTask`
+(error-boundary routing), two-phase like every other progressing operation: phase one
+checks the task is still there, phase two acts after the commit. `awarenessOfUserTask`
 locates a task by its task ID plus a business-key check and the same scope check.
 
-**What the awareness probes answer for (stories 104 and 107):** the election
+**What the awareness probes answer for:** the election
 contract of `MigratableProcessService` says an adapter answers only for the scope
 it is ASKED about, and a Camunda 7 business key is the workflow-aggregate id,
 which is unique per aggregate type and not across an engine. The probes therefore
@@ -317,7 +307,7 @@ SPI default. So a workflow of another workflow module, of another tenant or of a
 process this application never wired is `UNKNOWN_TO_BPMS`, and the election
 continues to the BPMS which really holds it.
 
-The write behind `aggregateChanged` answers for the same scope (story 112). It is
+The write behind `aggregateChanged` answers for the same scope. It is
 the half where getting it wrong costs more than a wrong answer: in Camunda 7 a
 variable write is what makes the engine re-evaluate conditional events, and the
 push writes a technical marker even for an aggregate which shares nothing, so an
@@ -330,14 +320,16 @@ an at-least-once phase two - is judged within the scope as well. The branch writ
 into the scope of a parked task needs no comparison: it is addressed by an
 execution id the engine handed out, which names exactly one execution.
 
-**Message correlation (story 23):** `correlateMessage` runs entirely within the
-caller's transaction (tenant = workflow module, business key = aggregate ID) - a
-rollback leaves the instance waiting. A correlation id matches via the V1
+**Message correlation:** `correlateMessage` is two-phase like every other
+progressing operation (tenant = workflow module, business key = aggregate ID). Phase
+one asks whether a subscription is waiting and fails the caller's transaction where
+none is, so "nothing matched" stays a synchronous answer; phase two correlates after
+the commit, through the outbox, tolerating a subscription which is gone by then. A
+rollback therefore leaves the instance waiting. A correlation id matches via the V1
 local-variable convention `<primary bpmnProcessId>-<messageName>` at the receiving
-scope. `startWorkflowByMessage` uses `correlateStartMessage()`. Separate-datasource
-adapter ids run both two-phase through the outbox (with waiting-subscription /
-already-started pre-checks tolerating stale entries). No variables are ever set -
-the payload doctrine.
+scope. `startWorkflowByMessage` uses `correlateStartMessage()` and is two-phase the
+same way, with an already-started pre-check. No variables are ever set - the payload
+doctrine.
 
 BPMN expressions like gateway conditions or multi-instance collections
 (`${riskAcceptable}`, `${items}`) resolve against the workflow aggregate
@@ -360,7 +352,7 @@ Two decisions worth recording:
   deployed, so an application upgrading without touching its configuration finds its
   running workflows again, and it costs this engine nothing (a tenant id is an attribute
   of the deployment, see below). The default stood at `none` between 2026-08-11 and
-  2026-08-22, which broke exactly that upgrade path - story 106. Where an application
+  2026-08-22, which broke exactly that upgrade path. Where an application
   chooses `none`, the adapter WARNs per workflow module and names all three ways of
   keeping modules apart, until `accept-unscoped-identifiers` acknowledges that the
   identifiers are unique. The acknowledgement is a statement about the application, not a
@@ -384,7 +376,7 @@ workflow-aggregate attributes in BPMN expressions.
 
 ## Sharing the workflow aggregate
 
-Since story 66 this adapter shares like every other BPMS: the values of the workflow
+This adapter shares like every other BPMS: the values of the workflow
 aggregate are written as Camunda process variables, and the engine evaluates its
 expressions against them. Being embedded is no reason to deviate - a model reading
 something else works here and breaks on every remote BPMS, which is what `@SyncWithBPMS`
@@ -396,7 +388,7 @@ They are written at every point the adapter talks to the engine on the applicati
 behalf: starting a workflow (also by message), completing a `@WorkflowTask` method
 (including the BPMN-error path), completing or cancelling an asynchronous task, completing
 or cancelling a user task, correlating a message, and `aggregateChanged`. The task
-completion is the one story 66 was written for: a gateway right behind a service task
+completion is the demanding one: a gateway right behind a service task
 decides on what that task just computed, so the values are written INSIDE the engine's
 transaction, right after the handler returned and before the activity is left. A broadcast
 signal writes nothing, since it reaches workflows of other aggregates.
@@ -438,7 +430,7 @@ the adapter writes the technical variable `vanillabpAggregateChanged` holding th
 the push.
 
 The EL resolver serves the WIRED TASKS. It still answers attribute names as well, but only
-as the **migration fallback** of story 66 and only where the engine has no variable of that
+as the **migration fallback** described above, and only where the engine has no variable of that
 name: workflows started with an older version carry none, and version 1 also resolved
 attributes without a getter or through an `isX()` returning a non-boolean. Each such read
 is logged once with the way out, and version 2.1 removes the fallback together with the SPI
@@ -528,10 +520,11 @@ gate.
 The fork adapters for Operaton and CIB seven arrive as repositories of their own, so they
 bring whatever versioning their forks need.
 
-Camunda 7 runs **embedded** inside the application's JVM and shares the same database and
-the same transaction as the business code. Consequently starting a workflow happens
-completely within the local transaction (no two-phase commit / transaction outbox), and
-engine queries are immediately consistent.
+Camunda 7 runs **embedded** inside the application's JVM and normally shares the database
+of the business code. Engine queries are therefore immediately consistent, which is what
+phase one of every operation asks. What phase two does still happens after the caller's
+commit, through the outbox, the way a remote BPMS works - see
+[decision 2](#2-a-workflow-is-progressed-after-the-callers-commit).
 
 ## Quarkus (JVM mode only!)
 
@@ -587,7 +580,7 @@ vanillabp:
 An unknown `data-source-name` and two adapter ids sharing one datasource fail the
 boot with guiding messages.
 
-## Viewing workflows (story 26)
+## Viewing workflows
 
 `ProcessService#getProcessDefinitions`, `#getBpmnXml` and `#getWorkflowHistory` are answered
 from the embedded engine: `RepositoryService` (every deployed version incl. its BPMN XML) and
@@ -612,6 +605,47 @@ neither an eventual-consistency lag nor an application-version boundary.
   VanillaBP's BPMS election (instead of "unknown") - which is what makes viewing ended
   workflows work and keeps a re-dispatched start from starting a second instance of a workflow
   which already ran to its end.
+
+## Decision log
+
+Decisions this repository's code points at. A number is handed out once and never reused or
+renumbered, so a citation stays resolvable; a decision which gets overturned keeps its entry,
+marked as superseded and naming the entry which replaced it.
+
+### 1. The workflow aggregate is shared as process variables
+
+Camunda 7 runs embedded, so the EL resolver could read the aggregate live - and that is
+exactly what makes a model portable in one direction only: `${riskAcceptable}` would work
+here and fail on every remote BPMS. The values an aggregate shares are therefore written as
+process variables at every point this adapter talks to the engine, and the engine evaluates
+its expressions against them. Reading an attribute through the EL resolver survives as a
+migration fallback for workflows started before, reported once per name and removed in 2.1.
+See [Sharing the workflow aggregate](#sharing-the-workflow-aggregate).
+
+### 2. A workflow is progressed after the caller's commit
+
+`needsTwoPhaseCommitForStartingWorkflows()` answers `true` for every adapter id, and every
+operation which moves a process forward is scheduled through the phase-two outbox, the way
+a remote BPMS works. Sharing the caller's transaction was possible and is not enough: an
+engine command which loses a concurrency conflict cannot be repeated inside that
+transaction, because it leaves the transaction rollback-only, and repeating just the engine
+part would advance the process while the application rolls back.
+
+What phase one still does is ask - an embedded engine answers for free and in the same
+transaction, so a gone task or an unknown workflow is reported where the application called.
+What phase two does is idempotent, because the outbox dispatches at-least-once. A test which
+called VanillaBP has to wait for the engine to catch up rather than read its state in the
+next line.
+
+### 3. Workflow modules are kept apart by scoping the identifiers
+
+Camunda 7 has tenants, but a workflow module may also prefix its identifiers instead, and
+then there is no tenant to ask. The engine is therefore always addressed with the SCOPED
+identifiers - process ids, message and signal names, error codes and task definitions - while
+the core's registries stay keyed by the plain ones, and a delivery coming back from the
+engine is translated before the core sees it. The mode is configured per workflow module,
+which is why no code may assume either shape.
+See [Keeping workflow modules apart](#keeping-workflow-modules-apart).
 
 ## Known deviations
 
@@ -670,7 +704,7 @@ adapter core is platform-neutral, but a core being correct says nothing about a 
 calling it, so a core line a platform never reaches names a feature that platform never runs.
 
 The two thresholds still differ by what one suite can produce and the other cannot: the startup check
-for old process versions (story 57) needs several boots against one database, each with a different
+for old process versions needs several boots against one database, each with a different
 model, and a Quarkus prod-mode test boots its application once per test class. The Quarkus suite's
 class comment lists that and the three other cases it deliberately does not repeat. Everything else
 is within a point or two of the Spring Boot numbers.

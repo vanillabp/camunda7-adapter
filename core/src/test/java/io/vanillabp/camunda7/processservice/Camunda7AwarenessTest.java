@@ -24,14 +24,14 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What the adapter answers when its engine cannot answer at all, and how it classifies a
  * failed phase-two attempt. Both decisions are invisible in a green system and expensive
  * when they are wrong: an engine on its own datasource which is down must never look like
- * "this workflow is not mine" (the election would hand the workflow to the next adapter,
- * story 25), and an outbox entry the engine rejects as wrong must not be retried forever.
+ * "this workflow is not mine" (the election would hand the workflow to the next
+ * adapter), and an outbox entry the engine rejects as wrong must not be retried forever.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7AwarenessTest {
 
   /**
-   * What a probe is asked about (story 107).
+   * What a probe is asked about.
    */
   private static final io.vanillabp.integration.adapter.spi.WorkflowScope SCOPE = io.vanillabp.integration.adapter.spi.WorkflowScope
       .of("test-module", "TestProcess");

@@ -10,7 +10,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The aggregate of the aggregateChanged integration test (story 44). Nothing is
+ * The aggregate of the aggregateChanged integration test. Nothing is
  * shared with the BPMS ({@code @SyncWithBPMS} is opt-in for Camunda 7), so the test
  * covers what matters on an embedded engine: the condition of a conditional event
  * reads the aggregate LIVE, and the push is what makes the engine look.

@@ -10,7 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 /**
- * The workflow service of pushing a changed aggregate (story 44). Two things are
+ * The workflow service of pushing a changed aggregate. Two things are
  * worth a real engine here: a conditional event only ever looks at its condition when
  * a variable of its scope changes - so the push is what makes it fire - and a
  * task-scoped push has to land in the scope the task RUNS IN, because that is the

@@ -15,7 +15,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Two <code>camunda7</code> adapter ids only make sense if they are DIFFERENT
- * engines (story 34): an own datasource, or an own table prefix on a shared one.
+ * engines: an own datasource, or an own table prefix on a shared one.
  * The rule is implemented once in the adapter's core and reached through the
  * adapter SPI hook {@code validateDistinctAdapterInstances}.
  */

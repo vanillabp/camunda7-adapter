@@ -24,7 +24,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * End-to-end test of {@code @WorkflowTask} processing on a real embedded Camunda 7
  * engine (H2, shared datasource/transaction manager with the JPA aggregate
- * persistence) - story 21b:
+ * persistence):
  * <ul>
  * <li>happy path: service task executes the handler, aggregate mutation persisted,
  * task completed, process ends - incl. a gateway condition reading an aggregate
@@ -53,7 +53,7 @@ public class Camunda7TaskProcessingIT {
   private static final String MODULE_ID = "c7-it";
 
   /**
-   * What a probe is asked about (story 107): this test's workflow module and the BPMN
+   * What a probe is asked about: this test's workflow module and the BPMN
    * processes its {@code @WorkflowService} serves. The probes answer for that scope and
    * for nothing else, so a test calling them directly has to name it the way the platform
    * would.
@@ -129,7 +129,7 @@ public class Camunda7TaskProcessingIT {
   }
 
   /**
-   * The instance is created by the phase-two outbox AFTER the commit (story 63), so
+   * The instance is created by the phase-two outbox AFTER the commit, so
    * the lookup waits for it instead of reading a moment too early.
    *
    * @param aggregateId The aggregate's id (the business key)
@@ -151,8 +151,7 @@ public class Camunda7TaskProcessingIT {
 
   /**
    * Asked against the HISTORY: a workflow which does not run may also be one the
-   * outbox has not started yet, and after story 63 that is a state every test passes
-   * through.
+   * outbox has not started yet, and that is a state every test passes through.
    *
    * @param aggregateId The aggregate's id (the business key)
    * @return Whether the workflow ran and ended
@@ -230,8 +229,8 @@ public class Camunda7TaskProcessingIT {
   @DisplayName("A transaction annotation in the handler's call chain fails the job with VanillaBP's message")
   public void nestedTransactionAnnotationIsReportedAtTheEngine() throws Exception {
 
-    // the handler carries no annotation itself (that would fail the boot since story
-    // 40b), it calls a bean that does - and the engine shares the transaction the
+    // the handler carries no annotation itself (that would fail the boot), it calls a
+    // bean that does - and the engine shares the transaction the
     // bean's interceptor marks rollback-only
     final var aggregateId = startSecondaryProcess("RollbackOnlyProcess", true, null);
 
@@ -415,7 +414,7 @@ public class Camunda7TaskProcessingIT {
     // delivers CANCELED to the subscribing handler within the same transaction
     final var instanceId = instanceIdOf(aggregateId);
     transactionTemplate.executeWithoutResult(status -> runtimeService
-        .deleteProcessInstance(instanceId, "story-22 test cancellation"));
+        .deleteProcessInstance(instanceId, "async-task test cancellation"));
 
     awaitUntil(
         () -> {
@@ -457,7 +456,7 @@ public class Camunda7TaskProcessingIT {
     transactionTemplate.executeWithoutResult(status -> {
       c7ProcessService.completeTaskPhaseTwo("c7-it", "AsyncProcess", null, aggregateId, "999999999");
       c7ProcessService.cancelTaskPhaseTwo("c7-it", "AsyncProcess", null, aggregateId, "999999999", "ERR");
-      // user-task variants behave identically (story 24)
+      // user-task variants behave identically
       c7ProcessService.completeUserTaskPhaseTwo("c7-it", "UserTaskProcess", null, aggregateId, "999999999");
       c7ProcessService.cancelUserTaskPhaseTwo("c7-it", "UserTaskProcess", null, aggregateId, "999999999", "ERR");
     });
@@ -467,7 +466,7 @@ public class Camunda7TaskProcessingIT {
         io.vanillabp.integration.adapter.spi.WorkflowAwareness.UNKNOWN_TO_BPMS,
         c7ProcessService.awarenessOfUserTask(SCOPE, aggregateId, "999999999"));
 
-    // correlation phase-two tolerance (story 23): no waiting subscription and an
+    // correlation phase-two tolerance: no waiting subscription and an
     // already-started instance are warned no-ops, never errors
     transactionTemplate.executeWithoutResult(status -> {
       c7ProcessService.correlateMessagePhaseTwo(
@@ -614,7 +613,7 @@ public class Camunda7TaskProcessingIT {
 
     final var instanceId = instanceIdOf(aggregateId);
     transactionTemplate.executeWithoutResult(status -> runtimeService
-        .deleteProcessInstance(instanceId, "story-24 test cancellation"));
+        .deleteProcessInstance(instanceId, "user-task test cancellation"));
 
     awaitUntil(
         () -> {
@@ -745,8 +744,8 @@ public class Camunda7TaskProcessingIT {
                 .correlationIdVariableName("TaskProcess", "PaymentReceived"),
             "payment-42"));
 
-    // a mismatching correlation id does not correlate - and since story 63 the
-    // adapter's phase one says so where the application called it, instead of
+    // a mismatching correlation id does not correlate - and the adapter's phase one
+    // says so where the application called it, instead of
     // letting the correlation fail behind the commit
     final var mismatch = assertThrows(
         IllegalStateException.class,

@@ -23,7 +23,7 @@ public class Camunda7TaskRegistry {
   private final Map<RegistryKey, List<Camunda7TaskConnectable>> connectables = new ConcurrentHashMap<>();
 
   /**
-   * The versions of the engine's process definitions (story 48) - handed over by the
+   * The versions of the engine's process definitions - handed over by the
    * deployment service, which owns the engine's {@code RepositoryService}. Every
    * listener building an invocation context reaches it through this registry. May be
    * <code>null</code> (tests): no version is reported then, which matches every
@@ -33,7 +33,7 @@ public class Camunda7TaskRegistry {
 
   /**
    * The id of the adapter owning this engine. Reported with every inbound delivery,
-   * so VanillaBP can record which BPMS holds a workflow (story 54). May be
+   * so VanillaBP can record which BPMS holds a workflow. May be
    * <code>null</code> (tests): nothing is recorded then.
    */
   private String adapterId;
@@ -85,7 +85,8 @@ public class Camunda7TaskRegistry {
 
   /**
    * Which workflow module a process definition key belongs to - the way back when
-   * there is no tenant to ask (prefixed identifiers, story 35).
+   * there is no tenant to ask (prefixed identifiers, see decision 3 in the
+   * repository's README.md).
    */
   private final Map<String, String> workflowModuleIdsByScopedProcessId = new ConcurrentHashMap<>();
 
@@ -98,12 +99,12 @@ public class Camunda7TaskRegistry {
   /**
    * The PLAIN signal name per signal start event, keyed by (workflow module, scoped
    * process id, start event id): the engine's parser cannot resolve a signalRef, and
-   * the name the application is told has to be the modelled one (story 35).
+   * the name the application is told has to be the modelled one.
    */
   private final Map<String, String> signalNamesOfStartEvents = new ConcurrentHashMap<>();
 
   /**
-   * Which serialization format nested shared values are stored in (story 66) - provided
+   * Which serialization format nested shared values are stored in - provided
    * by the platform integration, which binds the configuration. The task path asks the
    * registry because it has it at hand; <code>null</code> in tests, where the engine's
    * default applies.
@@ -141,7 +142,7 @@ public class Camunda7TaskRegistry {
       final Camunda7TaskConnectable connectable) {
 
     // keyed by what the ENGINE reports at runtime: the scoped process id (equal to
-    // the plain one unless the module's identifiers are prefixed, story 35)
+    // the plain one unless the module's identifiers are prefixed)
     connectables
         .computeIfAbsent(
             new RegistryKey(connectable.workflowModuleId(), connectable.scopedBpmnProcessId()),
@@ -226,7 +227,7 @@ public class Camunda7TaskRegistry {
 
   /**
    * The workflow module of a running execution. Camunda's tenant answers it whenever
-   * the module is isolated by a tenant; with prefixed identifiers (story 35) there
+   * the module is isolated by a tenant; with prefixed identifiers there
    * is no tenant, so the module is looked up by the process definition key the
    * wiring registered - a KNOWN value, never parsed out of the key.
    *

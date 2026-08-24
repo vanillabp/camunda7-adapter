@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Turns the values a workflow aggregate shares with the BPMS into Camunda 7 process
- * variables (story 66).
+ * variables.
  * <p>
  * The core hands over a normalized shape already: scalars, {@link Map}s of nested types
  * and {@link Collection}s of them, where everything the engine cannot compare has been

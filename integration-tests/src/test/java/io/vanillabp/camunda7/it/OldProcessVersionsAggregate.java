@@ -10,21 +10,21 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The aggregate of the old-process-versions integration test (story 57).
+ * The aggregate of the old-process-versions integration test.
  */
 @Entity
-@Table(name = "C7_STORY57_TEST")
+@Table(name = "C7_OLD_PROCESS_VERSIONS_TEST")
 @Getter
 @Setter
-public class Story57Aggregate {
+public class OldProcessVersionsAggregate {
 
   /**
    * An id range of its own: the Camunda business key is the aggregate's id, so the
    * id spaces of the test aggregates must not overlap.
    */
   @Id
-  @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "c7Story57Seq")
-  @SequenceGenerator(name = "c7Story57Seq", initialValue = 900000, allocationSize = 1)
+  @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "c7OldProcessVersionsSeq")
+  @SequenceGenerator(name = "c7OldProcessVersionsSeq", initialValue = 900000, allocationSize = 1)
   private Long id;
 
   /**

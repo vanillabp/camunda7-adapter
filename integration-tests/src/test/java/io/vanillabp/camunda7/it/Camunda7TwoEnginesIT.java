@@ -20,8 +20,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.process.ProcessService;
 
 /**
- * Two configured {@code camunda7} adapter ids side by side (story 26e - the
- * engine-side-by-side migration scenario): {@code c7} shares the application's
+ * Two configured {@code camunda7} adapter ids side by side (the engine-side-by-side
+ * migration scenario): {@code c7} shares the application's
  * datasource, {@code c7b} runs on an application-provided NAMED datasource bean
  * ({@code vanillabp.adapters.c7b.data-source-name} - setting up datasources is the
  * application's concern, VanillaBP never builds its own pool).

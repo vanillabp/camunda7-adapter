@@ -17,8 +17,8 @@ import jakarta.inject.Inject;
 import jakarta.transaction.UserTransaction;
 
 /**
- * Deferred job-executor activation on Quarkus (story 26f, mirroring the 26e
- * semantics): asynchronous continuations ({@code asyncBefore} jobs) are executed
+ * Deferred job-executor activation on Quarkus, with the same semantics as on Spring
+ * Boot: asynchronous continuations ({@code asyncBefore} jobs) are executed
  * ONLY while workflow processing is started. The test pauses processing via the
  * engine holder, creates an instance whose async-before job therefore stays
  * pending, and resumes processing - the job executor picks the job up (executing it

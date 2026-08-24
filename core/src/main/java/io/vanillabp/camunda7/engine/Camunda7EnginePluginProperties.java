@@ -3,7 +3,7 @@ package io.vanillabp.camunda7.engine;
 import java.util.Map;
 
 /**
- * One engine plugin of an adapter id (story 66): which class, and the properties Camunda
+ * One engine plugin of an adapter id: which class, and the properties Camunda
  * applies to it.
  * <p>
  * The section is NAMED by the application rather than keyed by the class, because a class

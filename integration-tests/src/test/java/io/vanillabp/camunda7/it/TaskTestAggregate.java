@@ -14,7 +14,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The JPA workflow aggregate of the task-processing integration tests (story 21b).
+ * The JPA workflow aggregate of the task-processing integration tests.
  * BPMN expressions reference its attributes through VanillaBP's EL resolver:
  * {@code ${approved}} (gateway condition, via {@link #isApproved()}) and
  * {@code ${items}} (multi-instance collection, via {@link #getItems()}).

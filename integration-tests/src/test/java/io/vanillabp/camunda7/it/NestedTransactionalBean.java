@@ -10,7 +10,7 @@ import io.vanillabp.spi.service.TaskException;
  * {@code @WorkflowTask} handler. On Camunda 7 the handler shares its transaction with
  * the engine's job, so the rollback-only mark this bean's interceptor sets takes the
  * engine's transaction down as well: the workflow does not even reach its error
- * boundary event. Story 40b turns that into a failure naming the cause.
+ * boundary event, and VanillaBP turns that into a failure naming the cause.
  */
 @Service
 @Transactional

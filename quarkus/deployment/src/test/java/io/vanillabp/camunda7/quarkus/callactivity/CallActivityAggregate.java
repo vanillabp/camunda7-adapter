@@ -10,7 +10,7 @@ import lombok.Setter;
 
 /**
  * The aggregate of the call-activity test: the called process works on it as well,
- * which is what the business key has to carry into the child (story 61).
+ * which is what the business key has to carry into the child.
  */
 @Entity
 @Table(name = "C7_CALLACTIVITY_AGGREGATE")

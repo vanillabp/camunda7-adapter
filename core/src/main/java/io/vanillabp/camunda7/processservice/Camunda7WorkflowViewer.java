@@ -23,7 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * The Camunda 7 part of VanillaBP's viewer/history API (story 26): process
+ * The Camunda 7 part of VanillaBP's viewer/history API: process
  * definitions, BPMN XML and the execution history of a workflow.
  * <p>
  * Camunda 7 is embedded and authoritative for both: the

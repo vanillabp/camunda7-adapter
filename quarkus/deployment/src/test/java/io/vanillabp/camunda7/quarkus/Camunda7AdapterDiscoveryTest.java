@@ -21,7 +21,7 @@ import io.vanillabp.spi.process.ProcessService;
 import jakarta.inject.Inject;
 
 /**
- * Discovery/boot smoke test of the Camunda 7 adapter on Quarkus (story 26f): the
+ * Discovery/boot smoke test of the Camunda 7 adapter on Quarkus: the
  * embedded plain engine boots on the shared Agroal datasource (schema created via
  * the JTA schema-ops interceptor - Agroal has no deferred enlistment), the runtime
  * deployment pipeline deploys the workflow module's BPMN with the module id as the
@@ -74,7 +74,7 @@ public class Camunda7AdapterDiscoveryTest {
         engine.isJobExecutorActive(),
         "the deployment pipeline started workflow processing at boot");
 
-    // the runtime deployment pipeline (story 26b) deployed the module's BPMN with
+    // the runtime deployment pipeline deployed the module's BPMN with
     // the workflow module id as the Camunda tenant id
     Assertions.assertEquals(
         1,
@@ -87,7 +87,7 @@ public class Camunda7AdapterDiscoveryTest {
         "the BPMN process is deployed for tenant = workflow module id");
 
     // per-adapter-id beans: process service (two-phase commit for every adapter id
-    // since story 63 - the workflow is progressed after the commit) and deployment
+    // - the workflow is progressed after the commit) and deployment
     // service
     Assertions.assertEquals(1, migratableProcessServices.size());
     Assertions.assertEquals("c7", migratableProcessServices.getFirst().getAdapterId());

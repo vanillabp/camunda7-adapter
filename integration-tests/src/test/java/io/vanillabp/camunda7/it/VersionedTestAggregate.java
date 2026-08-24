@@ -10,7 +10,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The aggregate of the process-version integration test (story 48).
+ * The aggregate of the process-version integration test.
  */
 @Entity
 @Table(name = "C7_VERSIONED_TEST")

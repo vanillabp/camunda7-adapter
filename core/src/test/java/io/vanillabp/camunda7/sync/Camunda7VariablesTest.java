@@ -19,7 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Story 66: how the values a workflow aggregate shares become Camunda 7 variables - a
+ * How the values a workflow aggregate shares become Camunda 7 variables - a
  * scalar stays comparable, a nested structure becomes an object variable in the
  * configured serialization format (which is what keeps dot-notated expressions working).
  */

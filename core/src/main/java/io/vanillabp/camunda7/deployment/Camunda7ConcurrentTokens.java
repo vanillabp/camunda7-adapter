@@ -15,7 +15,7 @@ import org.camunda.bpm.model.bpmn.instance.SubProcess;
 
 /**
  * Finds the elements of a BPMN process which can put a SECOND token into a running
- * workflow (story 59). The core is told about them during wiring and decides what it
+ * workflow. The core is told about them during wiring and decides what it
  * means: two tokens are two branches writing the same workflow aggregate, and an
  * aggregate without a version attribute loses one of the two writes without any error.
  * <p>

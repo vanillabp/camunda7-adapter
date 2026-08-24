@@ -13,7 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * What <code>vanillabp.adapters.&lt;id&gt;.table-prefix</code> means, and the check
- * which says so while the application boots (story 47).
+ * which says so while the application boots.
  * <p>
  * A prefixed engine RUNS: every runtime statement Camunda issues goes through MyBatis,
  * which prepends the prefix. Creating the tables is the part Camunda leaves out, and it

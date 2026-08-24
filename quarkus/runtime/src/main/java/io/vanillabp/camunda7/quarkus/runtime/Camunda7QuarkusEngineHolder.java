@@ -77,7 +77,7 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
    */
   /**
    * Whether the application asked to be told about the end of workflows of the
-   * process definition the engine is parsing (story 43).
+   * process definition the engine is parsing.
    *
    * @param workflowEndedInvoker The core's invoker
    * @param tenantId The tenant of the deployment (may be <code>null</code>)
@@ -88,7 +88,7 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
    * Whether this engine reports the end of a workflow, which it does when the core
    * handed over its invoker. False means every <code>&#64;WorkflowEnded</code> method
    * of a process deployed here stays silent - the deployment service says so instead
-   * of leaving the application waiting (story 72).
+   * of leaving the application waiting.
    *
    * @return Whether the end listener was attached
    */
@@ -119,7 +119,7 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
    * offers. The convenience constructors this class used to have filled the missing
    * ones with <code>null</code>, which silently switched off a feature: the engine
    * attached no end listener, the application booted without a warning and a
-   * <code>&#64;WorkflowEnded</code> method was simply never called (story 72). What
+   * <code>&#64;WorkflowEnded</code> method was simply never called. What
    * an engine does not support is the adapter's decision, not something a forgotten
    * argument decides.
    */
@@ -137,7 +137,7 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     this.usesSeparateDataSource = usesSeparateDataSource;
     this.deliversWorkflowEnded = workflowEndedInvoker != null;
 
-    // story 47: an adapter id running on a table prefix needs its tables to exist -
+    // An adapter id running on a table prefix needs its tables to exist -
     // Camunda's schema management ignores the prefix and would create a set of
     // unprefixed ACT_* tables here. Asked BEFORE the engine is built, so those tables
     // are never written
@@ -180,7 +180,7 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     // Provide an engine-wide default so BPMN models need not declare it individually
     // (a process may still override it via camunda:historyTimeToLive).
     configuration.setHistoryTimeToLive(properties.getHistoryTimeToLive());
-    // story 66: nested values shared by a workflow aggregate become object variables, and
+    // Nested values shared by a workflow aggregate become object variables, and
     // the format they are stored in is the application's choice - configured once at the
     // adapter and applied to the engine here, so nobody has to touch the engine
     // configuration for it
@@ -188,13 +188,13 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
       configuration.setDefaultSerializationFormat(properties.getSerializationFormat());
     }
     // an own table prefix makes two adapter ids distinct engines on ONE datasource
-    // (the side-by-side migration setup on a single database, story 34). The tables
+    // (the side-by-side migration setup on a single database). The tables
     // of the prefix exist - Camunda7TablePrefixSchema asked about that above
     if ((properties.getTablePrefix() != null) && !properties.getTablePrefix().isBlank()) {
       configuration.setDatabaseTablePrefix(properties.getTablePrefix());
     }
 
-    // story 66: the engine plugins - the way a serialization dataformat (camunda-xstream,
+    // The engine plugins - the way a serialization dataformat (camunda-xstream,
     // SPIN) reaches an embedded engine. Two ways in: configured per adapter id
     // ('vanillabp.adapters.<id>.engine-plugins', properties applied by Camunda itself), or
     // contributed as a CDI bean, which applies to every engine this adapter builds

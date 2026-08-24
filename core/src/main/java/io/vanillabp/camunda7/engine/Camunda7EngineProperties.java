@@ -55,8 +55,8 @@ public class Camunda7EngineProperties {
   private String tablePrefix;
 
   /**
-   * The serialization format nested values shared by a workflow aggregate are stored in
-   * (story 66), e.g. {@code application/xstream} (camunda-xstream) or
+   * The serialization format nested values shared by a workflow aggregate are stored in,
+   * e.g. {@code application/xstream} (camunda-xstream) or
    * {@code application/json} (SPIN). It is applied twice: to the engine's
    * {@code defaultSerializationFormat}, so an application configures the format once, and
    * per written variable, so a workflow module or a single workflow may override it
@@ -79,7 +79,7 @@ public class Camunda7EngineProperties {
 
   /**
    * The Camunda tenant a workflow module is deployed to under the name-clash
-   * avoidance mode {@code by-adapter} (story 35). Unset (the default) means the
+   * avoidance mode {@code by-adapter}. Unset (the default) means the
    * workflow module ID is the tenant - VanillaBP 1's behavior.
    */
   private String tenantId;
@@ -174,7 +174,7 @@ public class Camunda7EngineProperties {
   /**
    * The reserved value of {@code data-source-name} naming the application's
    * DEFAULT datasource explicitly. Needed because an application providing several
-   * datasources has to name the one each adapter id runs on (story 34) - and the
+   * datasources has to name the one each adapter id runs on - and the
    * default datasource has no name of its own on either platform.
    */
   public static final String DEFAULT_DATA_SOURCE_NAME = "default";

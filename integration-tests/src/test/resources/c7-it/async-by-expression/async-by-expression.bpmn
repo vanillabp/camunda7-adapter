@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Story 50: the same AsyncProcess as in 'processes/task-matrix.bpmn', but its task
+<!-- The same AsyncProcess as in 'processes/task-matrix.bpmn', but its task
      is wired by 'camunda:expression' - which completes the task when the expression
      returns, while the serving method declares @TaskId and wants to keep it open.
      The application must not start. -->

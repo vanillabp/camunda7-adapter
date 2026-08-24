@@ -25,7 +25,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * The Camunda 7 adapter's documented features, run end to end on a BOOTED Quarkus
- * application against the embedded engine on H2 (story 100).
+ * application against the embedded engine on H2.
  * <p>
  * This duplicates what the Spring Boot suite in {@code integration-tests} proves, and
  * the duplication is the point: the adapter's platform-neutral core being correct
@@ -45,16 +45,16 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * reason is the same for all of them - they are about a second boot or a second
  * engine, neither of which a prod-mode test can produce inside one class:
  * <ul>
- * <li>the startup check for old process versions (story 57) needs five boots against
+ * <li>the startup check for old process versions needs five boots against
  * one database, each with a different model or configuration;</li>
- * <li>two adapter ids on one datasource kept apart by a table prefix (story 47) and
- * two engines side by side (story 26f) are covered at extension level in
+ * <li>two adapter ids on one datasource kept apart by a table prefix and
+ * two engines side by side are covered at extension level in
  * {@code quarkus/deployment}, where a second configuration is a second test class;
  * </li>
- * <li>the name-clash-avoidance mode {@code use-prefix} (story 35) is a configuration
+ * <li>the name-clash-avoidance mode {@code use-prefix} is a configuration
  * variant of the same code path, and its remaining lines are uncovered on Spring Boot
  * as well;</li>
- * <li>a task-scoped push into ONE iteration of a multi-instance subprocess (story 44)
+ * <li>a task-scoped push into ONE iteration of a multi-instance subprocess
  * needs the job executor parked while the test reads execution scopes; the scope
  * SELECTION it proves is exercised here by the boundary-event case below.</li>
  * </ul>
@@ -200,7 +200,7 @@ public class Camunda7WorkflowLifecycleTest {
 
     final var reported = post("introspect/workflows/"
         + approved);
-    // since story 63 the workflow is created by the phase-two outbox, so nothing may
+    // the workflow is created by the phase-two outbox, so nothing may
     // exist while the caller's transaction is still open
     assertEquals(
         0,
@@ -412,8 +412,8 @@ public class Camunda7WorkflowLifecycleTest {
   @DisplayName("A transaction annotation in the handler's call chain fails the job with VanillaBP's message")
   public void aNestedTransactionAnnotationIsReportedAtTheEngine() throws Exception {
 
-    // the handler carries no annotation itself (that would fail the boot since story
-    // 40b), it calls a bean that does - and the engine shares the transaction that
+    // the handler carries no annotation itself (that would fail the boot), it calls a
+    // bean that does - and the engine shares the transaction that
     // bean's interceptor marks rollback-only
     final var aggregateId = startProcess("RollbackOnlyProcess", true);
 
@@ -647,8 +647,8 @@ public class Camunda7WorkflowLifecycleTest {
     postWithoutResponse(
         "introspect/engine/message-executions/%s/correlation-id/PaymentReceived/payment-42".formatted(execution));
 
-    // a mismatching correlation id does not correlate - and since story 63 phase one
-    // says so where the application called it, instead of failing behind the commit
+    // a mismatching correlation id does not correlate - and phase one says so where
+    // the application called it, instead of failing behind the commit
     final var mismatch = post("introspect/messages/PaymentReceived/correlate/%s/wrong-id".formatted(aggregateId));
     assertTrue(
         mismatch
@@ -725,7 +725,7 @@ public class Camunda7WorkflowLifecycleTest {
 
   }
 
-  // --- pushing a changed aggregate (story 44) ---
+  // --- pushing a changed aggregate ---
 
   @Test
   @DisplayName("A conditional event fires once the changed aggregate was pushed")
@@ -811,7 +811,7 @@ public class Camunda7WorkflowLifecycleTest {
 
   }
 
-  // --- process versions (story 48) ---
+  // --- process versions ---
 
   @Test
   @DisplayName("The version of the deployed process definition decides which method serves the task")
@@ -833,7 +833,7 @@ public class Camunda7WorkflowLifecycleTest {
 
   }
 
-  // --- a workflow the engine starts on its own (story 41) ---
+  // --- a workflow the engine starts on its own ---
 
   @Test
   @DisplayName("A timer start event creates the aggregate, the task finds it and the end is reported")

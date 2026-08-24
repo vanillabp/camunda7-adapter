@@ -26,7 +26,7 @@ import io.vanillabp.spi.process.ProcessService;
 
 /**
  * Two <code>camunda7</code> adapter ids on ONE datasource, kept apart by a table
- * prefix (story 47) - the side-by-side migration setup on a single database.
+ * prefix - the side-by-side migration setup on a single database.
  * <p>
  * The prefix is what Camunda calls <code>databaseTablePrefix</code>, and Camunda does
  * not create prefixed tables: the initializer below applies the engine's own

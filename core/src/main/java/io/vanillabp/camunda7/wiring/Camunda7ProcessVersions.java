@@ -17,7 +17,7 @@ import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 /**
  * The versions of the process definitions of ONE Camunda 7 engine (= one adapter id):
  * what the core matches <code>&#64;WorkflowTask(version = ...)</code> and its siblings
- * against (story 48).
+ * against.
  * <p>
  * Two things are cached here, both for the same reason - the engine delivers tasks
  * inside its own transaction, and a query per task execution would be paid by every
@@ -37,12 +37,12 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
 
   /**
    * The process definition key the ENGINE knows for a (workflow module, plain BPMN
-   * process id) - the identifiers may be prefixed (story 35).
+   * process id) - the identifiers may be prefixed.
    */
   private final BiFunction<String, String, String> scopedProcessIds;
 
   /**
-   * The tenant a workflow module is deployed to, or <code>null</code> (story 35).
+   * The tenant a workflow module is deployed to, or <code>null</code>.
    */
   private final Function<String, String> tenants;
 
@@ -53,14 +53,14 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   private final Map<String, String> versionsByDefinitionId = new ConcurrentHashMap<>();
 
   /**
-   * The version this boot deployed per process (story 57) - what tells a restart
+   * The version this boot deployed per process - what tells a restart
    * without a model change that it still has to report a version.
    */
   private final Map<String, String> deployedVersions = new ConcurrentHashMap<>();
 
   /**
    * Reads the tasks of a model the engine holds - the deployment service' own
-   * extraction (story 57).
+   * extraction.
    */
   @FunctionalInterface
   public interface TasksOfModel {
@@ -76,8 +76,8 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   private final TasksOfModel tasksOfModel;
 
   /**
-   * The engine's runtime, asked how many workflows still run on an old version
-   * (story 57). Set once the engine is there; <code>null</code> switches the
+   * The engine's runtime, asked how many workflows still run on an old version.
+   * Set once the engine is there; <code>null</code> switches the
    * question off.
    */
   private RuntimeService runtimeService;
@@ -107,7 +107,7 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
 
   /**
    * The version this adapter recorded for that process during this boot, or
-   * <code>null</code> if it deployed nothing (story 57).
+   * <code>null</code> if it deployed nothing.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The PLAIN BPMN process ID

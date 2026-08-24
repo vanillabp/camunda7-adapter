@@ -9,7 +9,7 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the aggregate-sync integration test (story 28/28b): the
+ * The workflow service of the aggregate-sync integration test: the
  * workflow parks at an asynchronous task so the test can inspect the process
  * variables Camunda 7 actually holds.
  */

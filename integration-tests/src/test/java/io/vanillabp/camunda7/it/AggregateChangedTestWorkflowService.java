@@ -8,7 +8,7 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the aggregateChanged integration test (story 44): the
+ * The workflow service of the aggregateChanged integration test: the
  * workflow waits at a conditional event whose condition reads the aggregate.
  */
 @Service
