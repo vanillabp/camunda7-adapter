@@ -37,8 +37,7 @@ import jakarta.transaction.TransactionManager;
  *       Boot).</li>
  * </ul>
  */
-// no Lombok here: the accessors are the deliberate surface of this class,
-// and generating them would hide which of its fields are meant to be read
+// see decision 4 in the repository's README.md
 @SuppressWarnings("LombokGetterMayBeUsed")
 public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLifecycle, AutoCloseable {
 
