@@ -17,7 +17,7 @@ import org.springframework.test.annotation.DirtiesContext;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * End-to-end test of a workflow the engine starts on its own (story 41) against a
+ * End-to-end test of a workflow the engine starts on its own against a
  * real embedded Camunda 7 engine: a timer start event fires, VanillaBP builds the
  * workflow aggregate from the trigger, stores its ID as the instance's business key
  * and the task following the start event finds the aggregate through exactly that
@@ -97,7 +97,7 @@ public class Camunda7BpmsInitiatedStartIT {
             .count() == 0,
         "the workflow started by the timer to run to its end");
 
-    // story 43: the end is reported to the application, in the transaction which
+    // The end is reported to the application, in the transaction which
     // ended the workflow - so it is visible as soon as the instance is gone
     awaitUntil(
         () -> repository

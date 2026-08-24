@@ -28,7 +28,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * What Camunda 7 itself does with <code>databaseTablePrefix</code> - recorded here,
  * without VanillaBP in the way, because the answer decides what
- * <code>vanillabp.adapters.&lt;id&gt;.table-prefix</code> can promise (story 47).
+ * <code>vanillabp.adapters.&lt;id&gt;.table-prefix</code> can promise.
  * <p>
  * The engine states the answer in its own API:
  * {@code ProcessEngineConfigurationImpl#setDatabaseTablePrefix} says <i>"the prefix
@@ -79,7 +79,7 @@ public class Camunda7TablePrefixEngineBehaviourTest {
     configuration.setDatabaseSchemaUpdate(schemaUpdate);
     configuration.setJobExecutorActivate(false);
     configuration.setHistoryTimeToLive("P180D");
-    configuration.setProcessEngineName("story47-%s".formatted(System.nanoTime()));
+    configuration.setProcessEngineName("table-prefix-%s".formatted(System.nanoTime()));
     if (tablePrefix != null) {
       configuration.setDatabaseTablePrefix(tablePrefix);
     }
@@ -200,7 +200,7 @@ public class Camunda7TablePrefixEngineBehaviourTest {
   @DisplayName("Camunda's create scripts name the tables verbatim - in every dialect")
   public void createScriptsCarryFixedTableNames() {
 
-    // the answer of this story cannot differ by database: executeSchemaResource()
+    // the answer cannot differ by database: executeSchemaResource()
     // runs these files statement by statement, and none of them has a placeholder a
     // prefix could be substituted into
     for (final var database : List.of("h2", "postgres", "oracle", "mysql", "mssql", "db2")) {
@@ -219,14 +219,14 @@ public class Camunda7TablePrefixEngineBehaviourTest {
   @DisplayName("A prefixed engine with database-schema-update=true creates the tables UNPREFIXED and then fails")
   public void schemaUpdateIgnoresThePrefix() {
 
-    final var dataSource = h2("story47-prefix-schema-update");
+    final var dataSource = h2("table-prefix-schema-update");
 
     final var failure = assertThrows(
         Exception.class,
         () -> engineConfiguration(dataSource, "true", "NEW_").buildProcessEngine());
 
     // the failure comes from a QUERY against the prefixed table, not from a rejected
-    // CREATE - exactly what was observed while building story 46
+    // CREATE - exactly what Camunda does here
     assertTrue(
         messages(failure).contains("NEW_ACT_GE_PROPERTY"),
         () -> messages(failure));
@@ -243,7 +243,7 @@ public class Camunda7TablePrefixEngineBehaviourTest {
     // 'MY_SCHEMA.' is the multi-tenancy shape of Camunda's documentation; the engine
     // derives databaseSchema from it, and the DDL still creates ACT_* wherever the
     // connection points
-    final var dataSource = h2("story47-prefix-schema;INIT=create schema if not exists NEW_ENGINE");
+    final var dataSource = h2("table-prefix-schema;INIT=create schema if not exists NEW_ENGINE");
 
     final var failure = assertThrows(
         Exception.class,
@@ -258,7 +258,7 @@ public class Camunda7TablePrefixEngineBehaviourTest {
   @DisplayName("An engine whose prefixed tables exist starts and runs")
   public void aPrefixedEngineRunsOnTablesWhichExist() {
 
-    final var dataSource = h2("story47-prefix-prepared");
+    final var dataSource = h2("table-prefix-prepared");
     createPrefixedSchema(dataSource, "NEW_");
 
     final var engine = assertDoesNotThrow(

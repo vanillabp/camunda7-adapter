@@ -18,7 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * End-to-end test of pushing a changed aggregate (story 44) against a real embedded
+ * End-to-end test of pushing a changed aggregate against a real embedded
  * Camunda 7 engine. Two things are worth an engine: a conditional event only ever
  * looks at its condition when a variable of its scope changes - so the push is what
  * makes it fire - and a task-scoped push has to land in the scope the task RUNS IN
@@ -94,10 +94,10 @@ public class Camunda7AggregateChangedIT {
     transactionTemplate
         .executeWithoutResult(status -> multiInstanceWorkflowService.escalateAt(aggregateId, taskId));
 
-    // story 66: the pushed VALUES are the change now - the technical marker is written
+    // The pushed VALUES are the change now - the technical marker is written
     // only for an aggregate which shares nothing at all
     final var marker = "escalate";
-    // the push happens after the commit (story 63), so the scope it lands in is
+    // the push happens after the commit, so the scope it lands in is
     // waited for
     final var instanceId = processInstanceIdOf(aggregateId);
     AwaitPhaseTwo.until(
@@ -127,7 +127,7 @@ public class Camunda7AggregateChangedIT {
   }
 
   /**
-   * The workflow is created by the phase-two outbox after the commit (story 63), so
+   * The workflow is created by the phase-two outbox after the commit, so
    * the lookup waits for it instead of reading a moment too early.
    *
    * @param aggregateId The aggregate's id (the business key)
@@ -235,7 +235,7 @@ public class Camunda7AggregateChangedIT {
 
     // the values land in the scope the task RUNS IN - the iteration of the
     // multi-instance subprocess, recognizable by its own 'item' variable
-    // story 66: the pushed VALUES are the change now - the technical marker is written
+    // The pushed VALUES are the change now - the technical marker is written
     // only for an aggregate which shares nothing at all
     final var marker = "escalate";
     final var iterationExecutionId = executionIdOfIteration(aggregateId, pushedItem);
@@ -247,8 +247,8 @@ public class Camunda7AggregateChangedIT {
         Boolean.TRUE,
         runtimeService.getVariablesLocal(iterationExecutionId).get(marker),
         "the iteration the task runs in has to carry the pushed value");
-    // the workflow's global scope keeps what the START wrote (story 66 writes the shared
-    // values there when the workflow begins), so the sibling iterations read the old
+    // the workflow's global scope keeps what the START wrote (the shared values are
+    // written there when the workflow begins), so the sibling iterations read the old
     // value - which is the point of writing at the scope the task runs in
     assertEquals(
         Boolean.FALSE,

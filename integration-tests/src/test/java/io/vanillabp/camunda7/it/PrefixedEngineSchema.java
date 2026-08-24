@@ -12,7 +12,7 @@ import org.camunda.bpm.engine.ProcessEngine;
 
 /**
  * Creates the engine tables of a table prefix, the way an application running a
- * prefixed adapter id has to (story 47): Camunda's own statements with the prefix
+ * prefixed adapter id has to: Camunda's own statements with the prefix
  * applied to them. It sits in the test sources on purpose - the adapter does not do
  * this, because the rename covers the tables, indexes and constraints of ONE engine
  * version, and the engine's version bookkeeping stays the engine's business.

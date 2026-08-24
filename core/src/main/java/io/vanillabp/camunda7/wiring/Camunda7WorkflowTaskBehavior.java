@@ -54,14 +54,15 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
   /**
    * Translates the error code of a {@code TaskException} into what the engine knows
-   * (story 35: the model's error codes are prefixed too). May be <code>null</code>.
+   * (the model's error codes are prefixed too, see decision 3 in the repository's
+   * README.md). May be <code>null</code>.
    */
   private final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
 
   private final String adapterId;
 
   /**
-   * Answers the version of the process definition an execution runs on (story 48).
+   * Answers the version of the process definition an execution runs on.
    * May be <code>null</code> (tests): no version is reported then.
    */
   private final Camunda7TaskRegistry taskRegistry;
@@ -159,7 +160,7 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
         connectable.workflowModuleId(),
         connectable.bpmnProcessId(),
         new Camunda7TaskInvocationContext(connectable, execution, taskRegistry));
-    // story 66: what the handler computed has to reach the engine BEFORE it evaluates
+    // What the handler computed has to reach the engine BEFORE it evaluates
     // what comes next - a gateway right behind this task would otherwise decide on the
     // values of the last ProcessService call. Written here, inside the engine's
     // transaction, so the variables commit with the aggregate and with the token
@@ -177,7 +178,7 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
   }
 
   /**
-   * Writes the values the aggregate shares with the BPMS onto the execution (story 66).
+   * Writes the values the aggregate shares with the BPMS onto the execution.
    * <p>
    * The values are read in the CALLER's transaction, which is the engine's: the handler
    * just changed the aggregate there, and reading in a new transaction would either see
@@ -375,9 +376,7 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
     // the walk collects innermost first - the SPI contract is outermost first
     final var outermostFirst = new LinkedHashMap<String, MultiInstanceValue>();
-    result
-        .reversed()
-        .forEach(outermostFirst::put);
+    outermostFirst.putAll(result.reversed());
     return outermostFirst;
 
   }

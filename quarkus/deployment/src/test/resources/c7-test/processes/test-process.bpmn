@@ -5,7 +5,7 @@
       <bpmn:outgoing>Flow_start_to_task</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:sequenceFlow id="Flow_start_to_task" sourceRef="StartEvent_1" targetRef="ServiceTask_1" />
-    <!-- since task wiring (story 21b) the expression names the @WorkflowTask method's
+    <!-- the expression names the @WorkflowTask method's
          task definition; the adapter's parse listener forces async-before/after anyway -->
     <bpmn:serviceTask id="ServiceTask_1" camunda:expression="${testTask}">
       <bpmn:incoming>Flow_start_to_task</bpmn:incoming>

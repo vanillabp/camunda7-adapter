@@ -20,7 +20,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 public class C7TimerWorkflowService {
 
   /**
-   * Story 43: the workflow started by the timer also reports its end.
+   * The workflow started by the timer also reports its end.
    *
    * @param aggregate The workflow aggregate
    * @param end How the workflow ended

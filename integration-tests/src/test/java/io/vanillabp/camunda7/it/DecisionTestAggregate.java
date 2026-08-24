@@ -11,7 +11,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The aggregate of story 66's decision test: a task computes what the gateway right behind
+ * The aggregate of the decision test: a task computes what the gateway right behind
  * it reads, so the value has to be a process variable by the time the engine evaluates
  * that gateway. It also carries a NESTED shared value, which becomes an object variable in
  * the configured serialization format.
@@ -44,7 +44,7 @@ public class DecisionTestAggregate {
   private String taskId;
 
   /**
-   * A nested shared value (story 66): an object variable in the configured format.
+   * A nested shared value: an object variable in the configured format.
    */
   @Embedded
   private DecisionTestCustomer customer;

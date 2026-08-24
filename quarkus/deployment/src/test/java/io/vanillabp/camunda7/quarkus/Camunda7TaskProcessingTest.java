@@ -19,7 +19,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.transaction.UserTransaction;
 
 /**
- * End-to-end test of {@code @WorkflowTask} processing on Quarkus (story 21b) - a
+ * End-to-end test of {@code @WorkflowTask} processing on Quarkus - a
  * real embedded engine on Agroal/Narayana: handlers run inside the engine's JTA
  * job transaction with the CDI request context active. The three outcomes:
  * <ul>
@@ -127,7 +127,7 @@ public class Camunda7TaskProcessingTest {
 
     final var aggregateId = start("QTaskProcess");
 
-    // story 63: the instance is created AFTER the commit, so waiting for it to
+    // The instance is created AFTER the commit, so waiting for it to
     // disappear would end before it ever existed - the results are the signal
     final var deadline = System.currentTimeMillis() + 15000;
     while (!"happy|error-raised|handled".equals(resultsOf(aggregateId))) {
@@ -194,7 +194,7 @@ public class Camunda7TaskProcessingTest {
   }
 
   @Test
-  @DisplayName("The workflow is progressed AFTER the commit, not inside the caller's transaction (story 63)")
+  @DisplayName("The workflow is progressed AFTER the commit, not inside the caller's transaction")
   public void completeTaskProgressesAfterTheCommit() throws Exception {
 
     final var aggregateId = start("QAsyncProcess");

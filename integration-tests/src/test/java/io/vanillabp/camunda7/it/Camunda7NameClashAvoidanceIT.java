@@ -21,7 +21,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * End-to-end test of the name-clash-avoidance mode {@code use-prefix} on a real
- * embedded Camunda 7 engine (story 35): the workflow module is NOT deployed into a
+ * embedded Camunda 7 engine: the workflow module is NOT deployed into a
  * tenant, instead every identifier the engine resolves across process definitions
  * carries the workflow module id as prefix. What has to keep working:
  * <ul>

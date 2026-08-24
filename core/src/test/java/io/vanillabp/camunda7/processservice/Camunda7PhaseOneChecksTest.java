@@ -21,7 +21,7 @@ import io.vanillabp.integration.spi.AggregatePersistenceAware;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Story 63: Camunda 7 progresses the workflow after the commit, so phase one only
+ * Camunda 7 progresses the workflow after the commit, so phase one only
  * ASKS - and an embedded engine answers from the caller's own transaction, exactly and
  * for free. What used to fail synchronously (a task which is gone, a message nobody
  * waits for) therefore still fails synchronously instead of turning into a log line

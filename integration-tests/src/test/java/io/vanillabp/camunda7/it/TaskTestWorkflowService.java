@@ -14,7 +14,7 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the task-processing integration tests (story 21b): one
+ * The workflow service of the task-processing integration tests: one
  * {@code @WorkflowTask} method per outcome/binding variation, serving FIVE BPMN
  * processes of one aggregate ({@code secondaryBpmnProcesses} - exercised for real
  * on Camunda 7).
@@ -153,7 +153,7 @@ public class TaskTestWorkflowService {
       @TaskEvent final io.vanillabp.spi.service.TaskEvent.Event event) {
 
     // subscribed to ALL events (default): CREATED parks the task, CANCELED is
-    // delivered when the activity is canceled (story 22)
+    // delivered when the activity is canceled
     if (event == io.vanillabp.spi.service.TaskEvent.Event.CREATED) {
       aggregate.setTaskId(taskId);
       aggregate.appendResult("event-created");
@@ -203,7 +203,7 @@ public class TaskTestWorkflowService {
       @TaskId final String taskId,
       @TaskEvent final io.vanillabp.spi.service.TaskEvent.Event event) {
 
-    // user-task lifecycle notification (story 24): CREATED when the task shows
+    // user-task lifecycle notification: CREATED when the task shows
     // up, CANCELED when its activity is canceled
     if (event == io.vanillabp.spi.service.TaskEvent.Event.CREATED) {
       aggregate.setTaskId(taskId);
@@ -267,7 +267,7 @@ public class TaskTestWorkflowService {
   /**
    * Calls a bean carrying a transaction annotation of the application. The handler
    * itself has none, so the startup check cannot see it and the runtime check has to
-   * catch the rollback-only transaction (story 40b).
+   * catch the rollback-only transaction.
    */
   @WorkflowTask
   public void nestedTransaction(

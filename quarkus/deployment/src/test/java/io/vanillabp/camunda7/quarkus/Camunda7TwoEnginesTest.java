@@ -21,8 +21,8 @@ import jakarta.persistence.EntityManager;
 import jakarta.transaction.UserTransaction;
 
 /**
- * Two configured {@code camunda7} adapter ids side by side on Quarkus (story 26f -
- * the engine-side-by-side migration scenario): {@code c7} runs on the application's
+ * Two configured {@code camunda7} adapter ids side by side on Quarkus (the
+ * engine-side-by-side migration scenario): {@code c7} runs on the application's
  * default Agroal datasource, {@code c7b} on the NAMED datasource declared under
  * <code>quarkus.datasource.c7b.*</code>
  * (<code>vanillabp.adapters.c7b.data-source-name</code>).

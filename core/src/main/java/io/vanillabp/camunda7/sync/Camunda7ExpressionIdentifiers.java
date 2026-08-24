@@ -16,8 +16,8 @@ import org.camunda.bpm.model.bpmn.instance.TimerEventDefinition;
 import org.camunda.bpm.model.xml.instance.ModelElementInstance;
 
 /**
- * Reads the identifiers the expressions of a BPMN process rely on - the input of story
- * 66's startup check: a name which is an attribute of the workflow aggregate but is not
+ * Reads the identifiers the expressions of a BPMN process rely on - the input of the
+ * startup check: a name which is an attribute of the workflow aggregate but is not
  * shared with the BPMS always evaluates to <code>null</code>, and Camunda 7 then behaves
  * as if the condition was false. No exception, no log line, the default flow.
  * <p>

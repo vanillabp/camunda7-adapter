@@ -12,7 +12,7 @@ import jakarta.inject.Inject;
 /**
  * A workflow which runs one task and ends. The <code>&#64;WorkflowEnded</code> method
  * is the point of the test: on Quarkus it was never called, because the adapter did
- * not hand the core's invoker to the engine (story 72).
+ * not hand the core's invoker to the engine.
  */
 @ApplicationScoped
 @WorkflowService(

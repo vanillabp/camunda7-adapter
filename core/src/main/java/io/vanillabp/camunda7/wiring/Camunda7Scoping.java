@@ -13,7 +13,7 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Applies {@link NameClashAvoidance#USE_PREFIX} to a Camunda 7 model (story 35):
+ * Applies {@link NameClashAvoidance#USE_PREFIX} to a Camunda 7 model:
  * every identifier the ENGINE resolves across process definitions is prefixed, so
  * two workflow modules may use the same names without a Camunda tenant.
  *

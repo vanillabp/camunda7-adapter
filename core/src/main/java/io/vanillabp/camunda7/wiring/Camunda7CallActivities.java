@@ -11,7 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * What a call activity needs on Camunda 7 to continue the SAME business case: the
- * business key (story 61).
+ * business key.
  * <p>
  * VanillaBP keeps the workflow aggregate's ID in Camunda's business key. Camunda 7
  * does not pass the business key to a called process unless the model says so, so the

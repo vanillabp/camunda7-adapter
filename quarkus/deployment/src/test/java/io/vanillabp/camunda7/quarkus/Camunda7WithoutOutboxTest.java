@@ -17,7 +17,7 @@ import io.vanillabp.camunda7.quarkus.sample.TestWorkflowService;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Story 63: Camunda 7 progresses workflows after the commit, through the phase-two
+ * Camunda 7 progresses workflows after the commit, through the phase-two
  * outbox - so an application without one cannot work. It is told while booting, with
  * the message naming the ways out, instead of at the first workflow.
  */

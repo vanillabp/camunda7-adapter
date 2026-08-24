@@ -19,7 +19,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * End-to-end test of broadcasting a BPMN signal (story 42) against a real embedded
+ * End-to-end test of broadcasting a BPMN signal against a real embedded
  * Camunda 7 engine: a workflow waits at an intermediate signal catch event, the
  * broadcast lets it continue, and a broadcast inside a rolled-back transaction
  * changes nothing - the embedded engine shares the caller's transaction, which is

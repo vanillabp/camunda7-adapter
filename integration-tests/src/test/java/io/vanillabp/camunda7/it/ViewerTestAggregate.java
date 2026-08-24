@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The aggregate of the viewer/history API test (story 26) - its own aggregate class
+ * The aggregate of the viewer/history API test - its own aggregate class
  * because the viewer API is asked on the process service of the process being viewed
  * ({@code ViewerParentProcess}).
  */

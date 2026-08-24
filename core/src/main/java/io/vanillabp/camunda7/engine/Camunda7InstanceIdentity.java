@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * What makes two configured <code>camunda7</code> adapter ids DIFFERENT engines
- * (story 34): the database they run on. Camunda 7 is embedded, so two ids sharing
+ * What makes two configured <code>camunda7</code> adapter ids DIFFERENT engines:
+ * the database they run on. Camunda 7 is embedded, so two ids sharing
  * one datasource AND one table prefix are literally the same engine state -
  * configuring them as separate adapters is a defect.
  * <p>

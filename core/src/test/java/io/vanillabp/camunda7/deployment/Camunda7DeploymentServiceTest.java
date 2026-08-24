@@ -14,11 +14,11 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What the Camunda 7 adapter contributes to the name-clash-avoidance model (story
- * 35): the mode applying without configuration, and how an unscoped workflow module
+ * What the Camunda 7 adapter contributes to the name-clash-avoidance model: the mode
+ * applying without configuration, and how an unscoped workflow module
  * is reported - the alternatives to {@link NameClashAvoidance#NONE} are Camunda 7's,
  * so the message is the adapter's. The default is {@link NameClashAvoidance#BY_ADAPTER}
- * because version 1 deployed a tenant per workflow module (story 106).
+ * because version 1 deployed a tenant per workflow module.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7DeploymentServiceTest {
@@ -74,7 +74,7 @@ public class Camunda7DeploymentServiceTest {
 
     final var warnings = warningsOf(() -> service.warnAboutUnservedWorkflowEndedHandlers(MODULE, "LoanApproval"));
 
-    assertEquals(1, warnings.size(), () -> warnings.toString());
+    assertEquals(1, warnings.size(), warnings::toString);
     final var message = warnings.getFirst();
     assertTrue(message.contains("LoanApproval"), () -> message);
     assertTrue(message.contains(MODULE), () -> message);
@@ -155,7 +155,7 @@ public class Camunda7DeploymentServiceTest {
     final var service = serviceOfAdapterId("myengine");
 
     final var configured = warningsOf(() -> service.warnAboutUnscopedIdentifiers(MODULE, false));
-    assertEquals(1, configured.size(), () -> configured.toString());
+    assertEquals(1, configured.size(), configured::toString);
     final var message = configured.getFirst();
     assertTrue(message.contains("'"
         + MODULE
@@ -173,11 +173,11 @@ public class Camunda7DeploymentServiceTest {
     // the mode being the adapter's default is worth saying - the developer configured
     // nothing, so they may not know the mode at all
     final var byDefault = warningsOf(() -> service.warnAboutUnscopedIdentifiers(MODULE, true));
-    assertTrue(byDefault.getFirst().contains("nothing is configured"), () -> byDefault.toString());
+    assertTrue(byDefault.getFirst().contains("nothing is configured"), byDefault::toString);
     // ... and the way out of the warning is part of it
     assertTrue(
         byDefault.getFirst().contains("vanillabp.adapters.myengine.accept-unscoped-identifiers: true"),
-        () -> byDefault.toString());
+        byDefault::toString);
 
   }
 

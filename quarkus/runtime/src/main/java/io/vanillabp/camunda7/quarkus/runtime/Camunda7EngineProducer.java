@@ -121,7 +121,7 @@ public class Camunda7EngineProducer {
     keys.tablePrefix().ifPresent(properties::setTablePrefix);
     keys.serializationFormat().ifPresent(properties::setSerializationFormat);
     // the named plugin sections travel onto the platform-neutral model, so the core builds
-    // and configures them the same way on both platforms (story 66)
+    // and configures them the same way on both platforms
     properties
         .setEnginePlugins(
             keys
@@ -166,7 +166,7 @@ public class Camunda7EngineProducer {
     // the explicit @Default literal is required: with named datasources present, an
     // unqualified select() on the @Any instance would be ambiguous
     // several datasources declared: which one the engine runs on is not VanillaBP's
-    // guess (story 34) - not even the default datasource decides it, because an
+    // guess - not even the default datasource decides it, because an
     // embedded engine writes its ACT_* tables into whatever database it gets. The
     // default datasource is named explicitly by the reserved value 'default'.
     if (dataSourceName == null) {

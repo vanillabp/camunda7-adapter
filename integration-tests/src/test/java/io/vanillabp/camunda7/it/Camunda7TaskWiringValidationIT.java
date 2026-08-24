@@ -12,9 +12,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Guiding wiring validation on a real engine boot: a BPMN task whose expression
- * matches no {@code @WorkflowTask} method aborts the boot naming the task and the fix
- * (story 21b), and so does a task which has to stay open but is wired in a way that
- * completes it on return (story 50).
+ * matches no {@code @WorkflowTask} method aborts the boot naming the task and the fix,
+ * and so does a task which has to stay open but is wired in a way that
+ * completes it on return.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput

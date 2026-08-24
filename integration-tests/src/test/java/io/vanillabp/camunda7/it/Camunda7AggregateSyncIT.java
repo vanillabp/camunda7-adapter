@@ -19,17 +19,17 @@ import org.springframework.transaction.support.TransactionTemplate;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What the EMBEDDED Camunda 7 engine gets to see of a workflow aggregate (stories 28, 28b
- * and 66), asserted against the real engine:
+ * What the EMBEDDED Camunda 7 engine gets to see of a workflow aggregate, asserted
+ * against the real engine:
  * <ul>
- * <li>since story 66 this adapter shares like every other BPMS: an aggregate carrying NO
+ * <li>this adapter shares like every other BPMS: an aggregate carrying NO
  * annotation writes every attribute as a process variable, and the engine's expressions
  * read those variables;</li>
  * <li>an aggregate which minimizes ({@code @SyncWithBPMS} on one attribute derives opt-out
  * for the rest) writes exactly what it named - and an expression reading something it did
  * NOT share only works through the MIGRATION FALLBACK of the EL resolver, which version
  * 2.1 removes;</li>
- * <li>the case the story was written for: the gateway right behind a service task branches
+ * <li>the demanding case: the gateway right behind a service task branches
  * on what THAT task computed, which means the value has to be a variable by then. The
  * condition also navigates a NESTED shared value, which travels as an object variable.</li>
  * </ul>
@@ -102,7 +102,7 @@ public class Camunda7AggregateSyncIT {
         .list()
         .stream()
         .collect(Collectors.toMap(
-            variable -> variable.getName(),
+            org.camunda.bpm.engine.runtime.VariableInstance::getName,
             variable -> String.valueOf(variable.getValue())));
 
   }
@@ -121,7 +121,7 @@ public class Camunda7AggregateSyncIT {
     });
 
     // the gateway condition reads the NOT shared attribute, so the workflow got past it
-    // through the migration fallback of story 66 - the EL resolver still reads the
+    // through the migration fallback - the EL resolver still reads the
     // aggregate where the engine has no variable of that name. Version 2.1 removes that,
     // and the startup check names such expressions while the application boots
     assertTrue(
@@ -167,9 +167,9 @@ public class Camunda7AggregateSyncIT {
         .processInstanceId(historicInstance.getId())
         .list()
         .stream()
-        .map(variable -> variable.getName())
+        .map(org.camunda.bpm.engine.history.HistoricVariableInstance::getName)
         .toList();
-    // story 66: FULL is the default of every adapter, so every attribute of this
+    // FULL is the default of every adapter, so every attribute of this
     // unannotated aggregate is a variable the model may read
     assertTrue(variableNames.contains("approved"), "shared attributes: "
         + variableNames);
@@ -181,7 +181,7 @@ public class Camunda7AggregateSyncIT {
   }
 
   @Test
-  @DisplayName("The gateway behind a task branches on what THAT task computed (story 66)")
+  @DisplayName("The gateway behind a task branches on what THAT task computed")
   public void theGatewayBehindATaskReadsWhatTheTaskComputed() {
 
     final var aggregateId = transactionTemplate.execute(status -> {
@@ -206,7 +206,7 @@ public class Camunda7AggregateSyncIT {
         "the gateway took the rejecting branch - it did not see what the task computed");
 
     // the value the task computed IS a process variable now, which is what the gateway
-    // read: before story 66 nothing was written when a task completed
+    // read (see decision 1 in the repository's README.md)
     final var variables = variablesOfWorkflow(aggregateId, "SyncDecisionProcess");
     assertEquals("true", variables.get("decided"), "variables: "
         + variables);

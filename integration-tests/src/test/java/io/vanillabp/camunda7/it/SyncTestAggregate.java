@@ -9,15 +9,14 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The aggregate of the aggregate-sync integration test (stories 28/28b/66): it shares the
- * attributes it annotates, which since story 28b DERIVES the class' mode "share nothing
- * else" (opt-in).
+ * The aggregate of the aggregate-sync integration test: it shares the
+ * attributes it annotates, which DERIVES the class' mode "share nothing else" (opt-in).
  * <p>
  * Two expressions read it. The gateway of {@code SyncProcess} branches on
- * {@link #isApproved()}, which is NOT shared - since story 66 that only works through the
- * MIGRATION FALLBACK of the EL resolver, which version 2.1 removes; the test pins that,
- * including the warning. The decision case story 66 was written for - a task computing what the
- * gateway right behind it reads - lives in {@code DecisionTestAggregate}.
+ * {@link #isApproved()}, which is NOT shared - that only works through the MIGRATION
+ * FALLBACK of the EL resolver, which version 2.1 removes; the test pins that, including
+ * the warning (see decision 1 in the repository's README.md). The decision case - a task
+ * computing what the gateway right behind it reads - lives in {@code DecisionTestAggregate}.
  */
 @Entity
 @Table(name = "C7_SYNC_TEST_AGGREGATE")

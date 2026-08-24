@@ -16,9 +16,9 @@ import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Stories 104 and 107: the awareness probes of this adapter answer for the scope they are
+ * The awareness probes of this adapter answer for the scope they are
  * ASKED about, which is what the election contract of {@code MigratableProcessService}
- * demands (story 105).
+ * demands.
  * <p>
  * A Camunda 7 business key is the workflow-aggregate id, and an engine may hold
  * processes this adapter never wired: models of another application sharing the
@@ -31,9 +31,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * of its workflow modules, and the tenant each module runs in. The engine here is a real
  * one, in memory, because the queries doing the comparison are the subject.
  * <p>
- * Story 104 could only compare what the adapter had DEPLOYED, so two workflow modules of
- * one adapter were both its own scope and a foreign-module instance with the same
- * aggregate id was still claimed. Since story 107 the probe is told which workflow module
+ * Comparing what the adapter has DEPLOYED is not enough: two workflow modules of one
+ * adapter would both be its own scope, and a foreign-module instance with the same
+ * aggregate id would still be claimed. The probe is therefore told which workflow module
  * and which BPMN processes are meant, and that case is the third test below.
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -307,8 +307,8 @@ public class Camunda7AwarenessScopeTest {
   @DisplayName("A workflow of ANOTHER workflow module of this adapter is not claimed")
   public void anotherModuleOfTheSameAdapterIsNotClaimed() {
 
-    // the case story 104 had to leave open: both modules belong to this adapter id, and
-    // only the scope of the CALL says which one is meant
+    // both modules belong to this adapter id, and only the scope of the CALL says
+    // which one is meant
     start(OTHER_MODULE_PROCESS, OTHER_MODULE);
 
     assertEquals(
@@ -364,7 +364,7 @@ public class Camunda7AwarenessScopeTest {
   }
 
   /**
-   * Story 112: the same question for the WRITE behind {@code aggregateChanged}, which the
+   * The same question for the WRITE behind {@code aggregateChanged}, which the
    * probes' fix had missed. It is the worse half of the defect - a probe answering for a
    * foreign workflow reports something wrong, a write into one ADVANCES it, because a
    * variable write is what makes Camunda 7 re-evaluate conditional events.
@@ -459,7 +459,7 @@ public class Camunda7AwarenessScopeTest {
 
     // two adapter ids on one engine, which is what a migration between two Camunda 7
     // installations of one database looks like: the second id runs the same workflow
-    // module under a tenant of its own (story 35), and both count aggregate ids alike
+    // module under a tenant of its own, and both count aggregate ids alike
     final var foreignAdapterTenant = "c7-prefixed";
     deploy(foreignAdapterTenant, OWN_PROCESS);
     final var own = start(OWN_PROCESS);

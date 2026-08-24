@@ -106,7 +106,7 @@ public class C7E2eIntrospectionController {
   }
 
   /**
-   * The aggregates of the workflows the ENGINE started on its own (story 41) - the
+   * The aggregates of the workflows the ENGINE started on its own - the
    * application never creates one of them.
    *
    * @return One "id|processedBy|endedAs" per aggregate
@@ -129,8 +129,8 @@ public class C7E2eIntrospectionController {
 
   /**
    * Starts the primary process through the VanillaBP user API and reports what was
-   * visible while the caller's transaction was still open: since story 63 the
-   * workflow is created by the phase-two outbox, so nothing may exist yet.
+   * visible while the caller's transaction was still open: the workflow is created
+   * by the phase-two outbox, so nothing may exist yet.
    *
    * @param approved What the gateway of {@code TaskProcess} branches on
    * @return The aggregate's id and what phase one left behind
@@ -364,7 +364,7 @@ public class C7E2eIntrospectionController {
 
   }
 
-  // --- pushing a changed aggregate (story 44) ---
+  // --- pushing a changed aggregate ---
 
   @POST
   @Path("/push/workflows")
@@ -568,7 +568,7 @@ public class C7E2eIntrospectionController {
 
   /**
    * The message of the job which failed - a technical exception of a handler ends up
-   * here, and story 40b's guiding message with it.
+   * here, and VanillaBP's guiding message with it.
    *
    * @param aggregateId The aggregate's id (the business key)
    * @return The job's exception message, or an empty string
@@ -720,7 +720,7 @@ public class C7E2eIntrospectionController {
 
   /**
    * Deploys the second version of {@code VersionedProcess} while the application runs
-   * - the way another node of a rolling deployment would (story 48).
+   * - the way another node of a rolling deployment would.
    */
   @POST
   @Path("/engine/deploy-version-two")
@@ -796,8 +796,8 @@ public class C7E2eIntrospectionController {
 
   /**
    * Runs one {@code ProcessService} call in a transaction of its own and reports what
-   * was visible while it was still open - since story 63 the engine may not have been
-   * touched at that point.
+   * was visible while it was still open - the engine may not have been touched at
+   * that point.
    *
    * @param aggregateId The aggregate the operation works on
    * @param operation What to call

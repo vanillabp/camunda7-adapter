@@ -43,7 +43,7 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
  * executor appear in applications merely having the adapter jar on the classpath.
  * <p>
  * <b>Startup validation:</b> two embedded engines on one schema are the same engine
- * state. Since story 34 that check runs through the adapter SPI hook
+ * state. That check runs through the adapter SPI hook
  * {@code AdapterDeploymentService#validateDistinctAdapterInstances} (implemented ONCE
  * in {@link Camunda7DeploymentService} for both platforms): adapter ids sharing one
  * datasource AND one table prefix fail the boot with a guiding message. An
@@ -103,7 +103,7 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 processService.setScoping(
                     supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class),
                     configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
-                // story 66: which serialization format nested shared values are stored
+                // Which serialization format nested shared values are stored
                 // in, resolved per workflow with a fallback to the module and the adapter
                 final var overlay = supplierContext.bean(VanillaBpCamunda7Properties.class);
                 processService.setSerializationFormats(
@@ -149,7 +149,7 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                     engine
                         .getProcessEngine()
                         .getIdentityService());
-                // story 57: how many workflows still run on an older version
+                // How many workflows still run on an older version
                 deploymentService.setRuntimeService(
                     engine
                         .getProcessEngine()
@@ -225,7 +225,7 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
       final String adapterId) {
 
     // several datasources available: which one the engine runs on is not VanillaBP's
-    // guess (story 34) - not even a @Primary bean decides it, because an embedded
+    // guess - not even a @Primary bean decides it, because an embedded
     // engine writes its ACT_* tables into whatever database it gets
     final var availableBeanNames = availableBeanNames(supplierContext, beanType);
     if ((availableBeanNames.size() > 1) && DataSource.class.equals(beanType)) {
@@ -313,7 +313,7 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
   /**
    * The tenant name configured for an adapter id
    * (<code>vanillabp.adapters.&lt;id&gt;.tenant-id</code>) or <code>null</code> - the
-   * workflow module id names the tenant then (story 35).
+   * workflow module id names the tenant then.
    */
   private static String configuredTenantIdOf(
       final VanillaBpCamunda7Properties overlay,

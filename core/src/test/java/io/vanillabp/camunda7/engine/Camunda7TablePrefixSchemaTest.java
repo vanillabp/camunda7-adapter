@@ -19,7 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The startup check of story 47: an adapter id running on a table prefix learns while
+ * The table-prefix startup check: an adapter id running on a table prefix learns while
  * booting that its tables have to be there, instead of dying on a MyBatis query
  * against a table nobody created.
  */

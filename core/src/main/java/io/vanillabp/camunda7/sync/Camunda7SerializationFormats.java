@@ -1,7 +1,7 @@
 package io.vanillabp.camunda7.sync;
 
 /**
- * Which serialization format Camunda 7 stores a NESTED shared value in (story 66),
+ * Which serialization format Camunda 7 stores a NESTED shared value in,
  * resolved per workflow with a fallback to the workflow module and to the adapter:
  *
  * <pre>

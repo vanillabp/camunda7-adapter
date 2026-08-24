@@ -11,7 +11,7 @@ import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * The workflow service of the multi-instance half of the aggregateChanged
- * integration test (story 44).
+ * integration test.
  */
 @Service
 @WorkflowService(

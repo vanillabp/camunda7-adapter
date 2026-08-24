@@ -1,5 +1,8 @@
 package io.vanillabp.camunda7.engine;
 
+import lombok.Getter;
+import lombok.Setter;
+
 /**
  * Per-adapter-id engine settings of the Camunda 7 adapter, living at the canonical
  * per-adapter location <code>vanillabp.adapters.&lt;id&gt;.*</code> (contributed to
@@ -44,19 +47,24 @@ package io.vanillabp.camunda7.engine;
  *       rather than letting the engine fail on its first query.</li>
  * </ul>
  */
+@Getter
 public class Camunda7EngineProperties {
 
+  @Setter
   private String databaseSchemaUpdate = "true";
 
+  @Setter
   private String historyTimeToLive = "P180D";
 
+  @Setter
   private String dataSourceName;
 
+  @Setter
   private String tablePrefix;
 
   /**
-   * The serialization format nested values shared by a workflow aggregate are stored in
-   * (story 66), e.g. {@code application/xstream} (camunda-xstream) or
+   * The serialization format nested values shared by a workflow aggregate are stored in,
+   * e.g. {@code application/xstream} (camunda-xstream) or
    * {@code application/json} (SPIN). It is applied twice: to the engine's
    * {@code defaultSerializationFormat}, so an application configures the format once, and
    * per written variable, so a workflow module or a single workflow may override it
@@ -66,6 +74,7 @@ public class Camunda7EngineProperties {
    * The matching dataformat has to be on the classpath - that dependency and its own
    * settings belong to the application, VanillaBP only names the format.
    */
+  @Setter
   private String serializationFormat;
 
   /**
@@ -79,9 +88,10 @@ public class Camunda7EngineProperties {
 
   /**
    * The Camunda tenant a workflow module is deployed to under the name-clash
-   * avoidance mode {@code by-adapter} (story 35). Unset (the default) means the
+   * avoidance mode {@code by-adapter}. Unset (the default) means the
    * workflow module ID is the tenant - VanillaBP 1's behavior.
    */
+  @Setter
   private String tenantId;
 
   /**
@@ -92,47 +102,8 @@ public class Camunda7EngineProperties {
    * two workflow modules address the same process definitions and tasks. Default
    * {@code false}.
    */
+  @Setter
   private boolean acceptUnscopedIdentifiers = false;
-
-  public boolean isAcceptUnscopedIdentifiers() {
-    return acceptUnscopedIdentifiers;
-  }
-
-  public void setAcceptUnscopedIdentifiers(
-      final boolean acceptUnscopedIdentifiers) {
-    this.acceptUnscopedIdentifiers = acceptUnscopedIdentifiers;
-  }
-
-  public String getDatabaseSchemaUpdate() {
-    return databaseSchemaUpdate;
-  }
-
-  public void setDatabaseSchemaUpdate(
-      final String databaseSchemaUpdate) {
-    this.databaseSchemaUpdate = databaseSchemaUpdate;
-  }
-
-  public String getHistoryTimeToLive() {
-    return historyTimeToLive;
-  }
-
-  public void setHistoryTimeToLive(
-      final String historyTimeToLive) {
-    this.historyTimeToLive = historyTimeToLive;
-  }
-
-  public String getTenantId() {
-    return tenantId;
-  }
-
-  public void setTenantId(
-      final String tenantId) {
-    this.tenantId = tenantId;
-  }
-
-  public java.util.Map<String, Camunda7EnginePluginProperties> getEnginePlugins() {
-    return enginePlugins;
-  }
 
   public void setEnginePlugins(
       final java.util.Map<String, Camunda7EnginePluginProperties> enginePlugins) {
@@ -141,40 +112,13 @@ public class Camunda7EngineProperties {
         : enginePlugins;
   }
 
-  public String getSerializationFormat() {
-    return serializationFormat;
-  }
-
-  public void setSerializationFormat(
-      final String serializationFormat) {
-    this.serializationFormat = serializationFormat;
-  }
-
-  public String getTablePrefix() {
-    return tablePrefix;
-  }
-
-  public void setTablePrefix(
-      final String tablePrefix) {
-    this.tablePrefix = tablePrefix;
-  }
-
-  public String getDataSourceName() {
-    return dataSourceName;
-  }
-
-  public void setDataSourceName(
-      final String dataSourceName) {
-    this.dataSourceName = dataSourceName;
-  }
-
   /**
    * @return Whether an own (named) datasource is configured for the adapter id
    */
   /**
    * The reserved value of {@code data-source-name} naming the application's
    * DEFAULT datasource explicitly. Needed because an application providing several
-   * datasources has to name the one each adapter id runs on (story 34) - and the
+   * datasources has to name the one each adapter id runs on - and the
    * default datasource has no name of its own on either platform.
    */
   public static final String DEFAULT_DATA_SOURCE_NAME = "default";

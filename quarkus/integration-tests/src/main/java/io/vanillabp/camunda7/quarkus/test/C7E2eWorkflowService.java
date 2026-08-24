@@ -288,7 +288,7 @@ public class C7E2eWorkflowService {
   /**
    * Calls a bean carrying a transaction annotation of the application. The handler
    * itself has none, so the startup check cannot see it and the runtime check has to
-   * catch the rollback-only transaction (story 40b).
+   * catch the rollback-only transaction.
    *
    * @param aggregate The workflow aggregate
    */
@@ -313,7 +313,7 @@ public class C7E2eWorkflowService {
   }
 
   /**
-   * Story 48: which method serves the task is decided by the version of the deployed
+   * Which method serves the task is decided by the version of the deployed
    * process definition - this one by its number.
    *
    * @param aggregate The workflow aggregate
@@ -327,7 +327,7 @@ public class C7E2eWorkflowService {
   }
 
   /**
-   * Story 48: this one by the <code>camunda:versionTag</code> of the second version,
+   * This one by the <code>camunda:versionTag</code> of the second version,
    * which is deployed while the application runs - the way another node of a rolling
    * deployment does it.
    *

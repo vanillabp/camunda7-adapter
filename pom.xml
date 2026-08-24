@@ -53,9 +53,9 @@
     <!-- the line each platform's aggregated report has to stay above, in PERCENT of
          covered instructions - enforced by test-coverage-report/coverage-gate. The rule
          is 90; the Quarkus line is lower because the startup check for old process
-         versions (story 57) needs several boots against one database, which a Quarkus
+         versions needs several boots against one database, which a Quarkus
          prod-mode test cannot produce - see the Quarkus suite's class comment for the
-         complete list. The Quarkus end-to-end suite of story 100 reaches 85.0, and the
+         complete list. The Quarkus end-to-end suite reaches 85.0, and the
          line sits just below that so a run-to-run difference does not break a build
          nothing changed in. It is never lowered to make a build pass. -->
     <coverage.threshold.spring-boot>90</coverage.threshold.spring-boot>

@@ -21,7 +21,7 @@ import io.vanillabp.spi.service.WorkflowTask;
 public class TimerStartTestWorkflowService {
 
   /**
-   * Story 43: the workflow started by the timer also reports its end.
+   * The workflow started by the timer also reports its end.
    */
   @WorkflowEnded
   public void workflowEnded(

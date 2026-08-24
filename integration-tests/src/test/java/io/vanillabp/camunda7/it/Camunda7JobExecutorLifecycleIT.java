@@ -18,7 +18,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.process.ProcessService;
 
 /**
- * Deferred job-executor activation end to end (story 26e): asynchronous continuations
+ * Deferred job-executor activation end to end: asynchronous continuations
  * ({@code asyncBefore} jobs) are executed ONLY while workflow processing is started.
  * The test pauses processing via the engine holder ({@code stopWorkflowProcessing} of
  * the only module stops the engine-global executor), creates an instance whose

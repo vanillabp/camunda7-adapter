@@ -15,7 +15,7 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The startup check of story 57 against a REAL engine: the application deploys version
+ * The old-versions startup check against a REAL engine: the application deploys version
  * 1 of a process, leaves a workflow running on it, and boots again with a model which
  * dropped one of its tasks. What the application still serves of that older version is
  * what the engine can answer and this test proves.
@@ -30,7 +30,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class Camunda7OldProcessVersionsIT {
 
-  private static final String DATABASE = "--spring.datasource.url=jdbc:h2:mem:c7-story57;DB_CLOSE_DELAY=-1";
+  private static final String DATABASE = "--spring.datasource.url=jdbc:h2:mem:c7-old-process-versions;DB_CLOSE_DELAY=-1";
 
   @Test
   @Order(1)
@@ -39,8 +39,8 @@ public class Camunda7OldProcessVersionsIT {
 
     final var application = new SpringApplicationBuilder(TestApplication.class).run(DATABASE, resources("v1"));
     try {
-      final var workflowService = application.getBean(Story57WorkflowService.class);
-      final var repository = application.getBean(Story57Repository.class);
+      final var workflowService = application.getBean(OldProcessVersionsWorkflowService.class);
+      final var repository = application.getBean(OldProcessVersionsRepository.class);
       final var aggregate = application
           .getBean(org.springframework.transaction.support.TransactionTemplate.class)
           .execute(status -> workflowService.startWorkflow());
@@ -67,16 +67,16 @@ public class Camunda7OldProcessVersionsIT {
       final CapturedOutput output) {
 
     final var reported = whatIsReportedWhileBooting(output, "v2");
-    assertTrue(reported.contains("'story57Never'"), "the unserved task of version 1 is named");
+    assertTrue(reported.contains("'servedForAnUnknownVersion'"), "the unserved task of version 1 is named");
     assertTrue(reported.contains("still run on version '1'"), "the workflow of version 1 is counted");
-    assertTrue(reported.contains("Story57Process"), "the process is named");
+    assertTrue(reported.contains("OldProcessVersionsProcess"), "the process is named");
     assertTrue(reported.contains("outfaded-versions"), "the way out is named");
     // the method kept for version 1 serves its task, so that one is not demanded
     assertTrue(
-        !reported.contains("definition(s) 'story57Gone'"),
+        !reported.contains("definition(s) 'droppedInVersionTwo'"),
         "the task served by the version-1 method is not reported");
     // the method naming a version this engine never had never runs, and says so
-    assertTrue(reported.contains("story57Never' (version '0')"), "the dead method is named");
+    assertTrue(reported.contains("servedForAnUnknownVersion' (version '0')"), "the dead method is named");
     assertTrue(reported.contains("the method never runs"), "and what that means is said");
 
   }
@@ -97,7 +97,7 @@ public class Camunda7OldProcessVersionsIT {
     assertTrue(reported.contains("still run on version '1'"), "the workflow left behind is reported");
     assertTrue(reported.contains("outfaded-versions-in-use"), "and how to make that stop the start");
     // the method kept for version 1 serves nothing once that version is faded out
-    assertTrue(reported.contains("story57Gone"), "the method for the faded-out version is named");
+    assertTrue(reported.contains("droppedInVersionTwo"), "the method for the faded-out version is named");
     assertTrue(reported.contains("faded out by"), "and the reason is the configuration");
 
   }
@@ -161,7 +161,7 @@ public class Camunda7OldProcessVersionsIT {
   private static String resources(
       final String version) {
 
-    return "--vanillabp.workflow-modules.c7-it.adapters.c7.resources-location=classpath*:c7-it/story57/%s"
+    return "--vanillabp.workflow-modules.c7-it.adapters.c7.resources-location=classpath*:c7-it/old-process-versions/%s"
         .formatted(version);
 
   }

@@ -58,7 +58,7 @@ public class Camunda7AdapterBootTest {
 
           // the embedded engine was wired (plain JDBC, no JPA), named after the
           // adapter id, with the job executor still INACTIVE (deferred activation:
-          // startWorkflowProcessing starts it - story 26e)
+          // startWorkflowProcessing starts it)
           final var engine = context.getBean(ProcessEngine.class);
           Assertions.assertEquals("vanillabp-camunda7-c7", engine.getName());
           final var holder = context.getBean(Camunda7EngineHolder.class);
@@ -83,7 +83,7 @@ public class Camunda7AdapterBootTest {
   @Test
   public void twoAdapterIdsOfTypeCamunda7YieldPerIdEnginesAndBeans() {
 
-    // per-adapter-id convention (stories 26d/26e): TWO ids of type camunda7 yield
+    // per-adapter-id convention: TWO ids of type camunda7 yield
     // one ENGINE, one process service and one deployment service PER id - the
     // second id needs its own datasource (two embedded engines must never share
     // one schema, see the validation test below), referenced BY BEAN NAME: setting
@@ -151,7 +151,7 @@ public class Camunda7AdapterBootTest {
                   .toMap(io.vanillabp.integration.adapter.spi.MigratableProcessService::getAdapterId,
                       service -> service));
           Assertions.assertEquals(java.util.Set.of("c7", "c7-two"), processServices.keySet());
-          // story 63: every Camunda 7 adapter id progresses the workflow after the
+          // Every Camunda 7 adapter id progresses the workflow after the
           // commit, whether it shares the application's datasource or not - an
           // operation which loses a concurrency conflict is repeatable only that way
           Assertions.assertTrue(processServices.get("c7").needsTwoPhaseCommitForStartingWorkflows());
@@ -182,7 +182,7 @@ public class Camunda7AdapterBootTest {
                 Camunda7ProcessServiceConfiguration.class,
                 WorkflowModuleAutoConfiguration.class,
                 SpringBootMigrationAdapterAutoConfiguration.class,
-                // since story 34 the distinctness of two ids of one type is
+                // the distinctness of two ids of one type is
                 // validated through the adapter SPI hook, which the deployment
                 // pipeline calls at startup
                 io.vanillabp.integration.deployment.DeploymentAutoConfiguration.class))
@@ -190,7 +190,7 @@ public class Camunda7AdapterBootTest {
 
           Assertions.assertNotNull(context.getStartupFailure(), "boot has to fail with a guiding message");
 
-          var cause = (Throwable) context.getStartupFailure();
+          var cause = context.getStartupFailure();
           while (cause.getCause() != null) {
             cause = cause.getCause();
           }
@@ -215,7 +215,7 @@ public class Camunda7AdapterBootTest {
   @Test
   public void aTablePrefixWithSchemaUpdateFailsWithGuidingMessage() {
 
-    // story 47: Camunda's schema management ignores the prefix and would create a set
+    // Camunda's schema management ignores the prefix and would create a set
     // of unprefixed ACT_* tables in the shared database. The check runs before the
     // engine is built, so the application learns about it instead of collecting stray
     // tables and a MyBatis stack trace
@@ -261,7 +261,7 @@ public class Camunda7AdapterBootTest {
   @Test
   public void missingPrefixedTablesFailWithGuidingMessage() {
 
-    // story 47: the prefixed engine is switched to 'the tables exist already', and
+    // The prefixed engine is switched to 'the tables exist already', and
     // they do not - the message names them and both ways on
     this.contextRunner
         .withPropertyValues(
@@ -310,7 +310,7 @@ public class Camunda7AdapterBootTest {
 
     // a configured camunda7 adapter WITHOUT any DataSource: the boot fails with a
     // guiding message naming the remedy - not with a NoSuchBeanDefinitionException
-    // (story 26c: configuration defects surface at startup)
+    // (configuration defects surface at startup)
     this.contextRunner
         .withPropertyValues("spring.config.location=classpath:application.yaml")
         .withInitializer(new ConfigDataApplicationContextInitializer())
@@ -324,7 +324,7 @@ public class Camunda7AdapterBootTest {
 
           Assertions.assertNotNull(context.getStartupFailure(), "boot has to fail with a guiding message");
 
-          var cause = (Throwable) context.getStartupFailure();
+          var cause = context.getStartupFailure();
           while (cause.getCause() != null) {
             cause = cause.getCause();
           }
@@ -345,7 +345,7 @@ public class Camunda7AdapterBootTest {
 
     // the adapter jar is on the classpath but ANOTHER BPMS is configured: the gate
     // must prevent the engine (and with it the ACT_* tables and the job executor)
-    // entirely. (Configuring NOTHING is a different case since story 34: the single
+    // entirely. (Configuring NOTHING is a different case: the single
     // adapter type of the classpath IS the configuration - see
     // withoutAnyConfigurationTheClasspathAdapterIsUsed.)
     this.contextRunner
@@ -381,7 +381,7 @@ public class Camunda7AdapterBootTest {
   @Test
   public void withoutAnyConfigurationTheClasspathAdapterIsUsed() {
 
-    // story 34: the adapter jar on the classpath IS the configuration - the engine
+    // The adapter jar on the classpath IS the configuration - the engine
     // of the derived adapter id (which is the adapter type) is created
     this.contextRunner
         .withPropertyValues(
@@ -392,13 +392,13 @@ public class Camunda7AdapterBootTest {
             io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker.class,
             () -> org.mockito.Mockito
                 .mock(io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker.class))
-        // the sync model (story 28) is contributed by the platform integration,
+        // the sync model is contributed by the platform integration,
         // which is not part of this minimal runner either
         .withBean(
             io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class,
             () -> org.mockito.Mockito
                 .mock(io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class))
-        // the name-clash-avoidance support (story 35) is contributed by the platform
+        // the name-clash-avoidance support is contributed by the platform
         // integration, too
         .withBean(
             io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class,

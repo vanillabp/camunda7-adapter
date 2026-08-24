@@ -11,8 +11,8 @@ import io.vanillabp.spi.service.TaskEvent;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Notifies <code>&#64;WorkflowTask</code> methods about USER-task lifecycle events
- * (story 24): attached as a task listener to user tasks at parse time
+ * Notifies <code>&#64;WorkflowTask</code> methods about USER-task lifecycle events:
+ * attached as a task listener to user tasks at parse time
  * ({@link Camunda7AsyncBpmnParseListener}) for the engine's global CREATE and
  * DELETE events - CREATE delivers {@link TaskEvent.Event#CREATED} (e.g. to send an
  * email or feed an own task list), DELETE delivers
@@ -45,7 +45,7 @@ public class Camunda7UserTaskEventListener implements TaskListener {
 
     final var execution = (ExecutionEntity) delegateTask.getExecution();
     final var processDefinition = execution.getProcessDefinition();
-    // story 35: the tenant answers the workflow module only while the module IS
+    // The tenant answers the workflow module only while the module IS
     // isolated by one - with prefixed identifiers the registry knows which module a
     // process definition key belongs to, and what its plain id is
     final var scopedBpmnProcessId = processDefinition.getKey();
@@ -124,12 +124,12 @@ public class Camunda7UserTaskEventListener implements TaskListener {
 
     /**
      * The version of the deployed process definition this user task belongs to
-     * (story 48) or <code>null</code>.
+     * or <code>null</code>.
      */
     private final String processVersion;
 
     /**
-     * The adapter delivering this notification (story 54) or <code>null</code>.
+     * The adapter delivering this notification or <code>null</code>.
      */
     private final String adapterId;
 

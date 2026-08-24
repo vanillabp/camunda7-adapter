@@ -9,7 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Story 54: the core waits for a workflow to become findable only where the adapter
+ * The core waits for a workflow to become findable only where the adapter
  * asks for it. Camunda 7 answers awareness probes from the very database and
  * transaction which created the instance, so it asks for nothing - a workflow this
  * engine does not know does not exist, and saying so has to stay immediate.

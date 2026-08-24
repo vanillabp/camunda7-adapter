@@ -8,7 +8,7 @@ import io.vanillabp.spi.service.WorkflowService;
 
 /**
  * The workflow service of {@code ViewerParentProcess} - the workflow the viewer/history
- * API test (story 26) inspects. It has no {@code @WorkflowTask} methods: the process
+ * API test inspects. It has no {@code @WorkflowTask} methods: the process
  * consists of a call activity and its called process waits in a timer event.
  */
 @Service

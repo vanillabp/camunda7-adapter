@@ -20,11 +20,11 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
  * Every other name falls through to the engine's remaining resolvers, which is where the
  * process variables live.
  * <p>
- * <b>Attributes of the workflow aggregate are a MIGRATION FALLBACK here</b> (story 66,
- * removed in 2.1). Until this story the resolver read the aggregate live, which made a
- * model reading <code>${riskAcceptable}</code> work on Camunda 7 and fail on every remote
- * BPMS - the opposite of what {@code @SyncWithBPMS} is for. The values are pushed as
- * process variables at every sync point now, so the engine resolves them itself.
+ * <b>Attributes of the workflow aggregate are a MIGRATION FALLBACK here</b>, removed in
+ * 2.1. Reading the aggregate live made a model reading <code>${riskAcceptable}</code> work
+ * on Camunda 7 and fail on every remote BPMS - the opposite of what {@code @SyncWithBPMS}
+ * is for. The values are pushed as process variables at every sync point now, so the engine
+ * resolves them itself (see decision 1 in the repository's README.md).
  * <p>
  * The fallback exists because an application upgrading to this version has workflows
  * RUNNING which carry no such variables yet, and because version 1 resolved attributes
@@ -41,7 +41,7 @@ public class Camunda7TaskELResolver extends ELResolver {
 
   /**
    * Which live reads were reported already (workflow module, process and name) - the
-   * migration fallback of story 66 names a configuration gap, and one line per evaluation
+   * migration fallback names a configuration gap, and one line per evaluation
    * would bury it.
    */
   private final java.util.Set<String> liveReadsReported = java.util.concurrent.ConcurrentHashMap
@@ -50,14 +50,14 @@ public class Camunda7TaskELResolver extends ELResolver {
   private final Camunda7TaskRegistry taskRegistry;
 
   /**
-   * Story 35: needed to translate a {@code TaskException}'s error code into what the
+   * Needed to translate a {@code TaskException}'s error code into what the
    * engine knows. Settable - the resolver is created by the engine configuration.
    */
   @lombok.Setter
   private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
 
   /**
-   * The adapter id this resolver serves (story 35).
+   * The adapter id this resolver serves.
    */
   @lombok.Setter
   private String adapterId;
@@ -74,7 +74,7 @@ public class Camunda7TaskELResolver extends ELResolver {
   }
 
   // both calls into the deprecated half of WorkflowTaskInvoker are the migration
-  // fallback of story 66, and this resolver is the only production caller of it: the
+  // fallback, and this resolver is the only production caller of it: the
   // 'removal' lint is mandatory and @Deprecated on a caller does not silence it, so
   // without this the adapter reported the same two warnings in every build. Goes away
   // in 2.1 together with the fallback.
@@ -100,7 +100,7 @@ public class Camunda7TaskELResolver extends ELResolver {
       return null;
     }
 
-    // story 35: without a tenant (prefixed identifiers) the registry answers which
+    // Without a tenant (prefixed identifiers) the registry answers which
     // workflow module a process definition key belongs to, and its plain id
     final var scopedBpmnProcessId = execution
         .getProcessDefinition()
@@ -120,7 +120,7 @@ public class Camunda7TaskELResolver extends ELResolver {
             scopedBpmnProcessId,
             currentElementId,
             propertyName)
-        // user-task connectables (story 24) are served by task listeners, never
+        // user-task connectables are served by task listeners, never
         // by EL names - a formKey colliding with an aggregate attribute must not
         // shadow the attribute
         .filter(candidate -> candidate.type() != Camunda7TaskConnectable.Type.USER_TASK)
@@ -128,8 +128,7 @@ public class Camunda7TaskELResolver extends ELResolver {
         // execution sits at its activity, including the condition of a conditional event
         // or a gateway. Only a name which IS a task definition of this process may run a
         // handler; anything else evaluated at that element is a variable and belongs to
-        // the engine's resolvers (story 66 - before it, the aggregate's attributes were
-        // the tie-breaker here)
+        // the engine's resolvers
         .filter(
             candidate -> taskRegistry
                 .isTaskDefinitionName(workflowModuleId, scopedBpmnProcessId, propertyName) || !workflowTaskInvoker
@@ -146,7 +145,7 @@ public class Camunda7TaskELResolver extends ELResolver {
       // the task completes when the evaluation returns
       final var outcome = behavior.invokeHandler(execution);
       if (outcome.kind() == WorkflowTaskOutcome.Kind.COMPLETION_PENDING) {
-        // the backstop: the deployment check (story 50) reports this while the
+        // the backstop: the deployment check reports this while the
         // application starts, so reaching this line means the model got to the
         // engine another way
         throw new ProcessEngineException(
@@ -156,8 +155,8 @@ public class Camunda7TaskELResolver extends ELResolver {
       return null;
     }
 
-    // no wired task: the values shared by the aggregate are process variables since
-    // story 66, so the engine's own resolvers answer the name - unless this workflow still
+    // no wired task: the values shared by the aggregate are process variables, so
+    // the engine's own resolvers answer the name - unless this workflow still
     // runs without them, which is what the migration fallback below is for
     if (execution.hasVariable(propertyName)) {
       return null;
@@ -182,8 +181,8 @@ public class Camunda7TaskELResolver extends ELResolver {
 
   /**
    * Says ONCE per workflow module, process and name that an expression was answered by
-   * reading the aggregate instead of a process variable - the migration fallback of story
-   * 66, which version 2.1 removes.
+   * reading the aggregate instead of a process variable - the migration fallback which
+   * version 2.1 removes.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID

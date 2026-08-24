@@ -16,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
  * its transaction. VanillaBP nevertheless progresses the process AFTER the commit, the
  * way every other BPMS does: {@link #needsTwoPhaseCommitForStartingWorkflows()} returns
  * {@code true} unconditionally and every progressing operation is scheduled through the
- * phase-two outbox (story 63).
+ * phase-two outbox.
  * <p>
  * <b>Why, although sharing the transaction was comfortable:</b> an engine command which
  * loses a concurrency conflict cannot be repeated inside the caller's transaction. Every
@@ -43,6 +43,8 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #startProcessInstance(String, String, Object)}.
  */
 @Slf4j
+// see decision 4 in the repository's README.md
+@SuppressWarnings("LombokSetterMayBeUsed")
 public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   private final String adapterId;
@@ -55,12 +57,12 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private final RuntimeService runtimeService;
 
   /**
-   * The embedded engine's task service - user-task operations (story 24).
+   * The embedded engine's task service - user-task operations.
    */
   private final org.camunda.bpm.engine.TaskService taskService;
 
   /**
-   * The viewer/history API (story 26) - definitions, BPMN XML and the instance
+   * The viewer/history API - definitions, BPMN XML and the instance
    * timeline, served by the engine's repository and history services.
    */
   private final Camunda7WorkflowViewer viewer;
@@ -79,7 +81,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private final org.camunda.bpm.engine.RepositoryService repositoryService;
 
   /**
-   * The core's sync model (story 28). Since story 66 Camunda 7 shares like every other
+   * The core's sync model. Camunda 7 shares like every other
    * BPMS: the values are written as process variables at every point this adapter talks
    * to the engine, and the engine's expressions read those variables. Being embedded is
    * no reason to do it differently - the engine evaluates its models against its own
@@ -101,14 +103,14 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   public static final String AGGREGATE_CHANGED_MARKER = "vanillabpAggregateChanged";
 
   /**
-   * The default of this adapter since story 66: everything is shared unless the
+   * The default of this adapter: everything is shared unless the
    * application excludes it ({@code @NoSyncWithBPMS}), which is the default of every
    * VanillaBP adapter - a model must not depend on which BPMS runs it.
    */
   public static final io.vanillabp.integration.adapter.spi.AggregateSyncMode SYNC_MODE = io.vanillabp.integration.adapter.spi.AggregateSyncMode.FULL;
 
   /**
-   * The core's name-clash-avoidance model (story 35): translates process ids, message
+   * The core's name-clash-avoidance model: translates process ids, message
    * names and error codes into what the ENGINE knows, and decides whether operations
    * run in a Camunda tenant. May be <code>null</code> (tests): the workflow module id
    * is the tenant then, as before.
@@ -117,7 +119,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Which serialization format nested shared values are stored in, resolved per workflow
-   * with a fallback to the workflow module and the adapter (story 66). Provided by the
+   * with a fallback to the workflow module and the adapter. Provided by the
    * platform integration, which binds the configuration; <code>null</code> in tests -
    * the engine's default applies then.
    */
@@ -154,8 +156,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private String configuredTenantId;
 
   /**
-   * Narrows a runtime query down to the scope an awareness probe was asked about (stories
-   * 104 and 107).
+   * Narrows a runtime query down to the scope an awareness probe was asked about.
    * <p>
    * <b>Why the probes need it.</b> A Camunda 7 business key is the workflow-aggregate id,
    * unique per aggregate type and not across an engine, so the key alone answers for any
@@ -229,7 +230,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Correlates a message which STARTS a workflow, honoring the module's tenant
-   * (story 35: there may be none).
+   * (a module prefixing its identifiers has none, see decision 3 in the
+   * repository's README.md).
    */
   private void startByMessage(
       final String workflowModuleId,
@@ -244,7 +246,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     correlation = tenantId != null
         ? correlation.tenantId(tenantId)
         : correlation.withoutTenantId();
-    // the new instance starts with the values its model may read (story 66), exactly
+    // the new instance starts with the values its model may read, exactly
     // like a workflow started without a message
     correlation
         .setVariables(sharedValues)
@@ -254,8 +256,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Whether a RUNNING instance of the given workflow exists - the idempotency check
-   * of the two-phase start. Honors the module's tenant and the scoped process id
-   * (story 35).
+   * of the two-phase start. Honors the module's tenant and the scoped process id.
    */
   private boolean instanceExists(
       final String workflowModuleId,
@@ -302,7 +303,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * The Camunda tenant an operation runs in, or <code>null</code> when the module's
-   * mode uses no tenant (story 35).
+   * mode uses no tenant.
    */
   private String tenantIdOf(
       final String workflowModuleId) {
@@ -366,7 +367,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   public boolean isPhaseTwoFailureRepeatable(
       final Throwable failure) {
 
-    // The conflict this adapter went two-phase for (story 63): the engine reports a
+    // The conflict this adapter went two-phase for: the engine reports a
     // row another transaction touched as OptimisticLockingException, and the next
     // attempt simply wins - which is exactly what Camunda's own job executor does
     // with a failed job. Everything else is repeated as well, because an engine
@@ -392,7 +393,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // Camunda 7 hands a task to the handler INSIDE its own (job) transaction
     // (TaskInvocationContext#runInCurrentTransaction), so aggregate changes and engine
     // state commit or roll back together: a redelivered job proves that NOTHING was
-    // committed, and there is nothing a delivery record could remember (story 51).
+    // committed, and there is nothing a delivery record could remember.
     // Deduplicating would cost a store access per task and buy nothing.
     //
     // With an OWN engine datasource the two commits are no longer one, so the window
@@ -407,7 +408,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   /**
    * Starts a Camunda 7 process instance inside the caller's transaction. The
    * <b>business key</b> is the workflow-aggregate ID as a string, the <b>tenant ID</b> is
-   * the workflow module ID (matching how {@link Camunda7DeploymentService} deployed the
+   * the workflow module ID (matching how {@code Camunda7DeploymentService} deployed the
    * process). Because the embedded engine shares the application's data source and
    * transaction, the created instance is committed or rolled back together with the
    * business data.
@@ -475,8 +476,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The values the aggregate shares with the BPMS, as Camunda 7 process variables
-   * (story 66): what the engine's expressions read, and what an operator sees in
+   * The values the aggregate shares with the BPMS, as Camunda 7 process variables:
+   * what the engine's expressions read, and what an operator sees in
    * Cockpit. Nested structures travel as JSON strings, see
    * {@link io.vanillabp.camunda7.sync.Camunda7Variables}.
    *
@@ -553,7 +554,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // within the engine. That the business key matches rules out an unrelated
     // aggregate; what it does NOT rule out is a workflow of another workflow module of
     // this engine carrying the same aggregate id, so the instance has to be one of this
-    // adapter's own scopes as well (story 104)
+    // adapter's own scopes as well
     try {
       final var execution = runtimeService
           .createExecutionQuery()
@@ -592,7 +593,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // was cleaned up an ended instance is indistinguishable from a never-existing
     // one - both map to UNKNOWN_TO_BPMS (the caller's guiding error explains the
     // causes).
-    // Stories 104 and 107: both queries run within the scope the probe was asked about.
+    // Both queries run within the scope the probe was asked about.
     // A business key is the aggregate id, unique per aggregate type and not across an
     // application, so the unscoped question answers ACTIVE for the workflow of another
     // workflow module of this engine which happens to count from the same number.
@@ -631,7 +632,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Whether the process instance behind a task belongs to the scope the probe was asked
-   * about AND carries the expected business key (stories 104 and 107). Both are needed:
+   * about AND carries the expected business key. Both are needed:
    * the business key rules out an unrelated aggregate, the scope rules out the same
    * aggregate id in another workflow module or another application of this engine.
    *
@@ -731,7 +732,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String taskId) {
 
     // user-task IDs (ACT_RU_TASK) are unique within the engine - the business key AND
-    // the scope are verified like in awarenessOfTask (story 104)
+    // the scope are verified like in awarenessOfTask
     try {
       final var task = taskService
           .createTaskQuery()
@@ -772,7 +773,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * @param beforeExecute Runs after the user task was found and before it is completed
-   *        or cancelled - writes the values the model reads next (story 66)
+   *        or cancelled - writes the values the model reads next
    */
   private void executeUserTask(
       final String taskId,
@@ -811,7 +812,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Writes the shared values at the execution of a user task (story 66) - the variables
+   * Writes the shared values at the execution of a user task - the variables
    * the flow behind the task reads.
    *
    * @param taskId The user task's ID
@@ -845,7 +846,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final A workflowAggregate,
       final String taskId) {
 
-    // the non-advancing phase-one check (story 63) - the completion happens after
+    // the non-advancing phase-one check - the completion happens after
     // the commit
     checkUserTaskExists(taskId, "completing");
 
@@ -881,7 +882,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String taskId,
       final String bpmnErrorCode) {
 
-    // the non-advancing phase-one check (story 63)
+    // the non-advancing phase-one check
     checkUserTaskExists(taskId, "canceling");
 
   }
@@ -916,7 +917,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final A workflowAggregate,
       final String taskId) {
 
-    // the non-advancing phase-one check (story 63): does the task still exist? The
+    // the non-advancing phase-one check: does the task still exist? The
     // completion itself happens after the commit - doing it here would advance the
     // process although the transaction may still roll back, and a completion losing
     // a concurrency conflict could not be repeated
@@ -932,7 +933,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String taskId) {
 
-    // the values the model reads are written along with the completion (story 66):
+    // the values the model reads are written along with the completion:
     // whatever the caller changed before answering the task decides where the
     // workflow goes next. Only after signalTask verified the task is still there -
     // writing variables of a gone execution would mark the dispatcher's transaction
@@ -958,7 +959,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String taskId,
       final String bpmnErrorCode) {
 
-    // the non-advancing phase-one check (story 63) - the cancellation itself and
+    // the non-advancing phase-one check - the cancellation itself and
     // the values an operator sees along with it happen after the commit
     checkTaskExists(taskId, "canceling");
 
@@ -974,8 +975,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String bpmnErrorCode) {
 
     // the values an operator sees in Cockpit are refreshed along with the
-    // cancellation, which is what phase one did before story 63 moved the operation
-    // behind the commit. It runs only once signalTask verified the task is still
+    // cancellation. It runs only once signalTask verified the task is still
     // there - writing variables of a gone execution would throw and mark the
     // dispatcher's transaction rollback-only
     signalTask(
@@ -1069,8 +1069,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * phase one asks before scheduling a correlation, and phase two asks again before
    * correlating (a subscription gone by dispatch time is the at-least-once residual).
    * <p>
-   * The subscription carries the SCOPED message name, like the correlation itself
-   * (story 35): querying the plain name would find nothing wherever a workflow module
+   * The subscription carries the SCOPED message name, like the correlation itself:
+   * querying the plain name would find nothing wherever a workflow module
    * prefixes its identifiers. A correlation id is deliberately NOT part of the
    * question - it selects among several waiting executions, which is the correlation's
    * job, not this check's.
@@ -1151,7 +1151,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String bpmnProcessId,
       final String signalName) {
 
-    // phase one does not advance the process (story 63) - a signal reaching a
+    // phase one does not advance the process - a signal reaching a
     // subscription IS progress, so it is broadcast after the commit
   }
 
@@ -1168,8 +1168,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   /**
    * A signal reaches every subscription of the workflow module's scope - the
    * tenant it is deployed into, respectively no tenant where the module prefixes
-   * its identifiers (story 35). No variables travel, and story 66 did not change that
-   * although it made every other sync point write them: a broadcast reaches workflows of
+   * its identifiers. No variables travel, although every other sync point
+   * writes them: a broadcast reaches workflows of
    * OTHER aggregates, so writing the values of the sending one into them would state
    * something false. Camunda 8 behaves the same way, for the same reason - the
    * difference to the other sync points is the broadcast, not the engine.
@@ -1197,7 +1197,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final String messageName,
       final String correlationId) {
 
-    // the non-advancing phase-one check (story 63): is a subscription waiting for
+    // the non-advancing phase-one check: is a subscription waiting for
     // this message? Correlating itself continues the workflow and happens after the
     // commit - but "nothing matched" was a synchronous failure before this adapter
     // went two-phase, and it stays one. The embedded engine answers from the same
@@ -1216,8 +1216,8 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
                   workflowModuleId,
                   correlationId == null
                       ? ""
-                      : " with correlation id '%s' (the waiting execution expects the one stored in "
-                          + "its local variable '%s')".formatted(
+                      : (" with correlation id '%s' (the waiting execution expects the one stored in "
+                          + "its local variable '%s')").formatted(
                               correlationId,
                               correlationIdVariableName(bpmnProcessId, messageName))));
     }
@@ -1277,7 +1277,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
           businessKey);
       return;
     }
-    // the values the model reads travel with the correlation (story 66): a gateway
+    // the values the model reads travel with the correlation: a gateway
     // behind the receiving event decides on what the caller changed before correlating
     messageCorrelation(workflowModuleId, bpmnProcessId, messageName, businessKey, correlationId)
         .setVariables(
@@ -1294,7 +1294,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final A workflowAggregate,
       final String taskId) {
 
-    // phase one does not advance the process (story 63) - writing here would show
+    // phase one does not advance the process - writing here would show
     // values of a transaction which may still roll back, and re-evaluating
     // conditional events IS progress
   }
@@ -1320,13 +1320,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Writes the aggregate's shared values into the workflow (see
-   * {@link #operatorContext}) and lets the engine re-evaluate what waits for a
-   * change.
+   * {@link #aggregateForOperatorContext}) and lets the engine re-evaluate what waits
+   * for a change.
    * <p>
    * Camunda 7 evaluates conditional events when a variable of their scope changes,
    * so the write itself is the trigger - and it has to happen even for an aggregate
    * sharing nothing at all, which is why a technical marker variable is written
-   * alongside. What a condition then reads are the values written here (story 66);
+   * alongside. What a condition then reads are the values written here;
    * without the write nothing would look.
    *
    * @param businessKey The aggregate's ID
@@ -1335,9 +1335,9 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    *        <code>null</code> for the workflow's global scope
    * @param tolerateGoneWorkflow Whether a workflow gone by now is tolerated (phase
    *        two is at-least-once) instead of failing. Judged within the scope of the
-   *        call since story 112: before that a foreign workflow carrying the same
-   *        business key made an ended workflow look present, and the redelivered push
-   *        then wrote there instead of being skipped
+   *        call - a foreign workflow carrying the same business key would otherwise
+   *        make an ended workflow look present, and a redelivered push would write
+   *        there instead of being skipped
    */
   private void pushAggregate(
       final String businessKey,
@@ -1379,12 +1379,12 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         return;
       }
       // no scope comparison on this path, and that is a decision rather than an
-      // omission (story 112): the caller names a task it was told about through
+      // omission: the caller names a task it was told about through
       // '@TaskId', and a Camunda 7 execution id is a UUID the engine hands out per
       // execution, so it addresses exactly one execution of one instance. That is
       // unlike Camunda 8, where a job or user-task KEY ignores the tenant and a
       // second adapter id on the same cluster can therefore be asked about a task of
-      // its own (story 103). What the branch below cannot rely on is the business
+      // its own. What the branch below cannot rely on is the business
       // key, which is why only it needs the filter.
       //
       // the scope the task RUNS IN - the process, an embedded subprocess, or the one
@@ -1399,7 +1399,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       return;
     }
 
-    // narrowed to the scope of the CALL (story 112): a business key is the
+    // narrowed to the scope of the CALL: a business key is the
     // workflow-aggregate id, unique per aggregate type and not across an engine, so the
     // key alone also matches a workflow of another workflow module, of another adapter id
     // during a migration, or of another application sharing the database. Writing there
@@ -1577,7 +1577,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final A workflowAggregate,
       final String messageName) {
 
-    // the non-advancing phase-one check (story 63): is there a message start event
+    // the non-advancing phase-one check: is there a message start event
     // of this name? Starting itself happens after the commit, idempotently
     final var scopedMessageName = scopedIdentifier(workflowModuleId, messageName);
     final var startEventExists = runtimeService
@@ -1633,7 +1633,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final AggregatePersistenceAware<A> aggregatePersistence,
       final A workflowAggregate) {
 
-    // phase one does not advance the process (story 63): the instance is created
+    // phase one does not advance the process: the instance is created
     // after the commit, so a rollback cannot leave a ghost instance behind. There
     // is nothing to validate against the engine either - starting is the degenerate
     // two-phase case, like on a remote BPMS

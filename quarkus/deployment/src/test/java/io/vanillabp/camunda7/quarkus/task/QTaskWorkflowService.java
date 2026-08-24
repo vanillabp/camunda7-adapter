@@ -9,7 +9,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 /**
- * Workflow service of the Quarkus task-processing test (story 21b): the three
+ * Workflow service of the Quarkus task-processing test: the three
  * outcomes on a real embedded engine with JTA transactions.
  */
 @ApplicationScoped

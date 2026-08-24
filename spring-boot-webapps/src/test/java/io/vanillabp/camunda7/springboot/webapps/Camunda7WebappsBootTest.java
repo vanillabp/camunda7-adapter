@@ -76,7 +76,7 @@ public class Camunda7WebappsBootTest {
     // that it RUNS. Interface and spring.factories key have to name the same type, and
     // measured: naming the old key while implementing the new interface fails the boot
     // with "not assignable to factory type", so this test is what catches a half-done
-    // migration (story 113)
+    // migration
     assertEquals(
         "false",
         context.getEnvironment().getProperty(Camunda7WebappsEnvironmentPostProcessor.CAMUNDA_BPM_ENABLED),

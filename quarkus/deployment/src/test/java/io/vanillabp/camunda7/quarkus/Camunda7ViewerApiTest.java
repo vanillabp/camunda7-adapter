@@ -24,7 +24,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.UserTransaction;
 
 /**
- * The viewer/history API (story 26) on Quarkus: the embedded engine's repository
+ * The viewer/history API on Quarkus: the embedded engine's repository
  * and history services answer definitions, BPMN XML and the instance timeline -
  * platform parity to the Spring Boot integration test of the same feature (the
  * logic itself lives in the adapter's core).
@@ -93,7 +93,7 @@ public class Camunda7ViewerApiTest {
 
     final var aggregate = startWorkflow();
 
-    // since story 63 the instance is created by the phase-two outbox right AFTER the
+    // the instance is created by the phase-two outbox right AFTER the
     // commit, so the viewing API knows the workflow a moment later than the call
     final var definitions = awaitProcessDefinitions(aggregate);
 

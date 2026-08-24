@@ -13,7 +13,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The workflow aggregate of pushing a changed aggregate (story 44). Nothing is shared
+ * The workflow aggregate of pushing a changed aggregate. Nothing is shared
  * with the BPMS explicitly - Camunda 7 reads the aggregate live, so what the
  * conditional events look at is the aggregate itself, and the push is what makes the
  * engine look at all.

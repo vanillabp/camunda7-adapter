@@ -14,7 +14,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 
 /**
- * Story 66: the serialization format of nested shared values is resolved per workflow,
+ * The serialization format of nested shared values is resolved per workflow,
  * with a fallback to the workflow module and to the adapter.
  */
 @ExtendWith(SuppressOutputExtension.class)

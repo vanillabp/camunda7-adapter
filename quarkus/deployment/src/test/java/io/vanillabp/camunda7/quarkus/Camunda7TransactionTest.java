@@ -18,7 +18,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.transaction.UserTransaction;
 
 /**
- * THE critical assertion of the Camunda 7 adapter on Quarkus (story 26f): the
+ * THE critical assertion of the Camunda 7 adapter on Quarkus: the
  * embedded engine joins the caller's JTA transaction (the {@code REQUIRED} semantics
  * of the engine's {@code JakartaTransactionInterceptor} on the shared Agroal
  * datasource) - a workflow started inside a {@code UserTransaction} is visible
@@ -48,7 +48,7 @@ public class Camunda7TransactionTest {
       // an own database: the module's shared H2 URL (DB_CLOSE_DELAY=-1) carries the
       // outbox table as well, so aggregate ids of other test classes would collide
       // with these - and an outbox entry of the same idempotency key is deduplicated
-      // away, which since story 63 means the workflow is never started
+      // away, which means the workflow is never started
       .overrideRuntimeConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-transaction-test;DB_CLOSE_DELAY=-1");
 
   @Inject
@@ -86,7 +86,7 @@ public class Camunda7TransactionTest {
     engine.stopWorkflowProcessing(MODULE_ID);
     try {
 
-      // story 63: the instance is NOT created within the caller's transaction any
+      // The instance is NOT created within the caller's transaction any
       // more - it is created right after the commit, by the phase-two outbox, so an
       // operation which loses a concurrency conflict can be repeated
       userTransaction.begin();

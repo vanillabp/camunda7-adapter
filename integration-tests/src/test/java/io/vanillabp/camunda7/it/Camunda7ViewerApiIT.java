@@ -25,7 +25,7 @@ import io.vanillabp.spi.process.WorkflowElementType;
 import io.vanillabp.spi.process.WorkflowNotFoundException;
 
 /**
- * Integration test of the viewer/history API (story 26) against a <b>real embedded
+ * Integration test of the viewer/history API against a <b>real embedded
  * engine on H2</b>: process definitions incl. the call activity's called process,
  * the deployed BPMN XML and the instance timeline - for a RUNNING and for an
  * ENDED workflow.

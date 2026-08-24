@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * JPA workflow aggregate of the task-processing test (story 21b) - persisted in
+ * JPA workflow aggregate of the task-processing test - persisted in
  * the same H2 database and the same JTA transaction as the embedded engine.
  */
 @Entity

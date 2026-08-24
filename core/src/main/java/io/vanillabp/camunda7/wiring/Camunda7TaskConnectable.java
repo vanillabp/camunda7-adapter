@@ -12,8 +12,8 @@ package io.vanillabp.camunda7.wiring;
  * @param bpmnProcessId The PLAIN BPMN process ID - what the core's registries are
  *          keyed by
  * @param scopedBpmnProcessId The BPMN process ID AS THE ENGINE KNOWS IT (equal to
- *          {@code bpmnProcessId} unless the module's identifiers are prefixed,
- *          story 35)
+ *          {@code bpmnProcessId} unless the module's identifiers are prefixed, see
+ *          decision 3 in the repository's README.md)
  * @param elementId The BPMN activity ID
  * @param taskDefinition The unwrapped expression text
  * @param type How the BPMN wires the task (expression vs. delegate expression)
@@ -55,7 +55,7 @@ public record Camunda7TaskConnectable(
      */
     DELEGATE_EXPRESSION,
     /**
-     * A BPMN user task (story 24): the task definition is the task's
+     * A BPMN user task: the task definition is the task's
      * <code>camunda:formKey</code>; the handler (if any) is notified via task
      * listeners (CREATED/CANCELED) and never completes the task on return.
      */
@@ -64,7 +64,7 @@ public record Camunda7TaskConnectable(
 
   /**
    * The verdict about a task which has to stay open but is wired by
-   * <code>camunda:expression</code> (story 50). It is reported twice, and therefore
+   * <code>camunda:expression</code>. It is reported twice, and therefore
    * lives once: while the application starts, where
    * {@code Camunda7DeploymentService#wireBpmn} asks the core whether the serving
    * method completes asynchronously, and at runtime in
