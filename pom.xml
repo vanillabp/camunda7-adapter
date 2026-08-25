@@ -50,16 +50,18 @@
     <maven.compiler.release>21</maven.compiler.release>
     <version.java>21</version.java>
     <jacoco.version>0.8.15</jacoco.version>
-    <!-- the line each platform's aggregated report has to stay above, in PERCENT of
-         covered instructions - enforced by test-coverage-report/coverage-gate. The rule
-         is 90; the Quarkus line is lower because the startup check for old process
-         versions needs several boots against one database, which a Quarkus
-         prod-mode test cannot produce - see the Quarkus suite's class comment for the
-         complete list. The Quarkus end-to-end suite reaches 85.0, and the
-         line sits just below that so a run-to-run difference does not break a build
-         nothing changed in. It is never lowered to make a build pass. -->
-    <coverage.threshold.spring-boot>90</coverage.threshold.spring-boot>
-    <coverage.threshold.quarkus>84</coverage.threshold.quarkus>
+    <!-- where the build breaks, in PERCENT of covered instructions per platform,
+         enforced by test-coverage-report/coverage-gate. The rule stays 90 per platform, which is
+         the number the coverage badges of the README are read against. The gate stands at
+         85, the same number in every VanillaBP repository, because a threshold marks the
+         point where somebody has to look and not the goal to aim at. It is never raised to whatever a
+         suite happens to reach, and never lowered to make a build pass. -->
+    <coverage.threshold.spring-boot>85</coverage.threshold.spring-boot>
+    <coverage.threshold.quarkus>85</coverage.threshold.quarkus>
+    <!-- the rule, as a number the gate can print: it reports every run against both, so
+         the distance between a passing build and the rule is readable without opening
+         the report -->
+    <coverage.rule>90</coverage.rule>
     <spi-for-java.version>1.2.0-SNAPSHOT</spi-for-java.version>
     <adapter-platform.version>2.0.0-SNAPSHOT</adapter-platform.version>
     <camunda.version>7.24.0</camunda.version>
