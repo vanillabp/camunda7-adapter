@@ -704,18 +704,21 @@ the respective report.
 The build breaks below the line: `test-coverage-report/coverage-gate` is the last module of the
 reactor, reads both reports and fails whenever a platform is below its threshold in the root POM
 (`coverage.threshold.spring-boot`, `coverage.threshold.quarkus`, in percent of covered instructions -
-the number the badges above show). It also compares every module producing a `jacoco.exec` against
-the two aggregates, so a module added to the build without being added to its report cannot stay
-unnoticed.
+the number the badges above show). Both properties hold 85, the same number every VanillaBP
+repository gates on, and that is not the target: the rule is 90 per platform, so a report between
+85 and 90 passes the build and still names a gap. The gate is where the gap has grown too big to
+carry, which is why it is never edited to make a build pass. It also compares every module
+producing a `jacoco.exec` against the two aggregates, so a module added to the build without being
+added to its report cannot stay unnoticed.
 
 Both platforms run the documented features end to end against a real embedded engine: Spring Boot in
 `integration-tests`, Quarkus in `quarkus/integration-tests`. That duplication is deliberate. The
 adapter core is platform-neutral, but a core being correct says nothing about a platform's glue ever
 calling it, so a core line a platform never reaches names a feature that platform never runs.
 
-The two thresholds still differ by what one suite can produce and the other cannot: the startup check
-for old process versions needs several boots against one database, each with a different
-model, and a Quarkus prod-mode test boots its application once per test class. The Quarkus suite's
+The two platforms still reach different numbers, by what one suite can produce and the other
+cannot: the startup check for old process versions needs several boots against one database, each
+with a different model, and a Quarkus prod-mode test boots its application once per test class. The Quarkus suite's
 class comment lists that and the three other cases it deliberately does not repeat. Everything else
 is within a point or two of the Spring Boot numbers.
 
