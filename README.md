@@ -711,6 +711,14 @@ carry, which is why it is never edited to make a build pass. It also compares ev
 producing a `jacoco.exec` against the two aggregates, so a module added to the build without being
 added to its report cannot stay unnoticed.
 
+The gate reports what it measured on every run, green ones included, which is the one place in
+VanillaBP where a passing test prints:
+
+```
+coverage gate | Spring Boot: 91.23 % instructions (790 of 9012 missed) | at the rule of 90 %
+coverage gate | Quarkus: 86.02 % instructions (1194 of 8541 missed) | 3.98 points below the rule of 90 %, build breaks below 85 %
+```
+
 Both platforms run the documented features end to end against a real embedded engine: Spring Boot in
 `integration-tests`, Quarkus in `quarkus/integration-tests`. That duplication is deliberate. The
 adapter core is platform-neutral, but a core being correct says nothing about a platform's glue ever
