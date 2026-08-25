@@ -618,9 +618,16 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   public void setRuntimeService(
       final org.camunda.bpm.engine.RuntimeService runtimeService) {
 
+    this.runtimeService = runtimeService;
     processVersions.setRuntimeService(runtimeService);
 
   }
+
+  /**
+   * The engine's runtime service, kept here as well so the startup can ask WHERE the
+   * workflows of a process run. May be <code>null</code> in tests.
+   */
+  private org.camunda.bpm.engine.RuntimeService runtimeService;
 
   /**
    * The process definition the engine considers current for that process - what this
@@ -1073,6 +1080,16 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                     workflowModuleId,
                     plainBpmnProcessId,
                     String.valueOf(definition.getVersion()));
+            // and whether the engine holds workflows of it where this
+            // configuration will never look
+            Camunda7TenantCheck
+                .warnAboutWorkflowsOutOfScope(
+                    adapterId,
+                    workflowModuleId,
+                    plainBpmnProcessId,
+                    definition.getKey(),
+                    tenantId,
+                    runtimeService);
           });
     }
 
