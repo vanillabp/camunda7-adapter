@@ -37,7 +37,7 @@ import jakarta.transaction.TransactionManager;
  *       Boot).</li>
  * </ul>
  */
-// see decision 4 in the repository's README.md
+// see decision 4 in the repository's DECISIONS.md
 @SuppressWarnings("LombokGetterMayBeUsed")
 public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLifecycle, AutoCloseable {
 

@@ -13,7 +13,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Keyed by (tenant ID = workflow module ID, BPMN process ID) - one engine serves
  * several workflow modules.
  */
-// see decision 4 in the repository's README.md
+// see decision 4 in the repository's DECISIONS.md
 @SuppressWarnings({
     "LombokGetterMayBeUsed", "LombokSetterMayBeUsed"
 })
@@ -90,7 +90,7 @@ public class Camunda7TaskRegistry {
   /**
    * Which workflow module a process definition key belongs to - the way back when
    * there is no tenant to ask (prefixed identifiers, see decision 3 in the
-   * repository's README.md).
+   * repository's DECISIONS.md).
    */
   private final Map<String, String> workflowModuleIdsByScopedProcessId = new ConcurrentHashMap<>();
 

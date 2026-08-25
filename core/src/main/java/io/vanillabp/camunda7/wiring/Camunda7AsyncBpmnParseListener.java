@@ -15,6 +15,9 @@ import org.camunda.bpm.engine.impl.util.xml.Element;
  * tasks (user/receive tasks) only get <code>asyncAfter</code>. Applied at parse
  * time - the deployed BPMN XML stays untouched, the parsed process definition
  * carries the flags.
+ * <p>
+ * Why this adapter edits the model it deploys at all, and what bounds each edit, is decision 5 in
+ * the repository's DECISIONS.md.
  */
 public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
 

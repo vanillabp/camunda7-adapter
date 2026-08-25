@@ -29,6 +29,9 @@ package io.vanillabp.camunda7.sync;
  * Implemented by the platform integrations, since each of them binds its own
  * configuration; the resolution across the three levels is
  * {@link #firstConfigured(String...)}.
+ * <p>
+ * Why a nested value is written in the engine's own format instead of as a JSON string is decision
+ * 9 in the repository's DECISIONS.md.
  */
 public interface Camunda7SerializationFormats {
 

@@ -15,7 +15,7 @@ import lombok.Setter;
  * Two expressions read it. The gateway of {@code SyncProcess} branches on
  * {@link #isApproved()}, which is NOT shared - that only works through the MIGRATION
  * FALLBACK of the EL resolver, which version 2.1 removes; the test pins that, including
- * the warning (see decision 1 in the repository's README.md). The decision case - a task
+ * the warning (see decision 1 in the repository's DECISIONS.md). The decision case - a task
  * computing what the gateway right behind it reads - lives in {@code DecisionTestAggregate}.
  */
 @Entity

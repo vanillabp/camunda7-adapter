@@ -25,6 +25,9 @@ import io.vanillabp.spi.service.BpmsStartTrigger;
  * command's), so aggregate and process instance commit together, and it is skipped
  * for instances which already carry a business key: those were started by the
  * application through {@code ProcessService}, and their aggregate exists.
+ * <p>
+ * Why a listener is added to the deployed model, and only where a handler exists, is decision 5 in
+ * the repository's DECISIONS.md.
  */
 public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
 

@@ -13,7 +13,7 @@ package io.vanillabp.camunda7.wiring;
  *          keyed by
  * @param scopedBpmnProcessId The BPMN process ID AS THE ENGINE KNOWS IT (equal to
  *          {@code bpmnProcessId} unless the module's identifiers are prefixed, see
- *          decision 3 in the repository's README.md)
+ *          decision 3 in the repository's DECISIONS.md)
  * @param elementId The BPMN activity ID
  * @param taskDefinition The unwrapped expression text
  * @param type How the BPMN wires the task (expression vs. delegate expression)

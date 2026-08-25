@@ -37,6 +37,10 @@ import org.slf4j.LoggerFactory;
  * nobody in Cockpit, and the engine's database then holds the application's class
  * versions. That is worth exactly one warning, which this class logs the first time it
  * writes such a value.
+ * <p>
+ * What is written is decision 1 in the repository's DECISIONS.md, and in which
+ * format is decision 9 in the repository's
+ * DECISIONS.md.
  */
 public final class Camunda7Variables {
 

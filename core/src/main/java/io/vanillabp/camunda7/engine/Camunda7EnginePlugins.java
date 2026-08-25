@@ -39,6 +39,9 @@ import org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin;
  * contribute a plugin as a BEAN - a plugin which configures itself from the application's own
  * properties (camunda-xstream does that on Spring Boot) is easier that way - and those beans
  * apply to every engine this adapter builds.
+ * <p>
+ * Why an embedded engine of this adapter accepts plugins at all is decision 9 in the repository's
+ * DECISIONS.md: without a data format a nested shared value cannot become an object variable.
  */
 public final class Camunda7EnginePlugins {
 

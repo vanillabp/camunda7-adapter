@@ -51,7 +51,7 @@ import lombok.extern.slf4j.Slf4j;
  * </ul>
  */
 @Slf4j
-// see decision 4 in the repository's README.md
+// see decision 4 in the repository's DECISIONS.md
 @SuppressWarnings("LombokGetterMayBeUsed")
 public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle, ApplicationContextAware, InitializingBean, AutoCloseable {
 

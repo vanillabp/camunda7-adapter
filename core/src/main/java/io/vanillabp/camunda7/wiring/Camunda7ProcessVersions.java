@@ -31,7 +31,7 @@ import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
  * elsewhere - the query only ever runs where a version TAG is involved.</li>
  * </ul>
  */
-// see decision 4 in the repository's README.md
+// see decision 4 in the repository's DECISIONS.md
 @SuppressWarnings("LombokSetterMayBeUsed")
 public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
 

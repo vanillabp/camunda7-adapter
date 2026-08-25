@@ -41,9 +41,13 @@ import lombok.extern.slf4j.Slf4j;
  * The workflow-aggregate ID maps naturally onto the Camunda 7 <b>business key</b> and the
  * workflow module ID onto the Camunda <b>tenant ID</b> - see
  * {@link #startProcessInstance(String, String, Object)}.
+ * <p>
+ * Why every probe and the instance lookup behind aggregateChanged filter by the scope of the call
+ * rather than by the business key alone is decision 8 in the repository's DECISIONS.md. Why phase
+ * one only asks while phase two acts is decision 2 in the repository's DECISIONS.md.
  */
 @Slf4j
-// see decision 4 in the repository's README.md
+// see decision 4 in the repository's DECISIONS.md
 @SuppressWarnings("LombokSetterMayBeUsed")
 public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
@@ -231,7 +235,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   /**
    * Correlates a message which STARTS a workflow, honoring the module's tenant
    * (a module prefixing its identifiers has none, see decision 3 in the
-   * repository's README.md).
+   * repository's DECISIONS.md).
    */
   private void startByMessage(
       final String workflowModuleId,
