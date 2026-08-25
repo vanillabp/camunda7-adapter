@@ -142,4 +142,134 @@ public class Camunda7TenantCheckTest {
 
   }
 
+  /**
+   * A runtime service answering how many instances of a process id there are, in total
+   * and without a tenant. Both counts are what the check subtracts, so a double is more
+   * honest here than an engine: the query is the whole mechanism.
+   *
+   * @param total Instances of the process id under any scope
+   * @param withoutTenant Instances of it carrying no tenant
+   * @param plainId Instances of the UNPREFIXED process id
+   * @return The stubbed runtime service
+   */
+  private static org.camunda.bpm.engine.RuntimeService runtimeServiceWith(
+      final long total,
+      final long withoutTenant,
+      final long plainId) {
+
+    final var scopedQuery = Mockito.mock(org.camunda.bpm.engine.runtime.ProcessInstanceQuery.class);
+    final var withoutTenantQuery = Mockito.mock(org.camunda.bpm.engine.runtime.ProcessInstanceQuery.class);
+    final var plainQuery = Mockito.mock(org.camunda.bpm.engine.runtime.ProcessInstanceQuery.class);
+    Mockito.lenient().when(scopedQuery.withoutTenantId()).thenReturn(withoutTenantQuery);
+    Mockito.lenient().when(scopedQuery.count()).thenReturn(total);
+    Mockito.lenient().when(withoutTenantQuery.count()).thenReturn(withoutTenant);
+    Mockito.lenient().when(plainQuery.count()).thenReturn(plainId);
+
+    final var runtimeService = Mockito.mock(org.camunda.bpm.engine.RuntimeService.class);
+    final var query = Mockito.mock(org.camunda.bpm.engine.runtime.ProcessInstanceQuery.class);
+    Mockito.lenient().when(runtimeService.createProcessInstanceQuery()).thenReturn(query);
+    Mockito.lenient().when(query.processDefinitionKey("loan-approval-taken")).thenReturn(scopedQuery);
+    Mockito.lenient().when(query.processDefinitionKey("taken")).thenReturn(plainQuery);
+    return runtimeService;
+
+  }
+
+  @Test
+  @DisplayName("Deploying into a tenant while the running workflows carry none is reported")
+  public void workflowsWithoutTenantAreReported() {
+
+    final var warnings = warningsOf(
+        () -> Camunda7TenantCheck.warnAboutWorkflowsOutOfScope(
+            "myengine",
+            "loan-approval",
+            "loan-approval-taken",
+            "loan-approval-taken",
+            "loan-approval",
+            runtimeServiceWith(9, 9, 0)));
+
+    assertEquals(1, warnings.size(), warnings::toString);
+    final var message = warnings.getFirst();
+    assertTrue(message.contains("9 of them carry no tenant"), () -> message);
+    assertTrue(message.contains("'loan-approval'"), () -> message);
+    assertTrue(message.contains("use-tenants: false"), () -> message);
+    assertTrue(message.contains("name-clash-avoidance"), () -> message);
+
+  }
+
+  @Test
+  @DisplayName("Deploying into no tenant while the running workflows carry one is reported")
+  public void workflowsUnderATenantAreReported() {
+
+    final var warnings = warningsOf(
+        () -> Camunda7TenantCheck.warnAboutWorkflowsOutOfScope(
+            "myengine",
+            "loan-approval",
+            "loan-approval-taken",
+            "loan-approval-taken",
+            null,
+            runtimeServiceWith(9, 2, 0)));
+
+    assertEquals(1, warnings.size(), warnings::toString);
+    assertTrue(warnings.getFirst().contains("7 of them run under a tenant"), warnings::getFirst);
+
+  }
+
+  @Test
+  @DisplayName("Workflows under the unprefixed process id are reported where the mode prefixes")
+  public void workflowsUnderTheUnprefixedIdAreReported() {
+
+    final var warnings = warningsOf(
+        () -> Camunda7TenantCheck.warnAboutWorkflowsOutOfScope(
+            "myengine",
+            "loan-approval",
+            "taken",
+            "loan-approval-taken",
+            null,
+            runtimeServiceWith(0, 0, 4)));
+
+    assertEquals(1, warnings.size(), warnings::toString);
+    assertTrue(warnings.getFirst().contains("4 run under the unprefixed process id 'taken'"), warnings::getFirst);
+
+  }
+
+  @Test
+  @DisplayName("A configuration which matches where the workflows run says nothing")
+  public void aMatchingScopeIsQuiet() {
+
+    assertEquals(
+        List.of(),
+        warningsOf(
+            () -> Camunda7TenantCheck.warnAboutWorkflowsOutOfScope(
+                "myengine",
+                "loan-approval",
+                "loan-approval-taken",
+                "loan-approval-taken",
+                "loan-approval",
+                runtimeServiceWith(9, 0, 0))));
+
+  }
+
+  @Test
+  @DisplayName("Without a runtime service, and where the engine refuses to answer, nothing is said")
+  public void anUnanswerableEngineIsQuiet() {
+
+    assertEquals(
+        List.of(),
+        warningsOf(
+            () -> Camunda7TenantCheck.warnAboutWorkflowsOutOfScope(
+                "myengine", "loan-approval", "p", "p", "loan-approval", null)));
+
+    final var throwing = Mockito.mock(org.camunda.bpm.engine.RuntimeService.class);
+    Mockito
+        .when(throwing.createProcessInstanceQuery())
+        .thenThrow(new IllegalStateException("no engine here"));
+    assertEquals(
+        List.of(),
+        warningsOf(
+            () -> Camunda7TenantCheck.warnAboutWorkflowsOutOfScope(
+                "myengine", "loan-approval", "p", "p", "loan-approval", throwing)),
+        "a diagnostic never fails a deployment");
+
+  }
+
 }

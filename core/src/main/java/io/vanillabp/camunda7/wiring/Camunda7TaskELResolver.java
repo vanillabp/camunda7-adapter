@@ -47,6 +47,42 @@ public class Camunda7TaskELResolver extends ELResolver {
   private final java.util.Set<String> liveReadsReported = java.util.concurrent.ConcurrentHashMap
       .newKeySet();
 
+  /**
+   * How many workflow INSTANCES the fallback served since this application started -
+   * which is what version 2.1 needs to know before it removes the fallback, and what the
+   * report of names cannot answer. A name says a model reads something unshared; an
+   * instance says a workflow still depends on the live read.
+   * <p>
+   * The number falls on its own without anything being done to it: an instance stops
+   * needing the fallback as soon as it reaches a sync point, because the adapter writes
+   * the shared values at every point it talks to the engine. So a shrinking count is the
+   * signal, and a count which stays is a workflow parked in a wait state.
+   * <p>
+   * Bounded like {@link #liveReadsReported}, and for the same reason: losing an entry
+   * costs one instance counted twice, and nothing durable belongs in an expression
+   * evaluation.
+   */
+  private final java.util.Set<String> liveReadInstances = java.util.concurrent.ConcurrentHashMap
+      .newKeySet();
+
+  /**
+   * Up to this many instances are remembered. Beyond it the count is reported as "at
+   * least", because an exact number is worth less than a bounded resolver.
+   */
+  private static final int MAX_REMEMBERED_INSTANCES = 10_000;
+
+  /**
+   * How often the count of instances still on the fallback is reported at most. The
+   * same interval the platform uses for its eviction-pressure warning, and for the same
+   * reason: a number which changes slowly is worth a line now and then, never one per
+   * evaluation.
+   */
+  private static final java.time.Duration USAGE_REPORT_INTERVAL = java.time.Duration.ofHours(1);
+
+  private volatile long usageReportedAtMillis;
+
+  private volatile int usageReportedAtCount;
+
   private final Camunda7TaskRegistry taskRegistry;
 
   /**
@@ -173,9 +209,117 @@ public class Camunda7TaskELResolver extends ELResolver {
     if (value == null) {
       return null;
     }
+    rememberLiveReadInstance(execution.getProcessInstanceId());
+    reportLiveReadUsage(workflowModuleId);
     reportLiveRead(workflowModuleId, bpmnProcessId, propertyName);
     context.setPropertyResolved(true);
     return value;
+
+  }
+
+  /**
+   * Remembers that one workflow instance was served by the fallback.
+   *
+   * @param processInstanceId The instance, may be <code>null</code> for an evaluation
+   *          outside an instance
+   */
+  private void rememberLiveReadInstance(
+      final String processInstanceId) {
+
+    if (processInstanceId == null) {
+      return;
+    }
+    if (liveReadInstances.size() >= MAX_REMEMBERED_INSTANCES) {
+      return;
+    }
+    liveReadInstances.add(processInstanceId);
+
+  }
+
+  /**
+   * Says at most once an hour how many workflow instances are still being answered by
+   * the fallback, and only while that number keeps growing.
+   * <p>
+   * This is the number version 2.1 needs, and it is not the one the startup check
+   * reports. That check names the EXPRESSIONS which read something unshared, which is a
+   * modelling gap and stays the same however many workflows there are. This says how
+   * many workflows still depend on the live read, and it falls on its own: an instance
+   * stops needing the fallback the moment it reaches a sync point, because the adapter
+   * writes the shared values at every point it talks to the engine. A count which stops
+   * growing is the signal that the upgrade window is closing; one which keeps growing
+   * means new workflows are being started into the gap, which is a defect in the sharing
+   * rather than a leftover of the upgrade.
+   *
+   * @param workflowModuleId The workflow module whose expression was answered
+   */
+  private void reportLiveReadUsage(
+      final String workflowModuleId) {
+
+    final var count = liveReadInstances.size();
+    if (count == usageReportedAtCount) {
+      return;
+    }
+    final var now = System.currentTimeMillis();
+    if ((usageReportedAtMillis != 0) && ((now - usageReportedAtMillis) < USAGE_REPORT_INTERVAL.toMillis())) {
+      return;
+    }
+    usageReportedAtMillis = now;
+    usageReportedAtCount = count;
+    log.info(
+        """
+            Camunda7[{}]: {}{} workflow(s) of workflow module '{}' were answered by the MIGRATION \
+            FALLBACK since this application started - they carry no process variable for an \
+            attribute their model reads, which is how workflows started under VanillaBP 1 arrive \
+            here. Version 2.1 removes the fallback, so this number is the one to watch: it falls on \
+            its own, because a workflow stops needing the fallback as soon as it reaches a point \
+            where this adapter writes the shared values. A number which keeps growing means new \
+            workflows run into the same gap, and then the model reads something which is not \
+            shared - the startup names those expressions.""",
+        adapterId,
+        usage().atLeast()
+            ? "at least "
+            : "",
+        count,
+        workflowModuleId);
+
+  }
+
+  /**
+   * The current usage, extracted so the message and {@link #liveReadUsage()} cannot
+   * disagree about what "at least" means.
+   *
+   * @return The usage
+   */
+  private LiveReadUsage usage() {
+
+    return new LiveReadUsage(liveReadInstances.size(), liveReadInstances.size() >= MAX_REMEMBERED_INSTANCES);
+
+  }
+
+  /**
+   * How many workflow instances the migration fallback served since this application
+   * started, and whether that is an exact number or a lower bound.
+   * <p>
+   * Read by whoever wants to report it - the resolver itself says nothing periodically,
+   * because an expression evaluation is the wrong place to own a schedule.
+   *
+   * @return The instances, and whether the memory ran full
+   */
+  public LiveReadUsage liveReadUsage() {
+
+    return usage();
+
+  }
+
+  /**
+   * How much of the Camunda 7 migration fallback is still in use.
+   *
+   * @param instances The workflow instances served since the application started
+   * @param atLeast Whether more were served than could be remembered
+   */
+  public record LiveReadUsage(
+                              int instances,
+                              boolean atLeast) {
 
   }
 
