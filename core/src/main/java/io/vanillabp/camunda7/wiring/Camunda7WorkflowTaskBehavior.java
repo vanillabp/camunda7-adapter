@@ -45,6 +45,9 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
  * <code>camunda:expression</code> tasks (executed inline by the
  * {@link Camunda7TaskELResolver}; staying open is impossible there, so
  * <code>&#64;TaskId</code> methods require a delegate expression).
+ * <p>
+ * Why the handler runs in the engine's own job transaction, and why the engine's retry is the
+ * recovery this adapter relies on, is decision 6 in the repository's DECISIONS.md.
  */
 public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
@@ -55,7 +58,7 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
   /**
    * Translates the error code of a {@code TaskException} into what the engine knows
    * (the model's error codes are prefixed too, see decision 3 in the repository's
-   * README.md). May be <code>null</code>.
+   * DECISIONS.md). May be <code>null</code>.
    */
   private final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
 

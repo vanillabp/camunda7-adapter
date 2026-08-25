@@ -23,6 +23,9 @@ import io.vanillabp.spi.service.WorkflowEnd;
  * rolls back with it. What the engine reports decides the KIND: an execution
  * carrying a delete reason was cancelled (by the API, by a terminate end event or
  * by an interrupting event), everything else reached an end event.
+ * <p>
+ * Why a listener is added to the deployed model, and only where a handler exists, is decision 5 in
+ * the repository's DECISIONS.md.
  */
 public class Camunda7WorkflowEndedListener implements ExecutionListener {
 

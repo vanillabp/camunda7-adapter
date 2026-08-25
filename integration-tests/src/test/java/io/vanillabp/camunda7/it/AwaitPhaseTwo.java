@@ -8,7 +8,7 @@ import java.util.function.BooleanSupplier;
 /**
  * An operation which progresses a workflow runs AFTER the caller's transaction
  * committed, dispatched by the phase-two outbox (see decision 2 in the repository's
- * README.md). A test which called
+ * DECISIONS.md). A test which called
  * VanillaBP therefore has to wait for the engine to catch up instead of reading its
  * state in the next line.
  * <p>

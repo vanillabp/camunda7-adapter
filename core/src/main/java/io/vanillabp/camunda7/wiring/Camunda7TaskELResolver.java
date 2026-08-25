@@ -24,7 +24,7 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
  * 2.1. Reading the aggregate live made a model reading <code>${riskAcceptable}</code> work
  * on Camunda 7 and fail on every remote BPMS - the opposite of what {@code @SyncWithBPMS}
  * is for. The values are pushed as process variables at every sync point now, so the engine
- * resolves them itself (see decision 1 in the repository's README.md).
+ * resolves them itself (see decision 1 in the repository's DECISIONS.md).
  * <p>
  * The fallback exists because an application upgrading to this version has workflows
  * RUNNING which carry no such variables yet, and because version 1 resolved attributes

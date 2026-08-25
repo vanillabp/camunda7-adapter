@@ -48,7 +48,7 @@ import lombok.extern.slf4j.Slf4j;
  * dispatches task executions through the core's {@code WorkflowTaskInvoker}.
  */
 @Slf4j
-// see decision 4 in the repository's README.md
+// see decision 4 in the repository's DECISIONS.md
 @SuppressWarnings("LombokSetterMayBeUsed")
 public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnModelInstance, Camunda7ProcessingContext> {
 

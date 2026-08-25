@@ -33,6 +33,9 @@ import lombok.extern.slf4j.Slf4j;
  * <li>the model does not pass a business key already - what the application
  * modelled wins.</li>
  * </ul>
+ * <p>
+ * Why the business key is injected here rather than left to the application, and why it is not
+ * injected blindly, is decision 5 in the repository's DECISIONS.md.
  */
 @Slf4j
 public final class Camunda7CallActivities {

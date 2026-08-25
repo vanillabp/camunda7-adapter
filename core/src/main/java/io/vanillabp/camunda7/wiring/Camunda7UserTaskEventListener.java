@@ -22,6 +22,9 @@ import lombok.extern.slf4j.Slf4j;
  * The invocation runs INSIDE the engine's transaction
  * ({@code runInCurrentTransaction}): aggregate changes commit or roll back with
  * the task's creation/cancellation itself.
+ * <p>
+ * Why a listener is added to the deployed model, and only where a handler exists, is decision 5 in
+ * the repository's DECISIONS.md.
  */
 @Slf4j
 public class Camunda7UserTaskEventListener implements TaskListener {

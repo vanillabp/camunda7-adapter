@@ -206,7 +206,7 @@ public class Camunda7AggregateSyncIT {
         "the gateway took the rejecting branch - it did not see what the task computed");
 
     // the value the task computed IS a process variable now, which is what the gateway
-    // read (see decision 1 in the repository's README.md)
+    // read (see decision 1 in the repository's DECISIONS.md)
     final var variables = variablesOfWorkflow(aggregateId, "SyncDecisionProcess");
     assertEquals("true", variables.get("decided"), "variables: "
         + variables);

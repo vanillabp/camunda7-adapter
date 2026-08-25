@@ -27,6 +27,10 @@ import lombok.extern.slf4j.Slf4j;
  * <tr><td>{@code bpmn:error errorCode}</td><td>yes</td><td>completeness with the other adapters - the application may raise it via {@code ProcessService#cancelTask}</td></tr>
  * <tr><td>task definitions ({@code camunda:expression}, {@code camunda:delegateExpression}, {@code camunda:formKey})</td><td><b>no</b></td><td>they are PROCESS-LOCAL in Camunda 7: the expression is evaluated inside the process by VanillaBP's EL resolver, nothing subscribes to them engine-wide. Camunda 8 job types are the opposite case and ARE prefixed.</td></tr>
  * </table>
+ * <p>
+ * Why the rewrite runs once per FILE and not once per process is decision 5 in the repository's
+ * DECISIONS.md; why it runs at all is decision 3 in the repository's
+ * DECISIONS.md.
  */
 @Slf4j
 public final class Camunda7Scoping {

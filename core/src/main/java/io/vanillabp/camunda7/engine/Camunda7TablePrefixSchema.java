@@ -33,6 +33,9 @@ import lombok.extern.slf4j.Slf4j;
  * against the prefixed ones - a MyBatis stack trace naming neither the adapter id nor
  * the prefix. This class turns that into a message which names both and the way on,
  * and it runs BEFORE the engine is built, so the stray tables are never written.
+ * <p>
+ * Why a prefix means the tables already exist rather than that the adapter will create them is
+ * decision 7 in the repository's DECISIONS.md.
  */
 @Slf4j
 public final class Camunda7TablePrefixSchema {

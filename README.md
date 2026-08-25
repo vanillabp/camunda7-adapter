@@ -129,7 +129,7 @@ deployed to the embedded engine of every prioritized adapter.
   engine, phase two creates the instance after the caller's commit, dispatched by the
   phase-two outbox and skipping an instance which is already there
   (`needsTwoPhaseCommitForStartingWorkflows()` is `true` for every adapter id, see
-  [decision 2](#2-a-workflow-is-progressed-after-the-callers-commit)). An application
+  [decision 2](./DECISIONS.md#2-a-workflow-is-progressed-after-the-callers-commit)). An application
   using this adapter therefore needs a phase-two outbox, which the VanillaBP platform
   integration provides for JPA/JDBC and MongoDB setups.
 - **Asynchronous continuations (job executor).** Each engine runs an idiomatic
@@ -524,7 +524,7 @@ Camunda 7 runs **embedded** inside the application's JVM and normally shares the
 of the business code. Engine queries are therefore immediately consistent, which is what
 phase one of every operation asks. What phase two does still happens after the caller's
 commit, through the outbox, the way a remote BPMS works - see
-[decision 2](#2-a-workflow-is-progressed-after-the-callers-commit).
+[decision 2](./DECISIONS.md#2-a-workflow-is-progressed-after-the-callers-commit).
 
 ## Quarkus (JVM mode only!)
 
@@ -608,54 +608,10 @@ neither an eventual-consistency lag nor an application-version boundary.
 
 ## Decision log
 
-Decisions this repository's code points at. A number is handed out once and never reused or
-renumbered, so a citation stays resolvable; a decision which gets overturned keeps its entry,
-marked as superseded and naming the entry which replaced it.
-
-### 1. The workflow aggregate is shared as process variables
-
-Camunda 7 runs embedded, so the EL resolver could read the aggregate live - and that is
-exactly what makes a model portable in one direction only: `${riskAcceptable}` would work
-here and fail on every remote BPMS. The values an aggregate shares are therefore written as
-process variables at every point this adapter talks to the engine, and the engine evaluates
-its expressions against them. Reading an attribute through the EL resolver survives as a
-migration fallback for workflows started before, reported once per name and removed in 2.1.
-See [Sharing the workflow aggregate](#sharing-the-workflow-aggregate).
-
-### 2. A workflow is progressed after the caller's commit
-
-`needsTwoPhaseCommitForStartingWorkflows()` answers `true` for every adapter id, and every
-operation which moves a process forward is scheduled through the phase-two outbox, the way
-a remote BPMS works. Sharing the caller's transaction was possible and is not enough: an
-engine command which loses a concurrency conflict cannot be repeated inside that
-transaction, because it leaves the transaction rollback-only, and repeating just the engine
-part would advance the process while the application rolls back.
-
-What phase one still does is ask - an embedded engine answers for free and in the same
-transaction, so a gone task or an unknown workflow is reported where the application called.
-What phase two does is idempotent, because the outbox dispatches at-least-once. A test which
-called VanillaBP has to wait for the engine to catch up rather than read its state in the
-next line.
-
-### 3. Workflow modules are kept apart by scoping the identifiers
-
-Camunda 7 has tenants, but a workflow module may also prefix its identifiers instead, and
-then there is no tenant to ask. The engine is therefore always addressed with the SCOPED
-identifiers - process ids, message and signal names, error codes and task definitions - while
-the core's registries stay keyed by the plain ones, and a delivery coming back from the
-engine is translated before the core sees it. The mode is configured per workflow module,
-which is why no code may assume either shape.
-See [Keeping workflow modules apart](#keeping-workflow-modules-apart).
-
-### 4. A class opens its fields one by one, not as a whole
-
-The process service, the deployment service and the engine holders of this adapter hold dozens
-of fields, most of them collaborators nobody outside the class needs. Which of them a caller
-may read belongs to the surface of the class, so an accessor is declared per field, and
-`@Getter` on the class is refused even where an IDE offers it: it would publish the current
-field list and then keep publishing whatever field a later change adds.
-`@SuppressWarnings("LombokGetterMayBeUsed")` on such a class is what keeps that offer from
-coming back.
+Decisions several places in this repository rely on live in [`DECISIONS.md`](./DECISIONS.md), the
+one thing the code is allowed to cite. A citation reads `see decision 3 in the repository's
+DECISIONS.md`, numbers are never reused, and an overturned entry stays and names its successor, so
+a citation written today still resolves in a year.
 
 ## Known deviations
 
