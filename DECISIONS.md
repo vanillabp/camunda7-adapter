@@ -129,3 +129,23 @@ adapter refused to accept before. Every `ProcessEnginePlugin` bean of the applic
 now, and `engine-plugins` configures one by class name with its properties handed to Camunda's own
 `PropertyHelper`, so the values convert exactly as they would in a `bpm-platform.xml`. Without a
 format the adapter warns once that Java serialization applies.
+
+### 10. A start asks the engine for numbers, and asks as many of them on the last day as on the first
+
+The questions this adapter answers while an application boots read from tables which grow for as
+long as it is in production: how many workflows still run on an old version of a process, how many
+of them the configured scope will never reach, which versions the engine holds and what their
+models look like. A start of ten seconds must not become a start of two minutes because the
+application did its job for two years, and the platform states the rule for every adapter as
+decision 19 of its own DECISIONS.md.
+
+For Camunda 7 that means two things. A question about a quantity is a `count()` and the engine
+answers it from an index; fetching the executions and counting the list is the same answer at a
+price which rises every year. And a definition query is asked once for the whole process:
+`fetchDeployedVersions` reads every version anyway, so it keeps the definition ids it saw, and the
+questions which follow are answered from them rather than each asking again.
+
+What does grow is the number of versions the engine holds, one per deployment which changed a
+model, and the questions about older versions grow with it. That is deliberate: those questions are
+what the check is for, and `outfaded-versions` is how an operator says which of them have stopped
+being interesting. `Camunda7StartupQuestionCostTest` counts what a start asks.
