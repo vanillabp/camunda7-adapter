@@ -55,6 +55,19 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   private final Map<String, String> versionsByDefinitionId = new ConcurrentHashMap<>();
 
   /**
+   * The engine's process definition id per (workflow module, BPMN process, version).
+   * <p>
+   * The startup check for old versions asks two things about every version older than the
+   * one this boot deployed, its model and how many workflows run on it, and both need this
+   * id. Looking it up with a definition query per question meant three queries per version
+   * where one list already held the answer: {@link #fetchDeployedVersions} reads the
+   * definitions and used to keep nothing but their version numbers. So it keeps the ids
+   * as well, and the query below runs only for a version which was deployed after that
+   * list was read - see decision 10 in the repository's DECISIONS.md.
+   */
+  private final Map<String, String> definitionIdsByVersion = new ConcurrentHashMap<>();
+
+  /**
    * The version this boot deployed per process - what tells a restart
    * without a model change that it still has to report a version.
    */
@@ -168,7 +181,8 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * The engine's process definition id of one version of a process.
+   * The engine's process definition id of one version of a process - from what the
+   * version list already brought back, and only otherwise from a query of its own.
    */
   private String definitionIdOf(
       final String workflowModuleId,
@@ -178,6 +192,28 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
     if (!version.matches("\\d+")) {
       return null;
     }
+    final var known = definitionIdsByVersion.get(versionKey(workflowModuleId, bpmnProcessId, version));
+    if (known != null) {
+      return known;
+    }
+    return askTheEngineForTheDefinitionId(workflowModuleId, bpmnProcessId, version);
+
+  }
+
+  private static String versionKey(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    return "%s|%s|%s".formatted(workflowModuleId, bpmnProcessId, version);
+
+  }
+
+  private String askTheEngineForTheDefinitionId(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
     final var scopedProcessId = scopedProcessIds.apply(workflowModuleId, bpmnProcessId);
     final var tenantId = tenants.apply(workflowModuleId);
     var query = repositoryService
@@ -188,9 +224,26 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
         ? query.withoutTenantId()
         : query.tenantIdIn(tenantId);
     final var definition = query.singleResult();
-    return definition == null
-        ? null
-        : definition.getId();
+    if (definition == null) {
+      return null;
+    }
+    remember(workflowModuleId, bpmnProcessId, definition);
+    return definition.getId();
+
+  }
+
+  /**
+   * Keeps what a definition query brought back, so the next question about the same
+   * version is answered without asking again.
+   */
+  private void remember(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final org.camunda.bpm.engine.repository.ProcessDefinition definition) {
+
+    final var version = String.valueOf(definition.getVersion());
+    definitionIdsByVersion.put(versionKey(workflowModuleId, bpmnProcessId, version), definition.getId());
+    versionsByDefinitionId.put(definition.getId(), version);
 
   }
 
@@ -244,6 +297,8 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
       final String versionTag) {
 
     versionsByDefinitionId.put(processDefinitionId, String.valueOf(version));
+    definitionIdsByVersion
+        .put(versionKey(workflowModuleId, bpmnProcessId, String.valueOf(version)), processDefinitionId);
     deployedVersions.put(workflowModuleId
         + "|"
         + bpmnProcessId, String.valueOf(version));
@@ -264,10 +319,14 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
     query = tenantId == null
         ? query.withoutTenantId()
         : query.tenantIdIn(tenantId);
-    return query
+    final var definitions = query
         .orderByProcessDefinitionVersion()
         .asc()
-        .list()
+        .list();
+    // this one list holds what every later question about an older version needs, and
+    // keeping it is what spares those questions a definition query each
+    definitions.forEach(definition -> remember(workflowModuleId, bpmnProcessId, definition));
+    return definitions
         .stream()
         .map(definition -> DeployedProcessVersion
             .of(String.valueOf(definition.getVersion()), definition.getVersionTag()))
