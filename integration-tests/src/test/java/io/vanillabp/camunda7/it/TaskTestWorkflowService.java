@@ -278,6 +278,14 @@ public class TaskTestWorkflowService {
 
   }
 
+  /**
+   * What the core reported as the running activation while a handler ran, in the order
+   * the handlers ran. Read by the test which checks that the adapter names every
+   * activation of an element differently - the value never reaches application code
+   * through the SPI, so this is where an IT can see it.
+   */
+  public static final java.util.List<String> ACTIVATIONS = new java.util.concurrent.CopyOnWriteArrayList<>();
+
   @WorkflowTask
   public void miTask(
       final TaskTestAggregate aggregate,
@@ -286,6 +294,7 @@ public class TaskTestWorkflowService {
       @MultiInstanceElement("MI_Task") final Object element) {
 
     aggregate.appendResult("%s%d/%d".formatted(element, index, total));
+    ACTIVATIONS.add(io.vanillabp.integration.spi.RunningActivation.current());
 
   }
 

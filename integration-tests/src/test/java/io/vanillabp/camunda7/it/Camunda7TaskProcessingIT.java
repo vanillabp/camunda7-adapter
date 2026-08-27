@@ -842,6 +842,7 @@ public class Camunda7TaskProcessingIT {
   @DisplayName("Multi-instance: collection from an aggregate attribute, index/total/element bound")
   public void multiInstanceBindings() throws Exception {
 
+    TaskTestWorkflowService.ACTIVATIONS.clear();
     final var aggregateId = startSecondaryProcess(
         "MultiInstanceProcess", true, List.of("a", "b", "c"));
     awaitUntil(() -> processEnded(aggregateId), "MultiInstanceProcess to end");
@@ -849,6 +850,23 @@ public class Camunda7TaskProcessingIT {
     assertEquals(
         "a0/3|b1/3|c2/3",
         repository.findById(aggregateId).orElseThrow().getResults());
+
+    // every element of the multi-instance activity is its OWN activation, which is what
+    // keeps the correlations of three siblings from sharing an idempotency key. Camunda
+    // 7 reports no delivery id at all and answers this question all the same
+    final var activations = List.copyOf(TaskTestWorkflowService.ACTIVATIONS);
+    assertEquals(3, activations.size(), "one activation per element: "
+        + activations);
+    assertEquals(
+        3,
+        activations.stream().distinct().count(),
+        "three elements, three activations: "
+            + activations);
+    activations
+        .forEach(activation -> assertNotNull(
+            activation,
+            "the adapter names its activations: "
+                + activations));
 
   }
 

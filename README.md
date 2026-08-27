@@ -337,6 +337,15 @@ identified by the business key (getter, boolean getter or field - Spring beans
 remain resolvable on Spring Boot). External tasks (`camunda:topic`) are not
 supported yet.
 
+This adapter answers no delivery identity and does answer an activation identity, which looks
+contradictory and is not. A redelivery here proves that nothing was committed, because the handler
+runs inside the engine's own job transaction, so there is no processed delivery to remember. Which
+element instance is executing is a different question, and the engine answers it:
+`DelegateExecution#getActivityInstanceId()` reads `<element-id>:<instance-id>`, so the second
+element of a multi-instance activity and the next iteration of a loop each get their own. The core
+puts it into the idempotency key of a message correlation planned while the handler runs, which is
+what keeps three siblings of one workflow aggregate from sharing a key.
+
 ## Keeping workflow modules apart
 
 The [name-clash-avoidance mode](https://github.com/vanillabp/adapter-platform-integration/wiki/Workflow-modules#how-name-clashes-are-avoided)

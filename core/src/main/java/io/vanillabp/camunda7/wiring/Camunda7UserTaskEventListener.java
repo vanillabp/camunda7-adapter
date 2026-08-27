@@ -213,6 +213,18 @@ public class Camunda7UserTaskEventListener implements TaskListener {
 
     }
 
+    @Override
+    public String getActivationId() {
+
+      // the activity instance the user task belongs to - the same value the
+      // asynchronous-task side reports, and per activation for the same reason. The
+      // user task's own id would do as well; the activity instance is chosen because
+      // creation and cancellation of one task then agree, which is what an activation
+      // is supposed to mean
+      return delegateTask.getExecution().getActivityInstanceId();
+
+    }
+
   }
 
 }
