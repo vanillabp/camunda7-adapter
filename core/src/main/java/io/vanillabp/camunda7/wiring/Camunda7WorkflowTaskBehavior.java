@@ -327,6 +327,18 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
     }
 
     @Override
+    public String getActivationId() {
+
+      // the activity instance is what the engine calls the running element instance:
+      // its id reads '<element-id>:<instance-id>', so the second element of a
+      // multi-instance activity and the next iteration of a loop each get their own.
+      // Camunda 7 reports no delivery id at all (a redelivery here proves that nothing
+      // was committed) and still answers this one - the two are different questions
+      return execution.getActivityInstanceId();
+
+    }
+
+    @Override
     public Map<String, MultiInstanceValue> getMultiInstances() {
 
       if (multiInstances == null) {
