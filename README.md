@@ -233,11 +233,20 @@ database of its own, where the engine creates and upgrades its schema as usual.
 `@WorkflowTask` methods are wired to BPMN tasks by expression: implement a service
 task as *Expression* `${myTaskDefinition}` (or *Delegate expression*) - the
 expression text names the method's task definition (defaulting to the method
-name). At deployment the adapter validates both directions (every task has a
-method, every method matches a task of one of its class' BPMN processes) with
-guiding messages, and forces `asyncBefore`/`asyncAfter` onto service-like tasks:
+name). At deployment the adapter validates that every BPMN task of a process has a
+`@WorkflowTask` method, with guiding messages, and forces `asyncBefore`/`asyncAfter`
+onto service-like tasks:
 every task runs in its own job transaction, aligning the embedded engine with
 remote BPMS.
+
+The other direction is NOT validated here yet, although the core offers it: a
+`@WorkflowTask` method which matches no task of any BPMN process of its workflow
+module stays unreported, because `Camunda7DeploymentService` does not call
+`WorkflowTaskInvoker.validateNoUnwiredWorkflowTaskMethods` at the end of
+`deployResources` - Camunda 8, the Process-Engine-API and both dummy adapters do. So a
+misspelled task definition is silent until the workflow reaches the task. Story 158 of
+the roadmap moves that call into the core, where no adapter can forget it, and the
+sentence above is written for the state before it.
 
 Handlers run INSIDE the engine's job transaction (Spring-managed respectively JTA
 on Quarkus, with the CDI request context activated): the workflow aggregate is
