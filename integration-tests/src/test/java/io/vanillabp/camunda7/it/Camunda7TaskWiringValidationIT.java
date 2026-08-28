@@ -76,6 +76,31 @@ public class Camunda7TaskWiringValidationIT {
             + message);
   }
 
+  @Test
+  @DisplayName("A @WorkflowTask method matching no task of the module aborts the boot")
+  public void orphanWorkflowTaskMethodAbortsBoot() {
+
+    // the other direction of the wiring check, which this adapter never called: the
+    // core runs it itself since story 158, once every adapter of the module deployed
+    final var failure = assertThrows(
+        RuntimeException.class,
+        () -> new SpringApplicationBuilder(TestApplication.class)
+            .run(
+                "--vanillabp.workflow-modules.c7-it.adapters.c7.resources-location=classpath*:c7-it/orphan-method",
+                "--spring.profiles.active=orphan-method",
+                "--spring.datasource.url=jdbc:h2:mem:c7-orphan-method;DB_CLOSE_DELAY=-1")
+            .close());
+
+    final var message = rootMessage(failure);
+    assertTrue(message.contains("orphanTypo"), "unexpected message: "
+        + message);
+    assertTrue(message.contains("activityNobodyModelled"), "unexpected message: "
+        + message);
+    assertTrue(message.contains("fix the annotation"), "unexpected message: "
+        + message);
+
+  }
+
   private static String rootMessage(
       final Throwable throwable) {
 

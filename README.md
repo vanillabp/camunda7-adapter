@@ -238,14 +238,12 @@ onto service-like tasks:
 every task runs in its own job transaction, aligning the embedded engine with
 remote BPMS.
 
-The other direction is NOT validated here yet, although the core offers it: a
-`@WorkflowTask` method which matches no task of any BPMN process of its workflow
-module stays unreported, because `Camunda7DeploymentService` does not call
-`WorkflowTaskInvoker.validateNoUnwiredWorkflowTaskMethods` at the end of
-`deployResources` - Camunda 8, the Process-Engine-API and both dummy adapters do. So a
-misspelled task definition is silent until the workflow reaches the task. Story 158 of
-the roadmap moves that call into the core, where no adapter can forget it, and the
-sentence above is written for the state before it.
+The other direction is validated as well, and no adapter has to remember it: a
+`@WorkflowTask` method which matches no task of any BPMN process of its workflow module
+ends the boot naming the method and the fix. The core runs that check itself
+(`WorkflowTaskWiring.validateNoUnwiredWorkflowTaskMethods`) once every adapter of the
+module finished deploying - this adapter forgot to call it for a year, which is why the
+duty moved (story 158). `Camunda7TaskWiringValidationIT` holds both directions.
 
 Handlers run INSIDE the engine's job transaction (Spring-managed respectively JTA
 on Quarkus, with the CDI request context activated): the workflow aggregate is

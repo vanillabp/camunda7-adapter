@@ -395,6 +395,12 @@ public class Camunda7AdapterBootTest {
             io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker.class,
             () -> org.mockito.Mockito
                 .mock(io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker.class))
+        // ...and its wiring half, which the deployment service takes since the SPI was
+        // split into the two duties
+        .withBean(
+            io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring.class,
+            () -> org.mockito.Mockito
+                .mock(io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring.class))
         // the sync model is contributed by the platform integration,
         // which is not part of this minimal runner either
         .withBean(
