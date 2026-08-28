@@ -382,21 +382,31 @@ public class Camunda7TaskProcessingIT {
   }
 
   @Test
-  @DisplayName("completeTask of an unknown task raises the guiding TaskNotFoundException")
+  @DisplayName("completeTask of an unknown task raises the guiding TaskNotFoundException, at once")
   public void completeUnknownTaskRaisesGuidingException() {
 
     final var aggregateId = startSecondaryProcess("AsyncProcess", true, null);
 
+    final var startedAt = System.nanoTime();
     final var exception = assertThrows(
         io.vanillabp.spi.process.TaskNotFoundException.class,
         () -> transactionTemplate.executeWithoutResult(status -> {
           final var aggregate = repository.findById(aggregateId).orElseThrow();
           workflowService.completeAsyncTask(aggregate, "no-such-task");
         }));
+    final var elapsed = java.time.Duration.ofNanos(System.nanoTime() - startedAt);
+
     assertTrue(
         exception.getMessage().contains("no-such-task"),
         "expected the unknown task to be named but got: "
             + exception.getMessage());
+    // the probe of a task is an engine question with an exact answer, so nothing is
+    // gained by asking again - and this runs in the caller's transaction (decision 27
+    // of the platform's DECISIONS.md)
+    assertTrue(
+        elapsed.toSeconds() < 5,
+        "an unknown task must fail without waiting, but took "
+            + elapsed);
 
   }
 
