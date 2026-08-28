@@ -42,7 +42,8 @@ public class Camunda7WithoutOutboxTest {
       .assertException(throwable -> {
         var current = throwable;
         while (current != null) {
-          if ((current.getMessage() != null) && current.getMessage().contains("no PhaseTwoOutbox is available")) {
+          if ((current.getMessage() != null) && current.getMessage()
+              .contains("is dispatched through a PhaseTwoOutbox")) {
             final var message = current.getMessage();
             assertTrue(message.contains("c7"), message);
             assertTrue(message.contains("TestProcess"), message);

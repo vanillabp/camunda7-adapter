@@ -161,10 +161,6 @@ public class Camunda7TwoEnginesIT {
   @SuppressWarnings("unchecked")
   public void separateDataSourceIdStartsTwoPhase() {
 
-    assertTrue(
-        separateDataSourceProcessService.needsTwoPhaseCommitForStartingWorkflows(),
-        "an engine on its own datasource cannot join the caller's transaction");
-
     // pause job processing of the c7b engine so the started instance does not
     // complete asynchronously while the idempotency of phase two is asserted
     separateDataSourceEngine.stopWorkflowProcessing(MODULE_ID);

@@ -37,11 +37,12 @@ service exist per id, not per type.
 
 ## Camunda 7 traits reflected here
 
-Camunda 7 is embedded and joins the application's local transaction. Hence
-`Camunda7ProcessService.needsTwoPhaseCommitForStartingWorkflows()` returns `false`:
-starting a workflow happens completely in phase one; phase two is a no-op and the
-transaction outbox is not involved. Workflow-module isolation maps the workflow
-module id onto the Camunda **tenant id**, and the 1:1 aggregate relation onto the Camunda
+Camunda 7 is embedded and joins the application's local transaction for INBOUND work: a
+task is delivered inside the engine's transaction. What leaves for the engine does not go
+that way - every progressing operation is planned in phase one and dispatched through the
+phase-two outbox after the commit, like on every other BPMS (see decision 2 of this
+repository's `DECISIONS.md`). Workflow-module isolation maps the workflow module id onto
+the Camunda **tenant id**, and the 1:1 aggregate relation onto the Camunda
 **business key**.
 
 ## What is implemented

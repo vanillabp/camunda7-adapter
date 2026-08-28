@@ -86,12 +86,9 @@ public class Camunda7AdapterDiscoveryTest {
             .count(),
         "the BPMN process is deployed for tenant = workflow module id");
 
-    // per-adapter-id beans: process service (two-phase commit for every adapter id
-    // - the workflow is progressed after the commit) and deployment
-    // service
+    // per-adapter-id beans: process service and deployment service
     Assertions.assertEquals(1, migratableProcessServices.size());
     Assertions.assertEquals("c7", migratableProcessServices.getFirst().getAdapterId());
-    Assertions.assertTrue(migratableProcessServices.getFirst().needsTwoPhaseCommitForStartingWorkflows());
     Assertions.assertEquals(1, deploymentServices.size());
     Assertions.assertEquals("c7", deploymentServices.getFirst().getAdapterId());
     Assertions.assertEquals("camunda7", deploymentServices.getFirst().getAdapterType());

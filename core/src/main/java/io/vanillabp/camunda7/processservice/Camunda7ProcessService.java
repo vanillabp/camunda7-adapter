@@ -14,9 +14,8 @@ import lombok.extern.slf4j.Slf4j;
  * <p>
  * Camunda 7 runs embedded in the application's JVM and normally shares its database and
  * its transaction. VanillaBP nevertheless progresses the process AFTER the commit, the
- * way every other BPMS does: {@link #needsTwoPhaseCommitForStartingWorkflows()} returns
- * {@code true} unconditionally and every progressing operation is scheduled through the
- * phase-two outbox.
+ * way every other BPMS does: every progressing operation is scheduled through the
+ * phase-two outbox, which is what the adapter SPI asks of every adapter.
  * <p>
  * <b>Why, although sharing the transaction was comfortable:</b> an engine command which
  * loses a concurrency conflict cannot be repeated inside the caller's transaction. Every
@@ -354,16 +353,6 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   public String getAdapterId() {
 
     return adapterId;
-
-  }
-
-  @Override
-  public boolean needsTwoPhaseCommitForStartingWorkflows() {
-
-    // ALWAYS - see the class comment. Sharing the caller's transaction would make a
-    // progressing operation which loses a concurrency conflict unrepeatable, and an
-    // adapter id with its OWN datasource cannot join that transaction anyway
-    return true;
 
   }
 

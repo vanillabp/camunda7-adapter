@@ -102,10 +102,9 @@ public class Camunda7TwoEnginesTest {
         .findFirst()
         .orElseThrow();
 
-    // an engine on a NAMED datasource cannot join the caller's transaction (the
+    // an engine on a NAMED datasource cannot join the caller's transaction anyway (the
     // default datasource is already enlisted; the engine's commands would enlist a
-    // second non-XA resource) - such ids start two-phase
-    Assertions.assertTrue(processService.needsTwoPhaseCommitForStartingWorkflows());
+    // second non-XA resource), which is one reason more for the two-phase split
     Assertions.assertFalse(
         engineRegistry
             .engineFor("c7")
