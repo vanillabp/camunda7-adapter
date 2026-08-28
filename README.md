@@ -127,8 +127,7 @@ deployed to the embedded engine of every prioritized adapter.
   **business key**, and the tenant is whatever the
   [name-clash-avoidance mode](#keeping-workflow-modules-apart) says. Phase one asks the
   engine, phase two creates the instance after the caller's commit, dispatched by the
-  phase-two outbox and skipping an instance which is already there
-  (`needsTwoPhaseCommitForStartingWorkflows()` is `true` for every adapter id, see
+  phase-two outbox and skipping an instance which is already there (see
   [decision 2](./DECISIONS.md#2-a-workflow-is-progressed-after-the-callers-commit)). An application
   using this adapter therefore needs a phase-two outbox, which the VanillaBP platform
   integration provides for JPA/JDBC and MongoDB setups.

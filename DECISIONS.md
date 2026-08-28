@@ -24,9 +24,9 @@ See [Sharing the workflow aggregate](./README.md#sharing-the-workflow-aggregate)
 
 ### 2. A workflow is progressed after the caller's commit
 
-`needsTwoPhaseCommitForStartingWorkflows()` answers `true` for every adapter id, and every
-operation which moves a process forward is scheduled through the phase-two outbox, the way
-a remote BPMS works. Sharing the caller's transaction was possible and is not enough: an
+Every operation which moves a process forward is scheduled through the phase-two outbox,
+the way a remote BPMS works. Sharing the caller's transaction was possible and is not
+enough: an
 engine command which loses a concurrency conflict cannot be repeated inside that
 transaction, because it leaves the transaction rollback-only, and repeating just the engine
 part would advance the process while the application rolls back.
