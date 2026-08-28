@@ -141,7 +141,7 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
       }
 
       @Override
-      public Instant getTriggerTime() {
+      public Instant getStartInstant() {
         // the engine does not hand a listener the timer's scheduled time, so this
         // is the moment the instance is created. Nothing is lost by that: this
         // listener runs in the transaction which creates the process instance, so a

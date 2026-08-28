@@ -152,6 +152,14 @@ public class Camunda7AdapterBootTest {
                       service -> service));
           Assertions.assertEquals(java.util.Set.of("c7", "c7-two"), processServices.keySet());
 
+          // an embedded engine answers the election by asking its own tables, so this
+          // adapter never guesses and may be combined with a second BPMS
+          processServices
+              .values()
+              .forEach(service -> Assertions.assertTrue(
+                  service.canLocateWorkflows(),
+                  "Camunda 7 can be asked which workflows it holds"));
+
         });
 
   }
