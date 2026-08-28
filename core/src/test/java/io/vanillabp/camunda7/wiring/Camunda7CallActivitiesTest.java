@@ -16,9 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
-import io.vanillabp.integration.adapter.spi.workflowtask.TaskInvocationContext;
-import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
-import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
+import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
@@ -56,7 +54,7 @@ public class Camunda7CallActivitiesTest {
    * The core's answer: everything of this module works on the aggregate of
    * 'LoanApproval' except 'Payment', which has one of its own.
    */
-  private static final WorkflowTaskInvoker CORE = new WorkflowTaskInvoker() {
+  private static final WorkflowTaskWiring CORE = new WorkflowTaskWiring() {
 
     @Override
     public boolean workflowsShareTheWorkflowAggregate(
@@ -82,81 +80,11 @@ public class Camunda7CallActivitiesTest {
     }
 
     @Override
-    public WorkflowTaskOutcome invokeWorkflowTask(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final TaskInvocationContext context) {
-
-      throw new UnsupportedOperationException("not part of this test");
-
-    }
-
-    // the migration fallback, deprecated for removal in 2.1: a test double implements it
-    // as long as the interface declares it, and the mandatory 'removal' lint needs the
-    // suppression - @Deprecated on the override does not silence it
-    @Deprecated(forRemoval = true)
-    @SuppressWarnings("removal")
-    @Override
-    public boolean workflowAggregateHasProperty(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final String propertyName) {
-
-      return false;
-
-    }
-
-    @Deprecated(forRemoval = true)
-    @SuppressWarnings("removal")
-    @Override
-    public Object resolveWorkflowAggregateProperty(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final String workflowAggregateId,
-        final String propertyName) {
-
-      return null;
-
-    }
-
-    @Override
-    public java.util.Map<String, Object> syncedWorkflowAggregateValuesInCurrentTransaction(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final String workflowAggregateId,
-        final io.vanillabp.integration.adapter.spi.AggregateSyncMode adapterDefault) {
-
-      return java.util.Map.of();
-
-    }
-
-    @Override
-    public boolean workflowTaskHandlerExists(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final String taskDefinitionOrActivityId) {
-
-      return false;
-
-    }
-
-    @Override
-    public java.util.Map<String, Object> syncedWorkflowAggregateValues(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final String workflowAggregateId,
-        final io.vanillabp.integration.adapter.spi.AggregateSyncMode adapterDefault) {
-
-      return java.util.Map.of();
-
-    }
-
-    @Override
     public String resolveWorkflowAggregateIdName(
         final String workflowModuleId,
         final String bpmnProcessId) {
 
-      return "id";
+      throw new UnsupportedOperationException("not part of this test");
 
     }
 

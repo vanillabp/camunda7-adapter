@@ -27,7 +27,7 @@ import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
 import io.vanillabp.integration.adapter.spi.AdapterPlatformVersion;
 import io.vanillabp.integration.adapter.spi.BpmnParseException;
 import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
-import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
+import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -45,7 +45,7 @@ import lombok.extern.slf4j.Slf4j;
  * Task wiring ({@link #wireBpmn}) extracts the service-like tasks from the model, validates
  * them against the registered {@code @WorkflowTask} methods (both directions, guiding
  * messages) and registers the connectables with the engine's EL resolver - the engine then
- * dispatches task executions through the core's {@code WorkflowTaskInvoker}.
+ * hands the model to the core's {@code WorkflowTaskWiring}.
  */
 @Slf4j
 // see decision 4 in the repository's DECISIONS.md
@@ -79,7 +79,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * The core's task-processing entry point: wiring validation during
    * {@link #wireBpmn} and task dispatch at runtime (via the EL resolver).
    */
-  private final WorkflowTaskInvoker workflowTaskInvoker;
+  private final WorkflowTaskWiring workflowTaskWiring;
 
   /**
    * The task connectables of this adapter id's engine, registered during
@@ -296,10 +296,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String adapterId,
       final RepositoryService repositoryService,
       final Camunda7WorkflowProcessingLifecycle workflowProcessingLifecycle,
-      final WorkflowTaskInvoker workflowTaskInvoker,
+      final WorkflowTaskWiring workflowTaskWiring,
       final Camunda7TaskRegistry taskRegistry) {
 
-    this(adapterId, repositoryService, workflowProcessingLifecycle, workflowTaskInvoker, taskRegistry, null);
+    this(adapterId, repositoryService, workflowProcessingLifecycle, workflowTaskWiring, taskRegistry, null);
 
   }
 
@@ -307,7 +307,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String adapterId,
       final RepositoryService repositoryService,
       final Camunda7WorkflowProcessingLifecycle workflowProcessingLifecycle,
-      final WorkflowTaskInvoker workflowTaskInvoker,
+      final WorkflowTaskWiring workflowTaskWiring,
       final Camunda7TaskRegistry taskRegistry,
       final java.util.function.Function<String, Camunda7InstanceIdentity> instanceIdentities) {
 
@@ -316,7 +316,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     this.adapterId = adapterId;
     this.repositoryService = repositoryService;
     this.workflowProcessingLifecycle = workflowProcessingLifecycle;
-    this.workflowTaskInvoker = workflowTaskInvoker;
+    this.workflowTaskWiring = workflowTaskWiring;
     this.taskRegistry = taskRegistry;
     this.instanceIdentities = instanceIdentities;
     // What the engine's process definitions are versioned as - the
@@ -508,7 +508,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       // BEFORE scoping, which rewrites the called elements: here the process IDs are
       // still the ones the application knows
       io.vanillabp.camunda7.wiring.Camunda7CallActivities
-          .propagateBusinessKey(model, workflowModuleId, workflowTaskInvoker);
+          .propagateBusinessKey(model, workflowModuleId, workflowTaskWiring);
       io.vanillabp.camunda7.wiring.Camunda7Scoping.apply(model, workflowModuleId, adapterId, scoping);
     }
     context.addResource(filename, model);
@@ -539,7 +539,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     // both directions with guiding messages; throwing here honors the
     // deployment-failure policy for non-first-priority adapter ids
-    workflowTaskInvoker.validateTaskWiring(workflowModuleId, bpmnProcessId, specs);
+    workflowTaskWiring.validateTaskWiring(workflowModuleId, bpmnProcessId, specs);
 
     // A task wired by 'camunda:expression' completes as soon as the
     // expression returns, so a method declaring @TaskId can never keep it open.
@@ -551,7 +551,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     connectables
         .stream()
         .filter(connectable -> connectable.type() == Camunda7TaskConnectable.Type.EXPRESSION)
-        .filter(connectable -> workflowTaskInvoker.workflowTaskCompletesAsynchronously(
+        .filter(connectable -> workflowTaskWiring.workflowTaskCompletesAsynchronously(
             workflowModuleId,
             bpmnProcessId,
             connectable.taskDefinition()))
@@ -572,13 +572,13 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     // The engine can be asked which versions of this process it has, which
     // is what a version specification naming a version TAG needs
-    workflowTaskInvoker
+    workflowTaskWiring
         .registerProcessVersions(adapterId, workflowModuleId, bpmnProcessId, processVersions);
 
     // Which elements can put a second token into a running workflow - two
     // tokens are two writers on the workflow aggregate, and the core knows whether
     // that aggregate can survive them
-    workflowTaskInvoker
+    workflowTaskWiring
         .reportConcurrentTokenElements(
             workflowModuleId,
             bpmnProcessId,
@@ -839,7 +839,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     if (identifiers.isEmpty()) {
       return;
     }
-    workflowTaskInvoker
+    workflowTaskWiring
         .unsharedWorkflowAggregateProperties(
             workflowModuleId,
             bpmnProcessId,
@@ -1074,7 +1074,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                     definition.getVersionTag());
             // The border between the model this boot brought and the older
             // versions the engine still holds
-            workflowTaskInvoker
+            workflowTaskWiring
                 .registerDeployedVersion(
                     adapterId,
                     workflowModuleId,
@@ -1111,7 +1111,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                     latest.getId(),
                     latest.getVersion(),
                     latest.getVersionTag());
-            workflowTaskInvoker
+            workflowTaskWiring
                 .registerDeployedVersion(
                     adapterId, workflowModuleId, bpmnProcessId, String.valueOf(latest.getVersion()));
           }
@@ -1129,7 +1129,6 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     // The deployment is done, so the version tags the application's
     // annotations name can be resolved against what the engine has now
-    workflowTaskInvoker.resolveProcessVersions(workflowModuleId);
 
   }
 

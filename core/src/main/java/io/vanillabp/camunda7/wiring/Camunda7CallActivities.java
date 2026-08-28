@@ -6,7 +6,7 @@ import org.camunda.bpm.model.bpmn.instance.ExtensionElements;
 import org.camunda.bpm.model.bpmn.instance.Process;
 import org.camunda.bpm.model.bpmn.instance.camunda.CamundaIn;
 
-import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
+import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -56,12 +56,12 @@ public final class Camunda7CallActivities {
    *
    * @param model The BPMN model of one file
    * @param workflowModuleId The workflow module the file belongs to
-   * @param workflowTaskInvoker The core, asked which processes share an aggregate
+   * @param workflowTaskWiring The core, asked which processes share an aggregate
    */
   public static void propagateBusinessKey(
       final BpmnModelInstance model,
       final String workflowModuleId,
-      final WorkflowTaskInvoker workflowTaskInvoker) {
+      final WorkflowTaskWiring workflowTaskWiring) {
 
     model
         .getModelElementsByType(CallActivity.class)
@@ -75,7 +75,7 @@ public final class Camunda7CallActivities {
           if (callingProcessId == null) {
             return;
           }
-          if (!workflowTaskInvoker
+          if (!workflowTaskWiring
               .workflowsShareTheWorkflowAggregate(workflowModuleId, callingProcessId, calledElement)) {
             return;
           }

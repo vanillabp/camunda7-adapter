@@ -128,8 +128,9 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 final var engine = engineHolder(supplierContext, adapterId);
                 final var deploymentService = new Camunda7DeploymentService(
                     adapterId, engine.getRepositoryService(), engine, supplierContext
-                        .bean(WorkflowTaskInvoker.class), engine.getTaskRegistry(), id -> instanceIdentityOf(
-                            environment, id));
+                        .bean(io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring.class), engine
+                            .getTaskRegistry(), id -> instanceIdentityOf(
+                                environment, id));
                 deploymentService.setBpmsInitiatedStartInvoker(
                     supplierContext
                         .beanProvider(
