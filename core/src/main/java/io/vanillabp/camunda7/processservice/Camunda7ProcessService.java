@@ -410,12 +410,17 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Starts a Camunda 7 process instance inside the caller's transaction. The
-   * <b>business key</b> is the workflow-aggregate ID as a string, the <b>tenant ID</b> is
-   * the workflow module ID (matching how {@code Camunda7DeploymentService} deployed the
-   * process). Because the embedded engine shares the application's data source and
-   * transaction, the created instance is committed or rolled back together with the
-   * business data.
+   * Starts a Camunda 7 process instance. The <b>business key</b> is the
+   * workflow-aggregate ID as a string, and the process is addressed the way
+   * {@code Camunda7DeploymentService} deployed it, which the name-clash-avoidance mode
+   * decides (a tenant named after the workflow module, prefixed identifiers, or
+   * neither).
+   * <p>
+   * This runs in phase two, after the caller's transaction committed, dispatched by the
+   * phase-two outbox like every operation which progresses a workflow here (see
+   * decision 2 in the repository's DECISIONS.md). So the instance is NOT committed
+   * together with the caller's business data: the outbox entry is, and the entry is
+   * repeated until the engine accepted the start.
    * <p>
    * The service task following the (asynchronous) start event is not executed
    * synchronously: the async-before continuation parks the instance in the job executor,
@@ -1144,10 +1149,10 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Broadcasts the signal inside the caller's transaction: the embedded engine
-   * shares it, so a rollback takes the broadcast with it. An engine on its OWN
-   * datasource cannot join that transaction - it broadcasts in phase two, like a
-   * remote BPMS (see {@link #needsTwoPhaseCommitForStartingWorkflows()}).
+   * Phase one of a broadcast asks nothing: a signal reaching a subscription IS
+   * progress, so it is broadcast in phase two, after the caller's commit, on every
+   * adapter id of this type (see decision 2 in the repository's DECISIONS.md). A
+   * rolled-back transaction takes the outbox entry with it and broadcasts nothing.
    */
   @Override
   public void sendSignalPhaseOne(
@@ -1652,7 +1657,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
     // phase two is dispatched at-least-once (outbox retries, crash recovery) - skip
     // if a running instance for this aggregate already exists (idempotency key:
-    // business key + tenant + process)
+    // business key + tenant + process).
+    //
+    // This is the SECOND line rather than the mechanism: the core owns the
+    // idempotency of a start and probes awarenessOfWorkflowForRedispatch before it
+    // dispatches a start again, which this adapter answers exactly. The check stays
+    // because the query is free on an embedded engine and because it also covers a
+    // start which reached the engine while the core had no reason to re-probe.
     final var businessKey = String.valueOf(workflowAggregateId);
     final var alreadyStarted = instanceExists(workflowModuleId, bpmnProcessId, businessKey);
     if (alreadyStarted) {
