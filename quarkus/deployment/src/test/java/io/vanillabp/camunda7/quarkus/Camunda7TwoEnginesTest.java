@@ -124,8 +124,7 @@ public class Camunda7TwoEnginesTest {
     final var aggregateId = aggregate.getId();
     // phase one must not create the instance (the engine command would commit in
     // its own transaction even if this one rolled back afterwards)
-    ((MigratableProcessService<TestAggregate>) (MigratableProcessService<?>) processService)
-        .startWorkflowPhaseOne(MODULE_ID, BPMN_PROCESS_ID, null, aggregate);
+    startWorkflowPhaseOne(processService, aggregate);
     userTransaction.commit();
 
     final var businessKey = String.valueOf(aggregateId);
@@ -136,11 +135,11 @@ public class Camunda7TwoEnginesTest {
 
     // phase two (after commit, dispatched via the outbox) creates the instance in
     // its OWN JTA transaction...
-    processService.startWorkflowPhaseTwo(MODULE_ID, BPMN_PROCESS_ID, null, aggregateId);
+    startWorkflowPhaseTwo(processService, aggregateId);
     Assertions.assertEquals(1, countInstances(namedEngine, businessKey));
 
     // ...and a redelivered phase two (at-least-once) is skipped
-    processService.startWorkflowPhaseTwo(MODULE_ID, BPMN_PROCESS_ID, null, aggregateId);
+    startWorkflowPhaseTwo(processService, aggregateId);
     Assertions.assertEquals(
         1,
         countInstances(namedEngine, businessKey),
@@ -160,6 +159,41 @@ public class Camunda7TwoEnginesTest {
         .processInstanceBusinessKey(businessKey)
         .tenantIdIn(MODULE_ID)
         .count();
+
+  }
+
+  /**
+   * Runs phase one of a start the way the core does: through the handler the adapter
+   * contributes for the operation.
+   */
+  @SuppressWarnings("unchecked")
+  private static void startWorkflowPhaseOne(
+      final MigratableProcessService<?> processService,
+      final Object workflowAggregate) {
+
+    ((MigratableProcessService<Object>) processService)
+        .phaseOperations()
+        .get(io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW)
+        .phaseOne(
+            new io.vanillabp.integration.adapter.spi.PhaseOneRequest<>(
+                MODULE_ID, BPMN_PROCESS_ID, null, workflowAggregate, java.util.Map.of()));
+
+  }
+
+  /**
+   * Runs phase two of a start the way the outbox dispatch does.
+   */
+  @SuppressWarnings("unchecked")
+  private static void startWorkflowPhaseTwo(
+      final MigratableProcessService<?> processService,
+      final Object workflowAggregateId) {
+
+    ((MigratableProcessService<Object>) processService)
+        .phaseOperations()
+        .get(io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW)
+        .phaseTwo(
+            new io.vanillabp.integration.adapter.spi.PhaseTwoRequest<>(
+                MODULE_ID, BPMN_PROCESS_ID, null, workflowAggregateId, java.util.Map.of()));
 
   }
 

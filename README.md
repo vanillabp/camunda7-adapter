@@ -352,6 +352,27 @@ element of a multi-instance activity and the next iteration of a loop each get t
 puts it into the idempotency key of a message correlation planned while the handler runs, which is
 what keeps three siblings of one workflow aggregate from sharing a key.
 
+## Outbound operations: one handler per operation
+
+Everything this adapter sends to the engine is a `PhaseOperationHandler`, contributed
+per operation in `Camunda7ProcessService.phaseOperations()`: `phaseOne` asks inside the
+caller's transaction, `phaseTwo` acts after the commit. The operation itself - its
+persisted name, what deduplicates it, which engine serves it, how a failure is worded -
+belongs to VanillaBP's `PhaseOperation`, so an operation added later costs this adapter
+one entry in that map and nothing else.
+
+The embedded engine can answer phase one for free and in the same transaction, which is
+why this adapter asks more there than a remote one can: a task which is gone, a message
+nothing waits for, a correlation id no execution expects, a message start event which is
+not deployed - all of them fail where the application made the call.
+`Camunda7PhaseOneChecksTest` holds that.
+
+Every phase two is idempotent, because the outbox dispatches at-least-once: a start
+skips an instance which already carries the business key, completing or cancelling
+checks the task, and correlating checks the subscription. Each check happens BEFORE the
+write, because a failing engine command marks the dispatcher's transaction rollback-only
+and would take the whole dispatch with it.
+
 ## Keeping workflow modules apart
 
 The [name-clash-avoidance mode](https://github.com/vanillabp/adapter-platform-integration/wiki/Workflow-modules#how-name-clashes-are-avoided)

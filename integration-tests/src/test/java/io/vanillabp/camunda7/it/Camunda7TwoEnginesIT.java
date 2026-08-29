@@ -172,7 +172,15 @@ public class Camunda7TwoEnginesIT {
 
     // phase one must not create the instance (the engine's own transaction would
     // commit it even if the caller's transaction rolled back afterwards)
-    separateDataSourceProcessService.startWorkflowPhaseOne(MODULE_ID, BPMN_PROCESS_ID, null, saved);
+    PhaseOperations
+        .phaseOne(
+            separateDataSourceProcessService,
+            io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW,
+            MODULE_ID,
+            BPMN_PROCESS_ID,
+            null,
+            saved,
+            java.util.Map.of());
     assertEquals(
         0,
         separateDataSourceEngine
@@ -184,7 +192,15 @@ public class Camunda7TwoEnginesIT {
         "phase one must not touch the engine");
 
     // phase two (after commit, dispatched via the outbox) creates the instance...
-    separateDataSourceProcessService.startWorkflowPhaseTwo(MODULE_ID, BPMN_PROCESS_ID, null, saved.getId());
+    PhaseOperations
+        .phaseTwo(
+            separateDataSourceProcessService,
+            io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW,
+            MODULE_ID,
+            BPMN_PROCESS_ID,
+            null,
+            saved.getId(),
+            java.util.Map.of());
     assertEquals(
         1,
         separateDataSourceEngine
@@ -195,7 +211,15 @@ public class Camunda7TwoEnginesIT {
             .count());
 
     // ...and a redelivered phase two (at-least-once) is skipped
-    separateDataSourceProcessService.startWorkflowPhaseTwo(MODULE_ID, BPMN_PROCESS_ID, null, saved.getId());
+    PhaseOperations
+        .phaseTwo(
+            separateDataSourceProcessService,
+            io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW,
+            MODULE_ID,
+            BPMN_PROCESS_ID,
+            null,
+            saved.getId(),
+            java.util.Map.of());
     assertEquals(
         1,
         separateDataSourceEngine

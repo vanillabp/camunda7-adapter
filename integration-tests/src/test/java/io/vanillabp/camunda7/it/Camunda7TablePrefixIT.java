@@ -191,8 +191,24 @@ public class Camunda7TablePrefixIT {
     final var saved = aggregateRepository.save(aggregate);
     final var businessKey = String.valueOf(saved.getId());
 
-    prefixedProcessService.startWorkflowPhaseOne(MODULE_ID, BPMN_PROCESS_ID, null, saved);
-    prefixedProcessService.startWorkflowPhaseTwo(MODULE_ID, BPMN_PROCESS_ID, null, saved.getId());
+    PhaseOperations
+        .phaseOne(
+            prefixedProcessService,
+            io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW,
+            MODULE_ID,
+            BPMN_PROCESS_ID,
+            null,
+            saved,
+            java.util.Map.of());
+    PhaseOperations
+        .phaseTwo(
+            prefixedProcessService,
+            io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW,
+            MODULE_ID,
+            BPMN_PROCESS_ID,
+            null,
+            saved.getId(),
+            java.util.Map.of());
 
     assertEquals(
         1,

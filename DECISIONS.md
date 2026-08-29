@@ -149,3 +149,24 @@ What does grow is the number of versions the engine holds, one per deployment wh
 model, and the questions about older versions grow with it. That is deliberate: those questions are
 what the check is for, and `outfaded-versions` is how an operator says which of them have stopped
 being interesting. `Camunda7StartupQuestionCostTest` counts what a start asks.
+
+### 11. What this adapter does per operation is a handler, not a pair of methods
+
+VanillaBP's adapter SPI used to ask for two methods per outbound operation, and this
+adapter had eighteen of them: nine phase-one checks and nine phase-two actions, most of
+them a single line forwarding to a private helper. Adding an operation meant adding two
+more, in every adapter, next to the four places the core needed for the same operation.
+
+The SPI now asks for a map instead: one `PhaseOperationHandler` per `PhaseOperation`,
+each of them the pair of "ask" and "act" for this engine, and everything else about an
+operation belongs to the operation. This adapter answers that map, and the eighteen
+methods are gone. What the handlers do is unchanged - the helpers they call are the ones
+the methods called - so nothing about the engine, the checks or the idempotency moved
+with them.
+
+Two things are worth knowing for whoever adds the next operation here. The map is the
+statement about what this adapter serves: an operation missing from it is an operation
+this engine has nothing like, and VanillaBP refuses the boot for the ones every adapter
+has to serve. And the phase-one half is where this adapter earns its keep, because an
+embedded engine answers from the caller's own transaction - see the platform's decision
+29 for why the operation itself carries no engine knowledge at all.

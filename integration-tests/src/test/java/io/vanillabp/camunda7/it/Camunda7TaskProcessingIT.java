@@ -464,11 +464,14 @@ public class Camunda7TaskProcessingIT {
 
     // phase two tolerates a gone task (stale outbox entry - warned no-op)
     transactionTemplate.executeWithoutResult(status -> {
-      c7ProcessService.completeTaskPhaseTwo("c7-it", "AsyncProcess", null, aggregateId, "999999999");
-      c7ProcessService.cancelTaskPhaseTwo("c7-it", "AsyncProcess", null, aggregateId, "999999999", "ERR");
+      goneTask(c7ProcessService, io.vanillabp.integration.spi.PhaseOperation.COMPLETE_TASK, "AsyncProcess",
+          aggregateId);
+      goneTask(c7ProcessService, io.vanillabp.integration.spi.PhaseOperation.CANCEL_TASK, "AsyncProcess", aggregateId);
       // user-task variants behave identically
-      c7ProcessService.completeUserTaskPhaseTwo("c7-it", "UserTaskProcess", null, aggregateId, "999999999");
-      c7ProcessService.cancelUserTaskPhaseTwo("c7-it", "UserTaskProcess", null, aggregateId, "999999999", "ERR");
+      goneTask(c7ProcessService, io.vanillabp.integration.spi.PhaseOperation.COMPLETE_USER_TASK, "UserTaskProcess",
+          aggregateId);
+      goneTask(c7ProcessService, io.vanillabp.integration.spi.PhaseOperation.CANCEL_USER_TASK, "UserTaskProcess",
+          aggregateId);
     });
 
     // user-task awareness edge cases
@@ -479,10 +482,24 @@ public class Camunda7TaskProcessingIT {
     // correlation phase-two tolerance: no waiting subscription and an
     // already-started instance are warned no-ops, never errors
     transactionTemplate.executeWithoutResult(status -> {
-      c7ProcessService.correlateMessagePhaseTwo(
-          "c7-it", "MessageProcess", null, aggregateId, "PaymentReceived", null);
-      c7ProcessService.startWorkflowByMessagePhaseTwo(
-          "c7-it", "AsyncProcess", null, aggregateId, "OrderPlaced");
+      PhaseOperations
+          .phaseTwo(
+              c7ProcessService,
+              io.vanillabp.integration.spi.PhaseOperation.CORRELATE_MESSAGE,
+              "c7-it",
+              "MessageProcess",
+              null,
+              aggregateId,
+              java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_MESSAGE_NAME, "PaymentReceived"));
+      PhaseOperations
+          .phaseTwo(
+              c7ProcessService,
+              io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW_BY_MESSAGE,
+              "c7-it",
+              "AsyncProcess",
+              null,
+              aggregateId,
+              java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_MESSAGE_NAME, "OrderPlaced"));
     });
     // workflow awareness edge: unknown aggregate
     assertEquals(
@@ -896,6 +913,31 @@ public class Camunda7TaskProcessingIT {
     final var happyTask = processDefinition.findActivity("TP_Happy");
     assertTrue(happyTask.isAsyncBefore(), "asyncBefore forced onto the service task");
     assertTrue(happyTask.isAsyncAfter(), "asyncAfter forced onto the service task");
+
+  }
+
+  /**
+   * Dispatches phase two of a task operation for a task which is not there any more -
+   * the stale outbox entry every adapter has to tolerate.
+   */
+  private static void goneTask(
+      final io.vanillabp.integration.adapter.spi.MigratableProcessService<TaskTestAggregate> adapter,
+      final io.vanillabp.integration.spi.PhaseOperation operation,
+      final String bpmnProcessId,
+      final Long aggregateId) {
+
+    PhaseOperations
+        .phaseTwo(
+            adapter,
+            operation,
+            "c7-it",
+            bpmnProcessId,
+            null,
+            aggregateId,
+            java.util.Map
+                .of(
+                    io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "999999999",
+                    io.vanillabp.integration.spi.PhaseTwoCall.ARG_BPMN_ERROR_CODE, "ERR"));
 
   }
 

@@ -379,12 +379,14 @@ public class Camunda7AwarenessScopeTest {
       final String taskId) {
 
     processService
-        .aggregateChangedPhaseTwo(
-            workflowModuleId,
-            bpmnProcessId,
-            persistence(),
-            AGGREGATE_ID,
-            taskId);
+        .phaseOperations()
+        .get(io.vanillabp.integration.spi.PhaseOperation.AGGREGATE_CHANGED)
+        .phaseTwo(
+            new io.vanillabp.integration.adapter.spi.PhaseTwoRequest<>(
+                workflowModuleId, bpmnProcessId, persistence(), AGGREGATE_ID, taskId == null
+                    ? java.util.Map.of()
+                    : java.util.Map
+                        .of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, taskId)));
 
   }
 

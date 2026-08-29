@@ -1,11 +1,17 @@
 package io.vanillabp.camunda7.processservice;
 
+import java.util.Map;
+
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.runtime.ProcessInstance;
 
 import io.vanillabp.integration.adapter.spi.MigratableProcessService;
+import io.vanillabp.integration.adapter.spi.PhaseOneRequest;
+import io.vanillabp.integration.adapter.spi.PhaseOperationHandler;
+import io.vanillabp.integration.adapter.spi.PhaseTwoRequest;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.spi.AggregatePersistenceAware;
+import io.vanillabp.integration.spi.PhaseOperation;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -348,6 +354,355 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   public String getAdapterId() {
 
     return adapterId;
+
+  }
+
+  /**
+   * What this adapter does for each operation, in both phases.
+   * <p>
+   * Every handler asks in phase one and acts in phase two, and every phase-two half is
+   * idempotent because the outbox dispatches at-least-once: starting skips an instance
+   * which already carries the business key, completing or cancelling checks that the
+   * task is still there, and correlating checks the subscription. The embedded engine
+   * answers phase one from the caller's own transaction, so a task which does not exist
+   * or a message nothing waits for is reported where the application asked for it.
+   */
+  @Override
+  public Map<PhaseOperation, PhaseOperationHandler<A>> phaseOperations() {
+
+    return Map
+        .ofEntries(
+            Map
+                .entry(
+                    PhaseOperation.START_WORKFLOW,
+                    PhaseOperationHandler
+                        .of(
+                            request -> {
+                              // phase one does not advance the process: the instance is created
+                              // after the commit, so a rollback cannot leave a ghost instance
+                              // behind. There is nothing to validate against the engine either -
+                              // starting is the degenerate two-phase case, like on a remote BPMS
+                            },
+                            this::startWorkflow)),
+            Map
+                .entry(
+                    PhaseOperation.START_WORKFLOW_BY_MESSAGE,
+                    PhaseOperationHandler.of(this::checkMessageStartEventExists, this::startWorkflowByMessage)),
+            Map
+                .entry(
+                    PhaseOperation.COMPLETE_TASK,
+                    PhaseOperationHandler
+                        .of(
+                            // the non-advancing phase-one check: does the task still exist? The
+                            // completion itself happens after the commit - doing it here would
+                            // advance the process although the transaction may still roll back,
+                            // and a completion losing a concurrency conflict could not be repeated
+                            request -> checkTaskExists(request.taskId(), "completing"),
+                            this::completeTask)),
+            Map
+                .entry(
+                    PhaseOperation.CANCEL_TASK,
+                    PhaseOperationHandler
+                        .of(
+                            // the non-advancing phase-one check - the cancellation itself and the
+                            // values an operator sees along with it happen after the commit
+                            request -> checkTaskExists(request.taskId(), "canceling"),
+                            this::cancelTask)),
+            Map
+                .entry(
+                    PhaseOperation.COMPLETE_USER_TASK,
+                    PhaseOperationHandler
+                        .of(
+                            // the non-advancing phase-one check - the completion happens after
+                            // the commit
+                            request -> checkUserTaskExists(request.taskId(), "completing"),
+                            this::completeUserTask)),
+            Map
+                .entry(
+                    PhaseOperation.CANCEL_USER_TASK,
+                    PhaseOperationHandler
+                        .of(
+                            request -> checkUserTaskExists(request.taskId(), "canceling"),
+                            this::cancelUserTask)),
+            Map
+                .entry(
+                    PhaseOperation.CORRELATE_MESSAGE,
+                    PhaseOperationHandler.of(this::checkSubscriptionWaits, this::correlateMessage)),
+            Map
+                .entry(
+                    PhaseOperation.SEND_SIGNAL,
+                    PhaseOperationHandler
+                        .of(
+                            request -> {
+                              // phase one does not advance the process - a signal reaching a
+                              // subscription IS progress, so it is broadcast after the commit
+                            },
+                            request -> broadcastSignal(request.workflowModuleId(), request.signalName()))),
+            Map
+                .entry(
+                    PhaseOperation.AGGREGATE_CHANGED,
+                    PhaseOperationHandler
+                        .of(
+                            request -> {
+                              // phase one does not advance the process - writing here would show
+                              // values of a transaction which may still roll back, and
+                              // re-evaluating conditional events IS progress
+                            },
+                            this::pushChangedAggregate)));
+
+  }
+
+  /**
+   * Creates the instance, unless one for this aggregate is already running.
+   * <p>
+   * Phase two is dispatched at-least-once (outbox retries, crash recovery), so the
+   * check is needed - but it is the SECOND line rather than the mechanism: the core owns
+   * the idempotency of a start and probes {@code awarenessOfWorkflowForRedispatch}
+   * before it dispatches a start again, which this adapter answers exactly. The check
+   * stays because the query is free on an embedded engine and because it also covers a
+   * start which reached the engine while the core had no reason to re-probe.
+   */
+  private void startWorkflow(
+      final PhaseTwoRequest<A> request) {
+
+    final var businessKey = String.valueOf(request.workflowAggregateId());
+    if (instanceExists(request.workflowModuleId(), request.bpmnProcessId(), businessKey)) {
+      log
+          .info(
+              "Camunda7[{}]: workflow '{}' of module '{}' was already started for aggregate '{}' - "
+                  + "skipping the redelivered phase-two start",
+              adapterId,
+              request.bpmnProcessId(),
+              request.workflowModuleId(),
+              businessKey);
+      return;
+    }
+
+    // the aggregate is committed by now, so its shared attributes can be written as
+    // the operator context of the new instance - phase one had it at hand, phase two
+    // has to read it back
+    startProcessInstance(
+        request.workflowModuleId(),
+        request.bpmnProcessId(),
+        request.workflowAggregateId(),
+        aggregateForOperatorContext(request.aggregatePersistence(), request.workflowAggregateId()));
+
+  }
+
+  /**
+   * The non-advancing phase-one check of a start by message: is there a message start
+   * event of this name? Starting itself happens after the commit, idempotently.
+   */
+  private void checkMessageStartEventExists(
+      final PhaseOneRequest<A> request) {
+
+    final var scopedMessageName = scopedIdentifier(request.workflowModuleId(), request.messageName());
+    final var startEventExists = runtimeService
+        .createEventSubscriptionQuery()
+        .eventType("message")
+        .eventName(scopedMessageName)
+        .count() > 0;
+    if (!startEventExists) {
+      throw new IllegalStateException(
+          """
+              No message start event named '%s' is deployed (BPMN process '%s' of workflow module \
+              '%s')! Starting the workflow by that message would do nothing - check the message \
+              name against the model."""
+              .formatted(request.messageName(), request.bpmnProcessId(), request.workflowModuleId()));
+    }
+
+  }
+
+  /**
+   * Starts the workflow by its message start event, unless one for this aggregate is
+   * already running - the same idempotency contract as {@link #startWorkflow}.
+   */
+  private void startWorkflowByMessage(
+      final PhaseTwoRequest<A> request) {
+
+    final var businessKey = String.valueOf(request.workflowAggregateId());
+    if (instanceExists(request.workflowModuleId(), request.bpmnProcessId(), businessKey)) {
+      log
+          .info(
+              "Camunda7[{}]: workflow '{}' of module '{}' was already started for aggregate '{}' - "
+                  + "skipping the redelivered phase-two start-by-message",
+              adapterId,
+              request.bpmnProcessId(),
+              request.workflowModuleId(),
+              businessKey);
+      return;
+    }
+    startByMessage(
+        request.workflowModuleId(),
+        request.messageName(),
+        businessKey,
+        sharedValues(
+            request.aggregatePersistence(),
+            request.workflowAggregateId(),
+            request.workflowModuleId(),
+            request.bpmnProcessId()));
+
+  }
+
+  /**
+   * Completes the parked task. The values the model reads are written along with the
+   * completion: whatever the caller changed before answering the task decides where the
+   * workflow goes next. Only after {@code signalTask} verified the task is still there -
+   * writing variables of a gone execution would mark the dispatcher's transaction
+   * rollback-only.
+   */
+  private void completeTask(
+      final PhaseTwoRequest<A> request) {
+
+    signalTask(
+        request.taskId(),
+        null,
+        true,
+        () -> refreshSharedValues(
+            request.taskId(),
+            aggregateForOperatorContext(request.aggregatePersistence(), request.workflowAggregateId()),
+            request.workflowModuleId(),
+            request.bpmnProcessId()));
+
+  }
+
+  /**
+   * Cancels the parked task by BPMN error. The values an operator sees in Cockpit are
+   * refreshed along with the cancellation, and only once {@code signalTask} verified the
+   * task is still there.
+   */
+  private void cancelTask(
+      final PhaseTwoRequest<A> request) {
+
+    signalTask(
+        request.taskId(),
+        scopedIdentifier(request.workflowModuleId(), request.bpmnErrorCode()),
+        true,
+        () -> {
+          final var workflowAggregate = request.aggregatePersistence().loadById(request.workflowAggregateId());
+          if (workflowAggregate != null) {
+            refreshSharedValues(
+                request.taskId(), workflowAggregate, request.workflowModuleId(), request.bpmnProcessId());
+          }
+        });
+
+  }
+
+  private void completeUserTask(
+      final PhaseTwoRequest<A> request) {
+
+    executeUserTask(
+        request.taskId(),
+        null,
+        true,
+        () -> refreshSharedValuesOfUserTask(
+            request.taskId(),
+            request.aggregatePersistence(),
+            request.workflowAggregateId(),
+            request.workflowModuleId(),
+            request.bpmnProcessId()));
+
+  }
+
+  private void cancelUserTask(
+      final PhaseTwoRequest<A> request) {
+
+    executeUserTask(
+        request.taskId(),
+        scopedIdentifier(request.workflowModuleId(), request.bpmnErrorCode()),
+        true,
+        () -> refreshSharedValuesOfUserTask(
+            request.taskId(),
+            request.aggregatePersistence(),
+            request.workflowAggregateId(),
+            request.workflowModuleId(),
+            request.bpmnProcessId()));
+
+  }
+
+  /**
+   * The non-advancing phase-one check of a correlation: is a subscription waiting for
+   * this message? Correlating itself continues the workflow and happens after the
+   * commit - but "nothing matched" was a synchronous failure before this adapter went
+   * two-phase, and it stays one. The embedded engine answers from the same transaction,
+   * so the answer is exact.
+   */
+  private void checkSubscriptionWaits(
+      final PhaseOneRequest<A> request) {
+
+    final var businessKey = String
+        .valueOf(request.aggregatePersistence().getAggregateId(request.workflowAggregate()));
+    if (!subscriptionWaitingFor(
+        request.workflowModuleId(),
+        request.bpmnProcessId(),
+        request.messageName(),
+        businessKey,
+        request.correlationId())) {
+      throw new IllegalStateException(
+          """
+              No execution of workflow aggregate '%s' waits for message '%s' (BPMN process '%s' of \
+              workflow module '%s')%s! Correlating it would do nothing - check the message name \
+              against the model, and whether the workflow already passed the point where it waits."""
+              .formatted(
+                  businessKey,
+                  request.messageName(),
+                  request.bpmnProcessId(),
+                  request.workflowModuleId(),
+                  request.correlationId() == null
+                      ? ""
+                      : (" with correlation id '%s' (the waiting execution expects the one stored in "
+                          + "its local variable '%s')").formatted(
+                              request.correlationId(),
+                              correlationIdVariableName(request.bpmnProcessId(), request.messageName()))));
+    }
+
+  }
+
+  private void correlateMessage(
+      final PhaseTwoRequest<A> request) {
+
+    final var businessKey = String.valueOf(request.workflowAggregateId());
+    // check BEFORE correlating (rollback-only pitfall, see signalTask): a waiting
+    // subscription gone by dispatch time is the at-least-once residual
+    if (!messageSubscriptionWaiting(request.workflowModuleId(), request.messageName(), businessKey)) {
+      log
+          .warn(
+              "Camunda7[{}]: no waiting subscription for message '{}' of workflow aggregate '{}' - "
+                  + "skipping the redelivered phase-two correlation",
+              adapterId,
+              request.messageName(),
+              businessKey);
+      return;
+    }
+    // the values the model reads travel with the correlation: a gateway
+    // behind the receiving event decides on what the caller changed before correlating
+    messageCorrelation(
+        request.workflowModuleId(),
+        request.bpmnProcessId(),
+        request.messageName(),
+        businessKey,
+        request.correlationId())
+        .setVariables(
+            sharedValues(
+                request.aggregatePersistence(),
+                request.workflowAggregateId(),
+                request.workflowModuleId(),
+                request.bpmnProcessId()))
+        .correlateWithResult();
+
+  }
+
+  private void pushChangedAggregate(
+      final PhaseTwoRequest<A> request) {
+
+    final var aggregate = request.aggregatePersistence().loadById(request.workflowAggregateId());
+    pushAggregate(
+        String.valueOf(request.workflowAggregateId()),
+        aggregate,
+        request.taskId(),
+        true,
+        request.workflowModuleId(),
+        request.bpmnProcessId());
 
   }
 
@@ -831,159 +1186,6 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   }
 
-  @Override
-  public void completeUserTaskPhaseOne(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final A workflowAggregate,
-      final String taskId) {
-
-    // the non-advancing phase-one check - the completion happens after
-    // the commit
-    checkUserTaskExists(taskId, "completing");
-
-  }
-
-  @Override
-  public void completeUserTaskPhaseTwo(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final Object workflowAggregateId,
-      final String taskId) {
-
-    executeUserTask(
-        taskId,
-        null,
-        true,
-        () -> refreshSharedValuesOfUserTask(
-            taskId,
-            aggregatePersistence,
-            workflowAggregateId,
-            workflowModuleId,
-            bpmnProcessId));
-
-  }
-
-  @Override
-  public void cancelUserTaskPhaseOne(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final A workflowAggregate,
-      final String taskId,
-      final String bpmnErrorCode) {
-
-    // the non-advancing phase-one check
-    checkUserTaskExists(taskId, "canceling");
-
-  }
-
-  @Override
-  public void cancelUserTaskPhaseTwo(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final Object workflowAggregateId,
-      final String taskId,
-      final String bpmnErrorCode) {
-
-    executeUserTask(
-        taskId,
-        scopedIdentifier(workflowModuleId, bpmnErrorCode),
-        true,
-        () -> refreshSharedValuesOfUserTask(
-            taskId,
-            aggregatePersistence,
-            workflowAggregateId,
-            workflowModuleId,
-            bpmnProcessId));
-
-  }
-
-  @Override
-  public void completeTaskPhaseOne(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final A workflowAggregate,
-      final String taskId) {
-
-    // the non-advancing phase-one check: does the task still exist? The
-    // completion itself happens after the commit - doing it here would advance the
-    // process although the transaction may still roll back, and a completion losing
-    // a concurrency conflict could not be repeated
-    checkTaskExists(taskId, "completing");
-
-  }
-
-  @Override
-  public void completeTaskPhaseTwo(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final Object workflowAggregateId,
-      final String taskId) {
-
-    // the values the model reads are written along with the completion:
-    // whatever the caller changed before answering the task decides where the
-    // workflow goes next. Only after signalTask verified the task is still there -
-    // writing variables of a gone execution would mark the dispatcher's transaction
-    // rollback-only
-    signalTask(
-        taskId,
-        null,
-        true,
-        () -> refreshSharedValues(
-            taskId,
-            aggregateForOperatorContext(aggregatePersistence, workflowAggregateId),
-            workflowModuleId,
-            bpmnProcessId));
-
-  }
-
-  @Override
-  public void cancelTaskPhaseOne(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final A workflowAggregate,
-      final String taskId,
-      final String bpmnErrorCode) {
-
-    // the non-advancing phase-one check - the cancellation itself and
-    // the values an operator sees along with it happen after the commit
-    checkTaskExists(taskId, "canceling");
-
-  }
-
-  @Override
-  public void cancelTaskPhaseTwo(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final Object workflowAggregateId,
-      final String taskId,
-      final String bpmnErrorCode) {
-
-    // the values an operator sees in Cockpit are refreshed along with the
-    // cancellation. It runs only once signalTask verified the task is still
-    // there - writing variables of a gone execution would throw and mark the
-    // dispatcher's transaction rollback-only
-    signalTask(
-        taskId,
-        scopedIdentifier(workflowModuleId, bpmnErrorCode),
-        true,
-        () -> {
-          final var workflowAggregate = aggregatePersistence.loadById(workflowAggregateId);
-          if (workflowAggregate != null) {
-            refreshSharedValues(taskId, workflowAggregate, workflowModuleId, bpmnProcessId);
-          }
-        });
-
-  }
-
   /**
    * The V1-compatible name of the LOCAL variable holding the expected correlation
    * id at a message subscription's execution:
@@ -1133,32 +1335,6 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Phase one of a broadcast asks nothing: a signal reaching a subscription IS
-   * progress, so it is broadcast in phase two, after the caller's commit, on every
-   * adapter id of this type (see decision 2 in the repository's DECISIONS.md). A
-   * rolled-back transaction takes the outbox entry with it and broadcasts nothing.
-   */
-  @Override
-  public void sendSignalPhaseOne(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final String signalName) {
-
-    // phase one does not advance the process - a signal reaching a
-    // subscription IS progress, so it is broadcast after the commit
-  }
-
-  @Override
-  public void sendSignalPhaseTwo(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final String signalName) {
-
-    broadcastSignal(workflowModuleId, signalName);
-
-  }
-
-  /**
    * A signal reaches every subscription of the workflow module's scope - the
    * tenant it is deployed into, respectively no tenant where the module prefixes
    * its identifiers. No variables travel, although every other sync point
@@ -1178,42 +1354,6 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         ? signal.tenantId(signalTenantId)
         : signal.withoutTenantId();
     signal.send();
-
-  }
-
-  @Override
-  public void correlateMessagePhaseOne(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final A workflowAggregate,
-      final String messageName,
-      final String correlationId) {
-
-    // the non-advancing phase-one check: is a subscription waiting for
-    // this message? Correlating itself continues the workflow and happens after the
-    // commit - but "nothing matched" was a synchronous failure before this adapter
-    // went two-phase, and it stays one. The embedded engine answers from the same
-    // transaction, so the answer is exact
-    final var businessKey = String.valueOf(aggregatePersistence.getAggregateId(workflowAggregate));
-    if (!subscriptionWaitingFor(workflowModuleId, bpmnProcessId, messageName, businessKey, correlationId)) {
-      throw new IllegalStateException(
-          """
-              No execution of workflow aggregate '%s' waits for message '%s' (BPMN process '%s' of \
-              workflow module '%s')%s! Correlating it would do nothing - check the message name \
-              against the model, and whether the workflow already passed the point where it waits."""
-              .formatted(
-                  businessKey,
-                  messageName,
-                  bpmnProcessId,
-                  workflowModuleId,
-                  correlationId == null
-                      ? ""
-                      : (" with correlation id '%s' (the waiting execution expects the one stored in "
-                          + "its local variable '%s')").formatted(
-                              correlationId,
-                              correlationIdVariableName(bpmnProcessId, messageName))));
-    }
 
   }
 
@@ -1246,68 +1386,6 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         .stream()
         .anyMatch(execution -> correlationId
             .equals(runtimeService.getVariableLocal(execution.getId(), variableName)));
-
-  }
-
-  @Override
-  public void correlateMessagePhaseTwo(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final Object workflowAggregateId,
-      final String messageName,
-      final String correlationId) {
-
-    final var businessKey = String.valueOf(workflowAggregateId);
-    // check BEFORE correlating (rollback-only pitfall, see signalTask): a waiting
-    // subscription gone by dispatch time is the at-least-once residual
-    if (!messageSubscriptionWaiting(workflowModuleId, messageName, businessKey)) {
-      log.warn(
-          "Camunda7[{}]: no waiting subscription for message '{}' of workflow aggregate '{}' - "
-              + "skipping the redelivered phase-two correlation",
-          adapterId,
-          messageName,
-          businessKey);
-      return;
-    }
-    // the values the model reads travel with the correlation: a gateway
-    // behind the receiving event decides on what the caller changed before correlating
-    messageCorrelation(workflowModuleId, bpmnProcessId, messageName, businessKey, correlationId)
-        .setVariables(
-            sharedValues(aggregatePersistence, workflowAggregateId, workflowModuleId, bpmnProcessId))
-        .correlateWithResult();
-
-  }
-
-  @Override
-  public void aggregateChangedPhaseOne(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final A workflowAggregate,
-      final String taskId) {
-
-    // phase one does not advance the process - writing here would show
-    // values of a transaction which may still roll back, and re-evaluating
-    // conditional events IS progress
-  }
-
-  @Override
-  public void aggregateChangedPhaseTwo(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final Object workflowAggregateId,
-      final String taskId) {
-
-    final var aggregate = aggregatePersistence.loadById(workflowAggregateId);
-    pushAggregate(
-        String.valueOf(workflowAggregateId),
-        aggregate,
-        taskId,
-        true,
-        workflowModuleId,
-        bpmnProcessId);
 
   }
 
@@ -1559,116 +1637,6 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // the engine names it "<activity id>#multiInstanceBody"
     return (activityId != null) && activityId.endsWith("#"
         + org.camunda.bpm.engine.ActivityTypes.MULTI_INSTANCE_BODY);
-
-  }
-
-  @Override
-  public void startWorkflowByMessagePhaseOne(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final A workflowAggregate,
-      final String messageName) {
-
-    // the non-advancing phase-one check: is there a message start event
-    // of this name? Starting itself happens after the commit, idempotently
-    final var scopedMessageName = scopedIdentifier(workflowModuleId, messageName);
-    final var startEventExists = runtimeService
-        .createEventSubscriptionQuery()
-        .eventType("message")
-        .eventName(scopedMessageName)
-        .count() > 0;
-    if (!startEventExists) {
-      throw new IllegalStateException(
-          """
-              No message start event named '%s' is deployed (BPMN process '%s' of workflow module \
-              '%s')! Starting the workflow by that message would do nothing - check the message \
-              name against the model."""
-              .formatted(messageName, bpmnProcessId, workflowModuleId));
-    }
-
-  }
-
-  @Override
-  public void startWorkflowByMessagePhaseTwo(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final Object workflowAggregateId,
-      final String messageName) {
-
-    // at-least-once: skip if an instance for this aggregate already exists (the
-    // same idempotency contract as startWorkflowPhaseTwo)
-    final var businessKey = String.valueOf(workflowAggregateId);
-    final var alreadyStarted = instanceExists(workflowModuleId, bpmnProcessId, businessKey);
-    if (alreadyStarted) {
-      log.info(
-          "Camunda7[{}]: workflow '{}' of module '{}' was already started for aggregate '{}' - "
-              + "skipping the redelivered phase-two start-by-message",
-          adapterId,
-          bpmnProcessId,
-          workflowModuleId,
-          businessKey);
-      return;
-    }
-    startByMessage(
-        workflowModuleId,
-        messageName,
-        businessKey,
-        sharedValues(aggregatePersistence, workflowAggregateId, workflowModuleId, bpmnProcessId));
-
-  }
-
-  @Override
-  public void startWorkflowPhaseOne(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final A workflowAggregate) {
-
-    // phase one does not advance the process: the instance is created
-    // after the commit, so a rollback cannot leave a ghost instance behind. There
-    // is nothing to validate against the engine either - starting is the degenerate
-    // two-phase case, like on a remote BPMS
-  }
-
-  @Override
-  public void startWorkflowPhaseTwo(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final AggregatePersistenceAware<A> aggregatePersistence,
-      final Object workflowAggregateId) {
-
-    // phase two is dispatched at-least-once (outbox retries, crash recovery) - skip
-    // if a running instance for this aggregate already exists (idempotency key:
-    // business key + tenant + process).
-    //
-    // This is the SECOND line rather than the mechanism: the core owns the
-    // idempotency of a start and probes awarenessOfWorkflowForRedispatch before it
-    // dispatches a start again, which this adapter answers exactly. The check stays
-    // because the query is free on an embedded engine and because it also covers a
-    // start which reached the engine while the core had no reason to re-probe.
-    final var businessKey = String.valueOf(workflowAggregateId);
-    final var alreadyStarted = instanceExists(workflowModuleId, bpmnProcessId, businessKey);
-    if (alreadyStarted) {
-      log.info(
-          "Camunda7[{}]: workflow '{}' of module '{}' was already started for aggregate '{}' - "
-              + "skipping the redelivered phase-two start",
-          adapterId,
-          bpmnProcessId,
-          workflowModuleId,
-          businessKey);
-      return;
-    }
-
-    // the aggregate is committed by now, so its shared attributes can be written as
-    // the operator context of the new instance - phase one had it at hand, phase two
-    // has to read it back
-    startProcessInstance(
-        workflowModuleId,
-        bpmnProcessId,
-        workflowAggregateId,
-        aggregateForOperatorContext(aggregatePersistence, workflowAggregateId));
 
   }
 

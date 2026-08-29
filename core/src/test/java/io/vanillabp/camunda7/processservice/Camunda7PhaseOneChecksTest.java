@@ -113,6 +113,28 @@ public class Camunda7PhaseOneChecksTest {
 
   }
 
+  /**
+   * Runs phase one of the given operation, the way the core does: through the handler
+   * the adapter contributes for it.
+   *
+   * @param testee The process service under test
+   * @param operation The operation to run
+   * @param args The operation's arguments
+   */
+  private static void phaseOne(
+      final Camunda7ProcessService<String> testee,
+      final io.vanillabp.integration.spi.PhaseOperation operation,
+      final java.util.Map<String, String> args) {
+
+    testee
+        .phaseOperations()
+        .get(operation)
+        .phaseOne(
+            new io.vanillabp.integration.adapter.spi.PhaseOneRequest<String>(
+                MODULE, PROCESS, persistence(), "4711", args));
+
+  }
+
   @Test
   @DisplayName("Completing or canceling a task which is gone fails where the application called it")
   public void goneTaskFailsInPhaseOne() {
@@ -121,19 +143,23 @@ public class Camunda7PhaseOneChecksTest {
 
     final var completing = assertThrows(
         IllegalStateException.class,
-        () -> testee.completeTaskPhaseOne(MODULE, PROCESS, persistence(), "4711", "task-1"));
+        () -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.COMPLETE_TASK,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "task-1")));
     assertTrue(completing.getMessage().contains("task-1"), completing.getMessage());
     assertTrue(completing.getMessage().contains("completing"), completing.getMessage());
 
     assertThrows(
         IllegalStateException.class,
-        () -> testee.cancelTaskPhaseOne(MODULE, PROCESS, persistence(), "4711", "task-1", "Denied"));
+        () -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.CANCEL_TASK,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "task-1")));
     assertThrows(
         IllegalStateException.class,
-        () -> testee.completeUserTaskPhaseOne(MODULE, PROCESS, persistence(), "4711", "user-task-1"));
+        () -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.COMPLETE_USER_TASK,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "user-task-1")));
     assertThrows(
         IllegalStateException.class,
-        () -> testee.cancelUserTaskPhaseOne(MODULE, PROCESS, persistence(), "4711", "user-task-1", "Denied"));
+        () -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.CANCEL_USER_TASK,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "user-task-1")));
 
   }
 
@@ -143,8 +169,10 @@ public class Camunda7PhaseOneChecksTest {
 
     final var testee = processService(1, 1, 0);
 
-    assertDoesNotThrow(() -> testee.completeTaskPhaseOne(MODULE, PROCESS, persistence(), "4711", "task-1"));
-    assertDoesNotThrow(() -> testee.completeUserTaskPhaseOne(MODULE, PROCESS, persistence(), "4711", "user-task-1"));
+    assertDoesNotThrow(() -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.COMPLETE_TASK,
+        java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "task-1")));
+    assertDoesNotThrow(() -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.COMPLETE_USER_TASK,
+        java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "user-task-1")));
 
   }
 
@@ -156,15 +184,16 @@ public class Camunda7PhaseOneChecksTest {
 
     final var failure = assertThrows(
         IllegalStateException.class,
-        () -> testee.correlateMessagePhaseOne(MODULE, PROCESS, persistence(), "4711", "LoanApproved", null));
+        () -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.CORRELATE_MESSAGE,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_MESSAGE_NAME, "LoanApproved")));
     assertTrue(failure.getMessage().contains("LoanApproved"), failure.getMessage());
     assertTrue(failure.getMessage().contains("4711"), failure.getMessage());
 
     // with a waiting subscription the call passes - correlating itself happens after
     // the commit
     assertDoesNotThrow(
-        () -> processService(1, 0, 0)
-            .correlateMessagePhaseOne(MODULE, PROCESS, persistence(), "4711", "LoanApproved", null));
+        () -> phaseOne(processService(1, 0, 0), io.vanillabp.integration.spi.PhaseOperation.CORRELATE_MESSAGE,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_MESSAGE_NAME, "LoanApproved")));
 
   }
 
@@ -174,14 +203,20 @@ public class Camunda7PhaseOneChecksTest {
 
     final var failure = assertThrows(
         IllegalStateException.class,
-        () -> processService(1, 0, 0, "payment-42")
-            .correlateMessagePhaseOne(MODULE, PROCESS, persistence(), "4711", "PaymentReceived", "wrong-id"));
+        () -> phaseOne(
+            processService(1, 0, 0, "payment-42"),
+            io.vanillabp.integration.spi.PhaseOperation.CORRELATE_MESSAGE,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_MESSAGE_NAME, "PaymentReceived",
+                io.vanillabp.integration.spi.PhaseTwoCall.ARG_CORRELATION_ID, "wrong-id")));
     assertTrue(failure.getMessage().contains("wrong-id"), failure.getMessage());
 
     // the counter-check: the id the waiting execution expects passes
     assertDoesNotThrow(
-        () -> processService(1, 0, 0, "payment-42")
-            .correlateMessagePhaseOne(MODULE, PROCESS, persistence(), "4711", "PaymentReceived", "payment-42"));
+        () -> phaseOne(
+            processService(1, 0, 0, "payment-42"),
+            io.vanillabp.integration.spi.PhaseOperation.CORRELATE_MESSAGE,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_MESSAGE_NAME, "PaymentReceived",
+                io.vanillabp.integration.spi.PhaseTwoCall.ARG_CORRELATION_ID, "payment-42")));
 
   }
 
@@ -191,13 +226,17 @@ public class Camunda7PhaseOneChecksTest {
 
     final var failure = assertThrows(
         IllegalStateException.class,
-        () -> processService(0, 0, 0)
-            .startWorkflowByMessagePhaseOne(MODULE, PROCESS, persistence(), "4711", "LoanRequested"));
+        () -> phaseOne(
+            processService(0, 0, 0),
+            io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW_BY_MESSAGE,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_MESSAGE_NAME, "LoanRequested")));
     assertTrue(failure.getMessage().contains("LoanRequested"), failure.getMessage());
 
     assertDoesNotThrow(
-        () -> processService(0, 0, 1)
-            .startWorkflowByMessagePhaseOne(MODULE, PROCESS, persistence(), "4711", "LoanRequested"));
+        () -> phaseOne(
+            processService(0, 0, 1),
+            io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW_BY_MESSAGE,
+            java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_MESSAGE_NAME, "LoanRequested")));
 
   }
 
@@ -206,7 +245,10 @@ public class Camunda7PhaseOneChecksTest {
   public void startingAWorkflowPassesPhaseOne() {
 
     assertDoesNotThrow(
-        () -> processService(0, 0, 0).startWorkflowPhaseOne(MODULE, PROCESS, persistence(), "4711"));
+        () -> phaseOne(
+            processService(0, 0, 0),
+            io.vanillabp.integration.spi.PhaseOperation.START_WORKFLOW,
+            java.util.Map.of()));
 
   }
 
