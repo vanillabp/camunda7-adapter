@@ -98,11 +98,11 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 final var engine = engineHolder(supplierContext, adapterId);
                 final var processService = new Camunda7ProcessService<>(
                     adapterId, engine.getRuntimeService(), engine.getTaskService(), engine
-                        .getRepositoryService(), engine.getHistoryService(), supplierContext
-                            .bean(io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.class));
-                processService.setScoping(
-                    supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class),
-                    configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
+                        .getRepositoryService(), engine.getHistoryService(), AdapterBeanRegistrarSupport
+                            .collaborators(supplierContext, adapterId));
+                processService
+                    .setConfiguredTenantId(
+                        configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
                 // Which serialization format nested shared values are stored
                 // in, resolved per workflow with a fallback to the module and the adapter
                 final var overlay = supplierContext.bean(VanillaBpCamunda7Properties.class);
@@ -127,23 +127,10 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
               spec -> spec.supplier(supplierContext -> {
                 final var engine = engineHolder(supplierContext, adapterId);
                 final var deploymentService = new Camunda7DeploymentService(
-                    adapterId, engine.getRepositoryService(), engine, supplierContext
-                        .bean(io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring.class), engine
-                            .getTaskRegistry(), id -> instanceIdentityOf(
-                                environment, id));
-                deploymentService.setBpmsInitiatedStartInvoker(
-                    supplierContext
-                        .beanProvider(
-                            io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker.class)
-                        .getIfAvailable());
-                deploymentService.setWorkflowEndedSupport(
-                    supplierContext
-                        .beanProvider(
-                            io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker.class)
-                        .getIfAvailable(),
-                    engine.deliversWorkflowEnded());
-                deploymentService.setScoping(
-                    supplierContext.bean(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class));
+                    adapterId, engine.getRepositoryService(), engine, AdapterBeanRegistrarSupport
+                        .collaborators(supplierContext, adapterId), engine.getTaskRegistry(), id -> instanceIdentityOf(
+                            environment, id));
+                deploymentService.setEngineDeliversWorkflowEnded(engine.deliversWorkflowEnded());
                 deploymentService.setConfiguredTenantId(
                     configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
                 deploymentService.setIdentityService(

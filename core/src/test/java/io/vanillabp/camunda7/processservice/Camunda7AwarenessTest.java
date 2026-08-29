@@ -76,7 +76,9 @@ public class Camunda7AwarenessTest {
 
     final var historyService = Mockito.mock(HistoryService.class);
 
-    return new Camunda7ProcessService<>("camunda7", runtimeService, taskService, null, historyService);
+    return new Camunda7ProcessService<>(
+        "camunda7", runtimeService, taskService, null, historyService, io.vanillabp.camunda7.TestCollaborators
+            .complete());
 
   }
 

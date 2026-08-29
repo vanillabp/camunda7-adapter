@@ -108,7 +108,8 @@ public class Camunda7PhaseOneChecksTest {
     final var taskService = Mockito.mock(TaskService.class);
     Mockito.when(taskService.createTaskQuery()).thenReturn(taskQuery);
 
-    return new Camunda7ProcessService<>("camunda7", runtimeService, taskService, null, null);
+    return new Camunda7ProcessService<>(
+        "camunda7", runtimeService, taskService, null, null, io.vanillabp.camunda7.TestCollaborators.complete());
 
   }
 

@@ -413,6 +413,11 @@ public class Camunda7AdapterBootTest {
             io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class,
             () -> org.mockito.Mockito
                 .mock(io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.class))
+        // since story 159 the adapter takes the whole set of collaborators in its
+        // constructor, so a runner mocking them one by one has to name this one as well
+        .withBean(
+            io.vanillabp.integration.adapter.spi.PreCommitRegistrar.class,
+            () -> org.mockito.Mockito.mock(io.vanillabp.integration.adapter.spi.PreCommitRegistrar.class))
         .withConfiguration(
             AutoConfigurations.of(
                 org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
