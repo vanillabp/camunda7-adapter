@@ -98,6 +98,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync;
 
   /**
+   * Everything the platform hands over. An adapter which is registered incompletely does
+   * not come into existence (see
+   * {@link io.vanillabp.integration.adapter.spi.AdapterCollaborators}).
+   */
+  private final io.vanillabp.integration.adapter.spi.AdapterCollaborators collaborators;
+
+  /**
    * The technical variable written when the application shares nothing: Camunda 7
    * evaluates conditional events on variable changes, so SOMETHING has to change for
    * the engine to look. Its value is the time of the push - only there to make every
@@ -118,7 +125,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * run in a Camunda tenant. May be <code>null</code> (tests): the workflow module id
    * is the tenant then, as before.
    */
-  private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
+  private final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
 
   /**
    * Which serialization format nested shared values are stored in, resolved per workflow
@@ -216,17 +223,14 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Sets the name-clash-avoidance support and the configured tenant name (the
-   * platform modules construct this service and inject them afterwards).
+   * Sets the configured tenant name - this adapter's own configuration, unlike the
+   * name-clash-avoidance support, which arrives with the collaborators.
    *
-   * @param scoping The name-clash-avoidance support
    * @param configuredTenantId The configured tenant name or <code>null</code>
    */
-  public void setScoping(
-      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping,
+  public void setConfiguredTenantId(
       final String configuredTenantId) {
 
-    this.scoping = scoping;
     this.configuredTenantId = configuredTenantId;
 
   }
@@ -325,21 +329,12 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
       final RuntimeService runtimeService,
       final org.camunda.bpm.engine.TaskService taskService,
       final org.camunda.bpm.engine.RepositoryService repositoryService,
-      final org.camunda.bpm.engine.HistoryService historyService) {
-
-    this(adapterId, runtimeService, taskService, repositoryService, historyService, null);
-
-  }
-
-  public Camunda7ProcessService(
-      final String adapterId,
-      final RuntimeService runtimeService,
-      final org.camunda.bpm.engine.TaskService taskService,
-      final org.camunda.bpm.engine.RepositoryService repositoryService,
       final org.camunda.bpm.engine.HistoryService historyService,
-      final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync) {
+      final io.vanillabp.integration.adapter.spi.AdapterCollaborators collaborators) {
 
-    this.aggregateSync = aggregateSync;
+    this.collaborators = collaborators;
+    this.aggregateSync = collaborators.workflowAggregateSync();
+    this.scoping = collaborators.scoping();
     this.adapterId = adapterId;
     this.runtimeService = runtimeService;
     this.taskService = taskService;

@@ -127,7 +127,7 @@ public class Camunda7AwarenessScopeTest {
     deploy(FOREIGN_TENANT, OWN_PROCESS);
     processService = new Camunda7ProcessService<>(
         "c7", engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
-            .getHistoryService());
+            .getHistoryService(), io.vanillabp.camunda7.TestCollaborators.complete());
 
   }
 

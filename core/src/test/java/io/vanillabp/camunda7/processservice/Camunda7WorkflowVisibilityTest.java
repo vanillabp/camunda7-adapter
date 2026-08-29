@@ -22,7 +22,7 @@ public class Camunda7WorkflowVisibilityTest {
   public void embeddedEngineReportsNoVisibilityDelay() {
 
     final var processService = new Camunda7ProcessService<Object>(
-        "camunda7", null, null, null, null);
+        "camunda7", null, null, null, null, io.vanillabp.camunda7.TestCollaborators.complete());
 
     assertFalse(
         processService.workflowVisibilityDelay().isWaiting(),

@@ -23,6 +23,7 @@ import io.vanillabp.camunda7.Camunda7ProcessingContext;
 import io.vanillabp.camunda7.engine.Camunda7InstanceIdentity;
 import io.vanillabp.camunda7.wiring.Camunda7TaskConnectable;
 import io.vanillabp.camunda7.wiring.Camunda7TaskRegistry;
+import io.vanillabp.integration.adapter.spi.AdapterCollaborators;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
 import io.vanillabp.integration.adapter.spi.AdapterPlatformVersion;
 import io.vanillabp.integration.adapter.spi.BpmnParseException;
@@ -82,6 +83,12 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   private final WorkflowTaskWiring workflowTaskWiring;
 
   /**
+   * Everything the platform hands over. An adapter which is registered incompletely does
+   * not come into existence (see {@link AdapterCollaborators}).
+   */
+  private final AdapterCollaborators collaborators;
+
+  /**
    * The task connectables of this adapter id's engine, registered during
    * {@link #wireBpmn} and looked up by the engine's EL resolver.
    */
@@ -92,26 +99,14 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * the start events of a process are reported here while wiring. May be
    * <code>null</code> (tests) - nothing is reported then.
    */
-  private io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker;
-
-  /**
-   * Hands over the core's entry point for workflows the engine starts on its own.
-   *
-   * @param bpmsInitiatedStartInvoker The core's invoker
-   */
-  public void setBpmsInitiatedStartInvoker(
-      final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker) {
-
-    this.bpmsInitiatedStartInvoker = bpmsInitiatedStartInvoker;
-
-  }
+  private final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker;
 
   /**
    * The core's registry of <code>&#64;WorkflowEnded</code> methods, used at deployment
    * to tell an application that its method will never be called. May be
    * <code>null</code> (tests) - nothing is checked then.
    */
-  private io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker;
+  private final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker;
 
   /**
    * Whether the engine of this adapter id attached the end listener, see
@@ -120,17 +115,15 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   private boolean engineDeliversWorkflowEnded;
 
   /**
-   * Hands over what is needed to check <code>&#64;WorkflowEnded</code> methods against
-   * what this adapter id's engine actually delivers.
+   * Says whether the engine of this adapter id attached the end listener - the half of
+   * the end support which is this adapter's own business. The core's registry of
+   * <code>&#64;WorkflowEnded</code> methods arrives with the collaborators.
    *
-   * @param workflowEndedInvoker The core's registry of end handlers
    * @param engineDeliversWorkflowEnded Whether the engine attached its end listener
    */
-  public void setWorkflowEndedSupport(
-      final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker,
+  public void setEngineDeliversWorkflowEnded(
       final boolean engineDeliversWorkflowEnded) {
 
-    this.workflowEndedInvoker = workflowEndedInvoker;
     this.engineDeliversWorkflowEnded = engineDeliversWorkflowEnded;
 
   }
@@ -141,7 +134,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * behavior), by PREFIXING the identifiers ({@code use-prefix} - no tenant) or not at
    * all ({@code none}, this adapter's default). May be <code>null</code> (tests).
    */
-  private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
+  private final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
 
   /**
    * The engine's identity service, used to tell whether a tenant deployed into is
@@ -193,19 +186,6 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String configuredTenantId) {
 
     this.configuredTenantId = configuredTenantId;
-
-  }
-
-  /**
-   * Sets the name-clash-avoidance support (the platform modules construct this
-   * service and inject it afterwards).
-   *
-   * @param scoping The name-clash-avoidance support
-   */
-  public void setScoping(
-      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping) {
-
-    this.scoping = scoping;
 
   }
 
@@ -296,10 +276,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String adapterId,
       final RepositoryService repositoryService,
       final Camunda7WorkflowProcessingLifecycle workflowProcessingLifecycle,
-      final WorkflowTaskWiring workflowTaskWiring,
+      final AdapterCollaborators collaborators,
       final Camunda7TaskRegistry taskRegistry) {
 
-    this(adapterId, repositoryService, workflowProcessingLifecycle, workflowTaskWiring, taskRegistry, null);
+    this(adapterId, repositoryService, workflowProcessingLifecycle, collaborators, taskRegistry, null);
 
   }
 
@@ -307,7 +287,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String adapterId,
       final RepositoryService repositoryService,
       final Camunda7WorkflowProcessingLifecycle workflowProcessingLifecycle,
-      final WorkflowTaskWiring workflowTaskWiring,
+      final AdapterCollaborators collaborators,
       final Camunda7TaskRegistry taskRegistry,
       final java.util.function.Function<String, Camunda7InstanceIdentity> instanceIdentities) {
 
@@ -316,7 +296,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     this.adapterId = adapterId;
     this.repositoryService = repositoryService;
     this.workflowProcessingLifecycle = workflowProcessingLifecycle;
-    this.workflowTaskWiring = workflowTaskWiring;
+    this.collaborators = collaborators;
+    this.workflowTaskWiring = collaborators.workflowTaskWiring();
+    this.bpmsInitiatedStartInvoker = collaborators.bpmsInitiatedStartInvoker().orElse(null);
+    this.workflowEndedInvoker = collaborators.workflowEndedInvoker().orElse(null);
+    this.scoping = collaborators.scoping();
     this.taskRegistry = taskRegistry;
     this.instanceIdentities = instanceIdentities;
     // What the engine's process definitions are versioned as - the

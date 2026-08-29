@@ -28,7 +28,20 @@ public class Camunda7DeploymentServiceTest {
   private static Camunda7DeploymentService serviceOfAdapterId(
       final String adapterId) {
 
-    return new Camunda7DeploymentService(adapterId, null, null, null, null);
+    return serviceReportingEndsTo(adapterId, null);
+
+  }
+
+  /**
+   * The service with a core which knows the given end handlers - what the deployment
+   * asks while it decides whether a method of the application will ever be called.
+   */
+  private static Camunda7DeploymentService serviceReportingEndsTo(
+      final String adapterId,
+      final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker) {
+
+    return new Camunda7DeploymentService(
+        adapterId, null, null, io.vanillabp.camunda7.TestCollaborators.reportingEndsTo(workflowEndedInvoker), null);
 
   }
 
@@ -69,8 +82,8 @@ public class Camunda7DeploymentServiceTest {
   @DisplayName("A @WorkflowEnded method nobody will call is reported as the adapter's wiring defect")
   public void unservedWorkflowEndedHandlerIsReported() {
 
-    final var service = serviceOfAdapterId("c7");
-    service.setWorkflowEndedSupport(handlersFor(MODULE, "LoanApproval"), false);
+    final var service = serviceReportingEndsTo("c7", handlersFor(MODULE, "LoanApproval"));
+    service.setEngineDeliversWorkflowEnded(false);
 
     final var warnings = warningsOf(() -> service.warnAboutUnservedWorkflowEndedHandlers(MODULE, "LoanApproval"));
 
@@ -89,15 +102,15 @@ public class Camunda7DeploymentServiceTest {
   @DisplayName("Nothing is said where the engine reports the end, or where no method waits for it")
   public void servedOrUnusedWorkflowEndStaysSilent() {
 
-    final var wired = serviceOfAdapterId("c7");
-    wired.setWorkflowEndedSupport(handlersFor(MODULE, "LoanApproval"), true);
+    final var wired = serviceReportingEndsTo("c7", handlersFor(MODULE, "LoanApproval"));
+    wired.setEngineDeliversWorkflowEnded(true);
     assertEquals(
         List.of(),
         warningsOf(() -> wired.warnAboutUnservedWorkflowEndedHandlers(MODULE, "LoanApproval")),
         "the end listener is attached, so the method will be called");
 
-    final var withoutHandler = serviceOfAdapterId("c7");
-    withoutHandler.setWorkflowEndedSupport(handlersFor(MODULE, "AnotherProcess"), false);
+    final var withoutHandler = serviceReportingEndsTo("c7", handlersFor(MODULE, "AnotherProcess"));
+    withoutHandler.setEngineDeliversWorkflowEnded(false);
     assertEquals(
         List.of(),
         warningsOf(() -> withoutHandler.warnAboutUnservedWorkflowEndedHandlers(MODULE, "LoanApproval")),

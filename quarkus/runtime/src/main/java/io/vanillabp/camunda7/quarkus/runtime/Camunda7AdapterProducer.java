@@ -31,6 +31,26 @@ import jakarta.inject.Singleton;
 @ApplicationScoped
 public class Camunda7AdapterProducer {
 
+  /**
+   * What the platform hands the adapter, built the same way for both services of an
+   * adapter id.
+   */
+  private static io.vanillabp.integration.adapter.spi.AdapterCollaborators collaboratorsOf(
+      final String adapterId,
+      final io.vanillabp.integration.adapter.migration.workflowtask.WorkflowTaskRegistry workflowTaskRegistry,
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping,
+      final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync,
+      final io.vanillabp.integration.adapter.spi.PreCommitRegistrar preCommitRegistrar,
+      final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker> workflowEndedInvoker,
+      final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker) {
+
+    return io.vanillabp.integration.runtime.support.AdapterCollaboratorsSupport
+        .collaborators(
+            adapterId, workflowTaskRegistry, workflowTaskRegistry, scoping, aggregateSync, preCommitRegistrar,
+            workflowEndedInvoker, bpmsInitiatedStartInvoker);
+
+  }
+
   @Produces
   @Singleton
   public List<MigratableProcessService<Object>> camunda7MigratableProcessServices(
@@ -38,7 +58,11 @@ public class Camunda7AdapterProducer {
       final Camunda7QuarkusEngineRegistry engineRegistry,
       final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync,
       final VanillaBpCamunda7Properties overlay,
-      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping) {
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping,
+      final io.vanillabp.integration.adapter.spi.PreCommitRegistrar preCommitRegistrar,
+      final io.vanillabp.integration.adapter.migration.workflowtask.WorkflowTaskRegistry workflowTaskRegistry,
+      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker> workflowEndedInvoker,
+      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker) {
 
     return camunda7AdapterIds(properties)
         .stream()
@@ -46,8 +70,10 @@ public class Camunda7AdapterProducer {
           final var engine = engineRegistry.engineFor(adapterId);
           final var processService = new Camunda7ProcessService<>(
               adapterId, engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
-                  .getHistoryService(), aggregateSync);
-          processService.setScoping(scoping, configuredTenantIdOf(overlay, adapterId));
+                  .getHistoryService(), collaboratorsOf(
+                      adapterId, workflowTaskRegistry, scoping, aggregateSync, preCommitRegistrar,
+                      workflowEndedInvoker, bpmsInitiatedStartInvoker));
+          processService.setConfiguredTenantId(configuredTenantIdOf(overlay, adapterId));
           // Which serialization format nested shared values are stored in,
           // resolved per workflow with a fallback to the module and the adapter
           final io.vanillabp.camunda7.sync.Camunda7SerializationFormats formats = (
@@ -73,18 +99,21 @@ public class Camunda7AdapterProducer {
       final Camunda7QuarkusEngineRegistry engineRegistry,
       final WorkflowTaskRegistry workflowTaskRegistry,
       final VanillaBpCamunda7Properties overlay,
-      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping) {
+      final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync,
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping,
+      final io.vanillabp.integration.adapter.spi.PreCommitRegistrar preCommitRegistrar,
+      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker> workflowEndedInvoker,
+      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker) {
 
     return (List) camunda7AdapterIds(properties)
         .stream()
         .map(adapterId -> {
           final var engine = engineRegistry.engineFor(adapterId);
           final var deploymentService = new Camunda7DeploymentService(
-              adapterId, engine.getRepositoryService(), engine, workflowTaskRegistry, engine
-                  .getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
-          deploymentService.setBpmsInitiatedStartInvoker(workflowTaskRegistry);
-          deploymentService.setWorkflowEndedSupport(workflowTaskRegistry, engine.deliversWorkflowEnded());
-          deploymentService.setScoping(scoping);
+              adapterId, engine.getRepositoryService(), engine, collaboratorsOf(
+                  adapterId, workflowTaskRegistry, scoping, aggregateSync, preCommitRegistrar, workflowEndedInvoker,
+                  bpmsInitiatedStartInvoker), engine.getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
+          deploymentService.setEngineDeliversWorkflowEnded(engine.deliversWorkflowEnded());
           deploymentService.setConfiguredTenantId(configuredTenantIdOf(overlay, adapterId));
           deploymentService.setIdentityService(
               engine
