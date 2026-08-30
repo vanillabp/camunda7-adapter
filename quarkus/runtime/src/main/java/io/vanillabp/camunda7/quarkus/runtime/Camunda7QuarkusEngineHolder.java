@@ -135,6 +135,9 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     this.adapterId = adapterId;
     this.usesSeparateDataSource = usesSeparateDataSource;
     this.deliversWorkflowEnded = workflowEndedInvoker != null;
+    // every listener building an invocation context has to know whose transaction it
+    // delivers in, and the datasource this engine was configured with is what decides it
+    this.taskRegistry.setEngineRunsOnItsOwnDataSource(usesSeparateDataSource);
 
     // An adapter id running on a table prefix needs its tables to exist -
     // Camunda's schema management ignores the prefix and would create a set of

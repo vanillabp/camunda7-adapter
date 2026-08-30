@@ -87,6 +87,18 @@ contributes nothing to the delivery log of the platform: a redelivery proves tha
 committed. An application which gives the engine a datasource of its own loses that proof, and
 that limit is documented rather than papered over.
 
+That limit is now answered rather than only named, and the answer follows the datasource mode. An
+engine on a datasource of its own runs its job
+transaction on a resource the application's persistence cannot join, so VanillaBP opens the
+transaction the handler and the workflow aggregate run in, that one commits before the job does, and
+a job the engine hands out afterwards is a repeated delivery of committed work. Such an adapter id
+therefore answers `deliversTasksAtLeastOnce()` with `true` and names each delivery by the id of the
+job at hand, which the engine keeps across its retries; on the application's datasource nothing of
+that happens, because there is nothing a record could add. A user-task notification stays unnamed in
+both modes: one transaction creates every user task the token reaches, so the job would name several
+notifications, and what is unique per task is generated while the task is created and does not
+survive the rollback which produces the repetition.
+
 ### 7. `table-prefix` says the tables are already there
 
 Camunda's own schema management ignores the prefix and creates unprefixed `ACT_*` tables. That is

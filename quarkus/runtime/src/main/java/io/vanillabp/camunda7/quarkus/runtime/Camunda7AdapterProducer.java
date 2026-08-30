@@ -73,6 +73,9 @@ public class Camunda7AdapterProducer {
                   .getHistoryService(), collaboratorsOf(
                       adapterId, workflowTaskRegistry, scoping, aggregateSync, preCommitRegistrar,
                       workflowEndedInvoker, bpmsInitiatedStartInvoker));
+          // an engine on a datasource of its own commits separately from the
+          // application, which makes its deliveries repeatable
+          processService.setEngineRunsOnItsOwnDataSource(engine.usesSeparateDataSource());
           processService.setConfiguredTenantId(configuredTenantIdOf(overlay, adapterId));
           // Which serialization format nested shared values are stored in,
           // resolved per workflow with a fallback to the module and the adapter

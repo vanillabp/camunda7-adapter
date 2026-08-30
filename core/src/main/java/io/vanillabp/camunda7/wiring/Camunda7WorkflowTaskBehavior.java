@@ -28,6 +28,14 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
  * ({@link TaskInvocationContext#runInCurrentTransaction()}): business changes and
  * engine state commit or roll back together.
  * <p>
+ * That holds while the engine shares the application's datasource. An engine given one of
+ * its own commits on a resource the application's persistence cannot join, so VanillaBP
+ * opens the transaction around the handler itself, the aggregate commits before the job
+ * does, and the job the engine hands out again after a crash in between is a REPEATED
+ * delivery. Which is why an engine in that mode names its deliveries
+ * ({@link TaskInvocationContext#getDeliveryId()} - the id of the job at hand) and the core
+ * answers the repetition from what it recorded.
+ * <p>
  * Outcome mapping:
  * <ul>
  * <li>COMPLETED - the activity is left (task completes);</li>
@@ -321,8 +329,32 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
     public boolean runInCurrentTransaction() {
 
       // the embedded engine invokes handlers inside its own (job) transaction -
-      // business changes and engine state commit or roll back together
-      return true;
+      // business changes and engine state commit or roll back together. An engine on a
+      // datasource of ITS OWN runs that transaction on a resource the application's
+      // persistence knows nothing about, so there is nothing to join and VanillaBP has
+      // to open the transaction it saves the workflow aggregate in itself
+      return (taskRegistry == null) || !taskRegistry.engineRunsOnItsOwnDataSource();
+
+    }
+
+    @Override
+    public String getDeliveryId() {
+
+      // On the application's datasource a redelivery proves that nothing was committed,
+      // so there is nothing to remember and no identity is reported. On an own datasource
+      // the aggregate commits before the job does, and the engine hands the same job out
+      // again after a crash in between - which is the delivery the core has to recognize
+      if ((taskRegistry == null) || !taskRegistry.engineRunsOnItsOwnDataSource()) {
+        return null;
+      }
+      // and only the CREATED delivery has a job to itself: the async-before continuation
+      // of this very task. A CANCELED notification travels with whatever job cancels the
+      // scope, and ONE such job cancels every task open in it, so that job would name
+      // several notifications and the core would take the second for a repetition of the
+      // first
+      return taskEvent == io.vanillabp.spi.service.TaskEvent.Event.CREATED
+          ? Camunda7DeliveringJob.idOnThisThread()
+          : null;
 
     }
 

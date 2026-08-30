@@ -144,6 +144,9 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     this.properties = properties;
     this.applicationDataSource = applicationDataSource;
     this.applicationTransactionManager = applicationTransactionManager;
+    // every listener building an invocation context has to know whose transaction it
+    // delivers in, and the datasource this engine was configured with is what decides it
+    this.taskRegistry.setEngineRunsOnItsOwnDataSource(usesSeparateDataSource());
 
   }
 

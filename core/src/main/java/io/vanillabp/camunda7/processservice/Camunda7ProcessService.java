@@ -229,6 +229,25 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
+   * Whether this adapter id was given a datasource of its own
+   * (<code>vanillabp.adapters.&lt;id&gt;.data-source-name</code>). Set by the platform
+   * integration, which builds the engine; <code>false</code> in tests, which is the
+   * shared-datasource answer.
+   */
+  private boolean engineRunsOnItsOwnDataSource;
+
+  /**
+   * @param engineRunsOnItsOwnDataSource Whether the engine runs on a datasource of its
+   *          own
+   */
+  public void setEngineRunsOnItsOwnDataSource(
+      final boolean engineRunsOnItsOwnDataSource) {
+
+    this.engineRunsOnItsOwnDataSource = engineRunsOnItsOwnDataSource;
+
+  }
+
+  /**
    * Sets the configured tenant name - this adapter's own configuration, unlike the
    * name-clash-avoidance support, which arrives with the collaborators.
    *
@@ -733,18 +752,18 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   @Override
   public boolean deliversTasksAtLeastOnce() {
 
-    // Camunda 7 hands a task to the handler INSIDE its own (job) transaction
-    // (TaskInvocationContext#runInCurrentTransaction), so aggregate changes and engine
-    // state commit or roll back together: a redelivered job proves that NOTHING was
-    // committed, and there is nothing a delivery record could remember.
-    // Deduplicating would cost a store access per task and buy nothing.
+    // On the application's datasource Camunda 7 hands a task to the handler INSIDE its
+    // own (job) transaction (TaskInvocationContext#runInCurrentTransaction), so
+    // aggregate changes and engine state commit or roll back together: a redelivered job
+    // proves that NOTHING was committed, and there is nothing a delivery record could
+    // remember. Deduplicating would cost a store access per task and buy nothing.
     //
-    // With an OWN engine datasource the two commits are no longer one, so the window
-    // the remote adapters have exists here as well. It is deliberately not covered:
-    // the identity of a delivery would have to be invented from the execution's
-    // activity instance, and the rule which held before this feature - key business
-    // decisions on the state of the workflow aggregate - carries that setup.
-    return false;
+    // An engine on a datasource of its own commits where the application's persistence
+    // cannot join, so the aggregate commits first and the job after it. A crash in
+    // between leaves the engine with work it never saw the end of, and it hands the same
+    // job out again - the window every remote BPMS has. The job names that delivery, so
+    // the core recognizes the repetition and answers it from what it recorded
+    return engineRunsOnItsOwnDataSource;
 
   }
 

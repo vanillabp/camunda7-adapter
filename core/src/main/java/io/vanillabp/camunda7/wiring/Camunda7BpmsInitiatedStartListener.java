@@ -169,8 +169,11 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
       @Override
       public boolean runInCurrentTransaction() {
         // an embedded engine sharing the application's transaction: the aggregate
-        // has to be written in the transaction which creates the instance
-        return true;
+        // has to be written in the transaction which creates the instance. An engine on
+        // a datasource of its own runs that transaction on a resource the application's
+        // persistence cannot join, so VanillaBP opens its own and the two commit one
+        // after the other
+        return !taskRegistry.engineRunsOnItsOwnDataSource();
       }
 
     };

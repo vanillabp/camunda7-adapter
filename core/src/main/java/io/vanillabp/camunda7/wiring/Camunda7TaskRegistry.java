@@ -62,6 +62,37 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * Whether this engine was given a datasource of its own
+   * (<code>vanillabp.adapters.&lt;id&gt;.data-source-name</code>), which is the one thing
+   * about the engine every listener building an invocation context has to know: an engine
+   * on the application's datasource delivers inside the transaction which persists the
+   * workflow aggregate, an engine on its own datasource cannot. Set by the platform
+   * integration, which builds the engine; <code>false</code> in tests, which is the
+   * shared-datasource answer this adapter had before an own datasource was configurable.
+   */
+  private boolean engineRunsOnItsOwnDataSource;
+
+  /**
+   * @param engineRunsOnItsOwnDataSource Whether the engine runs on a datasource of its
+   *          own
+   */
+  public void setEngineRunsOnItsOwnDataSource(
+      final boolean engineRunsOnItsOwnDataSource) {
+
+    this.engineRunsOnItsOwnDataSource = engineRunsOnItsOwnDataSource;
+
+  }
+
+  /**
+   * @return Whether the engine runs on a datasource of its own
+   */
+  public boolean engineRunsOnItsOwnDataSource() {
+
+    return engineRunsOnItsOwnDataSource;
+
+  }
+
+  /**
    * @param processVersions The versions of the engine's process definitions
    */
   public void setProcessVersions(
