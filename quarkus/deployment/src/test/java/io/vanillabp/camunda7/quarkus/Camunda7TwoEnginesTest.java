@@ -31,7 +31,10 @@ import jakarta.transaction.UserTransaction;
  *       BPMN is deployed to BOTH (each engine has its own schema);</li>
  *   <li>the separate-datasource id starts workflows via the two-phase pattern
  *       (mirroring the Spring Boot module's 26e decision): phase one does nothing
- *       against the engine, phase two creates the instance idempotently.</li>
+ *       against the engine, phase two creates the instance idempotently;</li>
+ *   <li>it delivers tasks as well, in a transaction VanillaBP opens because the
+ *       engine's own runs where the application's persistence cannot join - which is
+ *       why that adapter id, and only that one, says its deliveries may repeat.</li>
  * </ul>
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -92,15 +95,86 @@ public class Camunda7TwoEnginesTest {
   }
 
   @Test
+  public void onlyTheSeparateDataSourceIdMayRepeatADelivery() {
+
+    Assertions
+        .assertFalse(
+            processServiceOf("c7").deliversTasksAtLeastOnce(),
+            "sharing the application's datasource means delivering in its transaction");
+    Assertions
+        .assertTrue(
+            processServiceOf("c7b").deliversTasksAtLeastOnce(),
+            "an own datasource means the aggregate commits before the engine does");
+
+  }
+
+  @Test
+  public void separateDataSourceIdDeliversTasks() throws Exception {
+
+    final var namedEngine = engineRegistry.engineFor("c7b");
+
+    userTransaction.begin();
+    final var aggregate = new TestAggregate();
+    aggregate.setContent("delivery-c7b");
+    entityManager.persist(aggregate);
+    entityManager.flush();
+    final var aggregateId = aggregate.getId();
+    userTransaction.commit();
+
+    // started in the engine directly: the VanillaBP API would start in the first
+    // prioritized adapter, and this test is about what the SECOND one delivers
+    namedEngine
+        .getRuntimeService()
+        .createProcessInstanceByKey(BPMN_PROCESS_ID)
+        .processDefinitionTenantId(MODULE_ID)
+        .businessKey(String.valueOf(aggregateId))
+        .execute();
+
+    // the handler runs in a transaction VanillaBP opens, because the engine's own runs
+    // on a datasource the application's persistence cannot join
+    final var deadline = System.currentTimeMillis() + 20_000;
+    while (!"task-done".equals(contentOf(aggregateId))) {
+      Assertions
+          .assertTrue(
+              System.currentTimeMillis() < deadline,
+              "the handler of the own-datasource engine did not run within 20s");
+      Thread.sleep(50);
+    }
+
+  }
+
+  private String contentOf(
+      final Long aggregateId) throws Exception {
+
+    userTransaction.begin();
+    try {
+      entityManager.clear();
+      return entityManager
+          .find(TestAggregate.class, aggregateId)
+          .getContent();
+    } finally {
+      userTransaction.commit();
+    }
+
+  }
+
+  private MigratableProcessService<Object> processServiceOf(
+      final String adapterId) {
+
+    return migratableProcessServices
+        .stream()
+        .filter(service -> adapterId.equals(service.getAdapterId()))
+        .findFirst()
+        .orElseThrow();
+
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   public void separateDataSourceIdStartsTwoPhase() throws Exception {
 
     final var namedEngine = engineRegistry.engineFor("c7b");
-    final var processService = migratableProcessServices
-        .stream()
-        .filter(service -> "c7b".equals(service.getAdapterId()))
-        .findFirst()
-        .orElseThrow();
+    final var processService = processServiceOf("c7b");
 
     // an engine on a NAMED datasource cannot join the caller's transaction anyway (the
     // default datasource is already enlisted; the engine's commands would enlist a

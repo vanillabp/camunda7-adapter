@@ -126,8 +126,11 @@ public class Camunda7WorkflowEndedListener implements ExecutionListener {
               @Override
               public boolean runInCurrentTransaction() {
                 // an embedded engine: the notification belongs into the transaction
-                // which ends the workflow
-                return true;
+                // which ends the workflow. An engine on a datasource of its own ends it
+                // where the application's persistence cannot join, so VanillaBP opens
+                // its own transaction and the notification is at-least-once like every
+                // other delivery of that mode
+                return !taskRegistry.engineRunsOnItsOwnDataSource();
               }
 
             });

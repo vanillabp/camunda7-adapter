@@ -21,7 +21,9 @@ import lombok.extern.slf4j.Slf4j;
  * on return - completion arrives via <code>ProcessService#completeUserTask</code>.
  * The invocation runs INSIDE the engine's transaction
  * ({@code runInCurrentTransaction}): aggregate changes commit or roll back with
- * the task's creation/cancellation itself.
+ * the task's creation/cancellation itself - unless the engine was given a datasource of
+ * its own, whose transaction the application's persistence cannot join, so that VanillaBP
+ * opens the one the workflow aggregate is saved in.
  * <p>
  * Why a listener is added to the deployed model, and only where a handler exists, is decision 5 in
  * the repository's DECISIONS.md.
@@ -84,7 +86,8 @@ public class Camunda7UserTaskEventListener implements TaskListener {
     // user-task handlers are OPTIONAL by design - skip silently without one
     final var context = new Camunda7UserTaskInvocationContext(
         connectable.get(), delegateTask, event, taskRegistry
-            .versionOfDefinition(processDefinition.getId()), taskRegistry.getAdapterId());
+            .versionOfDefinition(processDefinition.getId()), taskRegistry.getAdapterId(), taskRegistry
+                .engineRunsOnItsOwnDataSource());
     if (!workflowTaskInvoker.workflowTaskHandlerExists(
         workflowModuleId, bpmnProcessId, context.getTaskDefinition())) {
       log.trace(
@@ -136,12 +139,19 @@ public class Camunda7UserTaskEventListener implements TaskListener {
      */
     private final String adapterId;
 
+    /**
+     * Whether the engine runs on a datasource of its own, which decides whose
+     * transaction the notified handler runs in.
+     */
+    private final boolean engineRunsOnItsOwnDataSource;
+
     Camunda7UserTaskInvocationContext(
         final Camunda7TaskConnectable connectable,
         final DelegateTask delegateTask,
         final TaskEvent.Event event,
         final String processVersion,
-        final String adapterId) {
+        final String adapterId,
+        final boolean engineRunsOnItsOwnDataSource) {
 
       this.adapterId = adapterId;
 
@@ -149,6 +159,7 @@ public class Camunda7UserTaskEventListener implements TaskListener {
       this.delegateTask = delegateTask;
       this.event = event;
       this.processVersion = processVersion;
+      this.engineRunsOnItsOwnDataSource = engineRunsOnItsOwnDataSource;
 
     }
 
@@ -209,7 +220,11 @@ public class Camunda7UserTaskEventListener implements TaskListener {
     @Override
     public boolean runInCurrentTransaction() {
 
-      return true;
+      // the notification runs in the transaction which creates or cancels the task,
+      // and that is the application's own as long as the engine shares its datasource.
+      // An engine on a datasource of its own commits elsewhere, so VanillaBP opens the
+      // transaction the workflow aggregate is saved in itself
+      return !engineRunsOnItsOwnDataSource;
 
     }
 
@@ -222,6 +237,21 @@ public class Camunda7UserTaskEventListener implements TaskListener {
       // creation and cancellation of one task then agree, which is what an activation
       // is supposed to mean
       return delegateTask.getExecution().getActivityInstanceId();
+
+    }
+
+    @Override
+    public String getDeliveryId() {
+
+      // No identity, not even on an own datasource. A user task gets no job of its
+      // own: one transaction creates every user task the token reaches, so the job at
+      // hand names several notifications and the core would take the second for a
+      // repetition of the first. What is unique per task - the task id, the activity
+      // instance - is generated while the task is created, so a rolled-back transaction
+      // produces a new one and a repetition would look like new work. The handler of a
+      // user-task notification therefore runs again after a crash, and no record of
+      // VanillaBP changes that
+      return null;
 
     }
 

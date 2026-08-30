@@ -140,8 +140,17 @@ deployed to the embedded engine of every prioritized adapter.
   follow-up; until then new jobs are picked up by the executor's regular acquisition.)
 - **Adapter ids with an OWN (named) datasource.** An engine on a named datasource
   cannot join the caller's transaction at all - its commands commit on an
-  adapter-internal transaction manager bound to that datasource. Nothing changes for
-  them: every progressing operation runs after the caller's commit anyway.
+  adapter-internal transaction manager bound to that datasource. Outbound nothing
+  changes for them: every progressing operation runs after the caller's commit anyway.
+  Inbound both halves of the delivery contract change. The handler cannot run in the
+  engine's job transaction, because the application's persistence has no part in it, so
+  VanillaBP opens the transaction the workflow aggregate is saved in and that one
+  commits first. A job which fails afterwards is handed out again with the handler's
+  work committed, which is the at-least-once window every remote BPMS has. So such an
+  adapter id answers `deliversTasksAtLeastOnce()` with `true` and names each delivery by
+  the id of the job at hand, and the core answers the repetition from its delivery log
+  instead of running the `@WorkflowTask` method a second time (see
+  [decision 6](./DECISIONS.md#6-a-task-handler-runs-inside-the-engines-own-job-transaction)).
 
 ### Embedded-engine wiring
 
@@ -343,10 +352,28 @@ identified by the business key (getter, boolean getter or field - Spring beans
 remain resolvable on Spring Boot). External tasks (`camunda:topic`) are not
 supported yet.
 
-This adapter answers no delivery identity and does answer an activation identity, which looks
-contradictory and is not. A redelivery here proves that nothing was committed, because the handler
-runs inside the engine's own job transaction, so there is no processed delivery to remember. Which
-element instance is executing is a different question, and the engine answers it:
+### What names a delivery here, and what names an activation
+
+A delivery identity is answered where the engine has a datasource of its own, an activation identity
+always. The two look like one value under two names and are opposite contracts: a delivery identity
+has to stay EQUAL while the engine repeats itself, an activation identity has to DIFFER between two
+activations of one element.
+
+On the application's datasource there is nothing to name. A redelivery proves that nothing was
+committed, because the handler runs inside the engine's own job transaction, so no processed
+delivery exists to remember. On an engine datasource of its own the two commits are separate, and
+the delivery is named by the id of the job executing it: the engine keeps that id while it
+decrements the job's retries, and the next activation of the element runs on a job of its own. Which
+is exactly what the core needs to tell a repetition from new work.
+
+A user-task notification is named in neither mode. A user task gets no job for itself - one
+transaction creates every user task the token reaches - so the job at hand would name several
+notifications and the second would read as a repetition of the first. What is unique per task, the
+task id and the activity instance, is generated while the task is created, so the rollback which
+produces the repetition produces a new value as well. A handler notified about a user task therefore
+runs again after a crash, which is what it did before an own datasource could be configured.
+
+The activation is answered by the engine in both modes:
 `DelegateExecution#getActivityInstanceId()` reads `<element-id>:<instance-id>`, so the second
 element of a multi-instance activity and the next iteration of a loop each get their own. The core
 puts it into the idempotency key of a message correlation planned while the handler runs, which is
@@ -503,6 +530,14 @@ tells the two kinds apart: an execution carrying a delete reason was cancelled, 
 terminated (`TERMINATED`), everything else reached an end event (`COMPLETED`, with the id
 of that end event). Processes without such a method get no listener.
 
+Both listeners follow the datasource mode like the task delivery does. An engine on a
+datasource of its own runs its transaction where the application's persistence cannot join,
+so VanillaBP opens the transaction the aggregate is written in and the two commit one after
+the other. A start whose engine transaction fails afterwards is retried and builds the
+aggregate again, an end notification whose transaction fails is delivered again - which is
+the at-least-once shape of that mode, and the reason a `@WorkflowEnded` method has to
+tolerate a repetition there.
+
 ## Versions of a process
 
 The engine counts a process definition's version upwards per BPMN process id and a running
@@ -609,8 +644,8 @@ vanillabp:
       type: camunda7     # runs on the default datasource (in-transaction guarantee)
     c7-legacy:
       type: camunda7
-      data-source-name: legacy   # runs on its own schema (two-phase start, see the
-                                 # transaction caveat above)
+      data-source-name: legacy   # its own schema, and its own transaction: tasks are
+                                 # delivered at least once there, see the caveat above
 ```
 
 An unknown `data-source-name` and two adapter ids sharing one datasource fail the
