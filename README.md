@@ -553,6 +553,28 @@ very start is included) and again only for a version it has never seen, which is
 rolling deployment produces. What the deployment itself reported costs no query at all: the
 deploy command names the version the engine assigned to every model, tag included.
 
+### A suspended version counts, and how to get past it once
+
+Deleting a process definition removes it from this engine, so the startup check for old process
+versions stops reporting about it without anything being configured. Suspending it does not: the
+definition is still there, its workflows keep running, and the `@WorkflowTask` method they are
+missing is still missing once somebody resumes it. The definition query therefore names no
+suspension state and a suspended version is checked like any other one.
+
+The exception is an application which has to be up right now while an old version is nobody's job
+to clean up at this minute. Starting it with the system property
+`vanillabp.ignore-suspended-process-definitions=true`, or with the environment variable
+`VANILLABP_IGNORE_SUSPENDED_PROCESS_DEFINITIONS=true`, takes suspended definitions out of the
+check; where both are set the property wins, and only the value `true` counts. Two warnings then
+stand in the log of every start, one saying the exit was taken and what it costs, one naming the
+versions it hid, and neither is remembered anywhere, because they are supposed to be in the way
+until the switch is gone. The reasoning, including why this is not a configuration property, is
+[decision 12](./DECISIONS.md#12-a-suspended-process-definition-counts-and-the-only-way-past-it-is-a-system-property).
+
+Two things nearby are deliberately untouched. `Camunda7WorkflowViewer` reports the latest version
+of a called process whether or not it is suspended, and the version this boot runs on is the
+engine's latest one for the same reason: both of them show what is there, and neither is the check.
+
 ## Camunda's web applications
 
 The optional module `camunda7-adapter-spring-boot-webapps` serves Cockpit, Tasklist and
