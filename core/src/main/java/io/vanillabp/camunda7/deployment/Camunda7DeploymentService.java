@@ -306,7 +306,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // What the engine's process definitions are versioned as - the
     // registry hands it to every listener building an invocation context
     this.processVersions = new io.vanillabp.camunda7.wiring.Camunda7ProcessVersions(
-        repositoryService, this::scopedProcessId, this::tenantIdOf, this::tasksOfDeployedModel);
+        adapterId, repositoryService, this::scopedProcessId, this::tenantIdOf, this::tasksOfDeployedModel);
+    // the emergency exit past the old-versions check is meant to be the decision of THIS
+    // start, so every start says out loud that it was taken
+    io.vanillabp.camunda7.wiring.SuspendedProcessDefinitions.reportIfTheSwitchIsSet(adapterId);
     if (taskRegistry != null) {
       taskRegistry.setProcessVersions(processVersions);
       // every inbound delivery reports which adapter it came from

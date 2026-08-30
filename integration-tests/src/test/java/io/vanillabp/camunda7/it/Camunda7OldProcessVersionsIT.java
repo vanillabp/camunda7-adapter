@@ -3,6 +3,7 @@ package io.vanillabp.camunda7.it;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.camunda.bpm.engine.RepositoryService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 
+import io.vanillabp.camunda7.wiring.SuspendedProcessDefinitions;
 import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
@@ -19,6 +21,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * 1 of a process, leaves a workflow running on it, and boots again with a model which
  * dropped one of its tasks. What the application still serves of that older version is
  * what the engine can answer and this test proves.
+ * <p>
+ * The last two cases suspend version 1 and ask the same question again: a suspended
+ * definition is not a deleted one, so it keeps its place in the check, and the only way
+ * past it is the emergency exit which says on every start that it was taken.
  * <p>
  * Every case is a full boot, because the question is what a START reports, and the
  * findings are read from the captured output rather than from a log appender: Spring
@@ -128,6 +134,76 @@ public class Camunda7OldProcessVersionsIT {
         () -> boot("v2", "--vanillabp.workflow-modules.c7-it.adapters.c7.outfaded-versions=*"));
 
     assertTrue(rootMessage(failure).contains("deployed during this boot"), rootMessage(failure));
+
+  }
+
+  @Test
+  @Order(6)
+  @DisplayName("A suspended version is checked like every other one")
+  public void aSuspendedVersionIsStillReported(
+      final CapturedOutput output) {
+
+    suspendVersionOne();
+
+    final var reported = whatIsReportedWhileBooting(output, "v2");
+    assertTrue(
+        reported.contains("'servedForAnUnknownVersion'"),
+        "suspending version 1 does not answer what it still needs");
+    assertTrue(reported.contains("still run on version '1'"), "and its workflow is counted as before");
+
+  }
+
+  @Test
+  @Order(7)
+  @DisplayName("The emergency exit takes the suspended version out, loudly")
+  public void theEmergencyExitTakesTheSuspendedVersionOut(
+      final CapturedOutput output) {
+
+    System.setProperty(SuspendedProcessDefinitions.IGNORE_PROPERTY, "true");
+    try {
+      final var reported = whatIsReportedWhileBooting(output, "v2");
+
+      assertTrue(reported.contains("emergency exit for one start"), "the start says the switch was taken");
+      assertTrue(
+          reported.contains("version(s) 1 of BPMN process 'OldProcessVersionsProcess'"),
+          "and names the version it left out");
+      assertTrue(
+          !reported.contains("served by NO @WorkflowTask method"),
+          "nothing is demanded of the suspended version any more");
+      assertTrue(
+          !reported.contains("still run on version '1'"),
+          "and its workflow is not counted either");
+      // what the switch costs on the code side: version 1 is not among the versions the
+      // check believes the engine holds, so the method kept for it looks dead
+      assertTrue(reported.contains("droppedInVersionTwo' (version '1')"), "the method for it looks dead now");
+    } finally {
+      System.clearProperty(SuspendedProcessDefinitions.IGNORE_PROPERTY);
+    }
+
+  }
+
+  /**
+   * Suspends the older version at the engine, in a boot of its own - the cases after it
+   * are about what the NEXT start makes of it.
+   */
+  private static void suspendVersionOne() {
+
+    final var application = new SpringApplicationBuilder(TestApplication.class).run(DATABASE, resources("v2"));
+    try {
+      final var repositoryService = application.getBean(RepositoryService.class);
+      final var versionOne = repositoryService
+          .createProcessDefinitionQuery()
+          .processDefinitionKey("OldProcessVersionsProcess")
+          .tenantIdIn("c7-it")
+          .processDefinitionVersion(1)
+          .singleResult();
+      if (versionOne == null) {
+        throw new AssertionError("the engine does not hold version 1 any more - the cases before this one did");
+      }
+      repositoryService.suspendProcessDefinitionById(versionOne.getId());
+    } finally {
+      application.close();
+    }
 
   }
 

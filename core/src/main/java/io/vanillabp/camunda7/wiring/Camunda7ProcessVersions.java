@@ -35,6 +35,11 @@ import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 @SuppressWarnings("LombokSetterMayBeUsed")
 public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
 
+  /**
+   * The adapter ID - this catalog belongs to ONE engine, and what it reports names it.
+   */
+  private final String adapterId;
+
   private final RepositoryService repositoryService;
 
   /**
@@ -98,11 +103,13 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   private RuntimeService runtimeService;
 
   public Camunda7ProcessVersions(
+      final String adapterId,
       final RepositoryService repositoryService,
       final BiFunction<String, String, String> scopedProcessIds,
       final Function<String, String> tenants,
       final TasksOfModel tasksOfModel) {
 
+    this.adapterId = adapterId;
     this.repositoryService = repositoryService;
     this.scopedProcessIds = scopedProcessIds;
     this.tenants = tenants;
@@ -324,9 +331,13 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
         .asc()
         .list();
     // this one list holds what every later question about an older version needs, and
-    // keeping it is what spares those questions a definition query each
+    // keeping it is what spares those questions a definition query each. A suspended
+    // definition is remembered along with the rest even where SuspendedProcessDefinitions
+    // takes it out of the answer: its workflows keep running and keep reporting the
+    // version they are on
     definitions.forEach(definition -> remember(workflowModuleId, bpmnProcessId, definition));
-    return definitions
+    return SuspendedProcessDefinitions
+        .definitionsWhichStillCount(adapterId, workflowModuleId, bpmnProcessId, definitions)
         .stream()
         .map(definition -> DeployedProcessVersion
             .of(String.valueOf(definition.getVersion()), definition.getVersionTag()))

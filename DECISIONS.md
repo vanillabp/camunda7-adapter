@@ -182,3 +182,39 @@ this engine has nothing like, and VanillaBP refuses the boot for the ones every 
 has to serve. And the phase-one half is where this adapter earns its keep, because an
 embedded engine answers from the caller's own transaction - see the platform's decision
 29 for why the operation itself carries no engine knowledge at all.
+
+### 12. A suspended process definition counts, and the only way past it is a system property
+
+Deleting a process definition really removes it here: the engine drops it from the database and the
+definition query stops answering with it, so the startup check for old process versions stops
+reporting about it by itself. Suspending is the other thing Camunda 7 offers, and it is not the
+same. A suspended definition comes back the moment somebody resumes it, its workflows never went
+away, and a `@WorkflowTask` method missing for one of their tasks is still missing afterwards. A
+check which went quiet because somebody suspended a definition would have dropped the finding
+without anything being settled, and the finding would come back as an incident on a live workflow -
+which is what the check exists to prevent. So the definition query names no suspension state, and a
+suspended version is checked like every other one.
+
+There is one situation that rule cannot cover: an application has to run now, and nobody is in a
+position to clean up an old version at this minute. For it there is
+`vanillabp.ignore-suspended-process-definitions`, next to it the environment variable
+`VANILLABP_IGNORE_SUSPENDED_PROCESS_DEFINITIONS`, and the property wins where both are set. Only
+the value `true` counts, in any case; anything else is reported and changes nothing.
+
+It is a system property and not a configuration key, and that is the part most likely to be
+"fixed" later by somebody who does not know why. A configuration key lands in an
+`application.yaml`, gets committed, and is then set forever without anybody noticing it again.
+This switch is meant to be the decision of exactly this start, typed where it can be seen, which is
+also why every start says out loud that it was taken and which versions it hid, and why nothing
+about having said so is remembered.
+
+The environment variable is an equal way in rather than a convenience. A Quarkus native image reads
+neither `JAVA_OPTS` nor `JAVA_TOOL_OPTIONS`, which is where a container usually carries its `-D`
+arguments, so without the variable the switch would do nothing at all in a native image and say
+nothing about it either. An emergency exit that quietly fails is worse than none.
+
+The name carries no adapter part and no adapter id, because it holds for every VanillaBP adapter
+whose BPMS can suspend a definition - today only this one - and somebody searching for a way out in
+an emergency should find one switch instead of three. An application running two Camunda 7 adapter
+ids cannot take the exit for one of them alone. That is the price, and it is paid on purpose.
+`SuspendedProcessDefinitions` is the single place all of this lives.

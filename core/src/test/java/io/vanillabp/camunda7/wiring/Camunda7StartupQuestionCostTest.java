@@ -129,7 +129,7 @@ public class Camunda7StartupQuestionCostTest {
         });
 
     versions = new Camunda7ProcessVersions(
-        repositoryService, (
+        "c7", repositoryService, (
             workflowModuleId,
             bpmnProcessId) -> bpmnProcessId, workflowModuleId -> null, (
                 workflowModuleId,
