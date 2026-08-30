@@ -70,7 +70,10 @@ side during a migration) - **each id gets its OWN embedded engine** (named
 schema (they would be the same engine state), every additional id needs either a
 datasource of its own or a
 [table prefix of its own](#two-engines-on-one-database-table-prefix) - the boot fails with
-a guiding message otherwise.
+a guiding message otherwise. `Camunda7AdapterBootTest#twoAdapterIdsOfTypeCamunda7YieldPerIdEnginesAndBeans`
+and `#twoAdapterIdsSharingTheSameDataSourceFailWithGuidingMessage` hold both halves on Spring
+Boot, `Camunda7SameDataSourceValidationTest` on Quarkus, and `Camunda7InstanceIdentityTest`
+the comparison itself.
 
 Per-adapter-id settings (all optional, at the canonical location
 `vanillabp.adapters.<id>.*`):
@@ -152,6 +155,14 @@ deployed to the embedded engine of every prioritized adapter.
   instead of running the `@WorkflowTask` method a second time (see
   [decision 6](./DECISIONS.md#6-a-task-handler-runs-inside-the-engines-own-job-transaction)).
 
+The four bullets have their tests: `Camunda7StartWorkflowIT` for the deployment and the
+two-phase start, `Camunda7JobExecutorLifecycleIT` and its Quarkus twin for the executor
+which runs only while processing is started, and `Camunda7RepeatedDeliveryIT` for the
+difference the datasource makes
+(`repeatedDeliveryOnAnOwnDataSourceIsAnsweredFromTheRecord` against
+`repeatedDeliveryOnTheSharedDataSourceRunsTheHandlerAgain`). What the startup says about a
+missing delivery log in each mode is `Camunda7MissingDeliveryLogIT`.
+
 ### Embedded-engine wiring
 
 The `spring-boot` module builds the engine(s) itself from
@@ -178,7 +189,9 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used). The
 
 A `DataSource` and a `PlatformTransactionManager` must be present (a Camunda 7
 application always needs a database) unless every configured id brings its own
-datasource.
+datasource. `Camunda7AdapterBootTest#configuredAdapterWithoutDataSourceFailsWithGuidingMessage`
+is that message, and `Camunda7UnknownDataSourceNameTest` the one for a `data-source-name`
+naming nothing.
 
 ### Two engines on one database: `table-prefix`
 
@@ -216,7 +229,8 @@ vanillabp:
 
 `Camunda7TablePrefixSchema` asks about that before the engine is built, so a wrong
 configuration costs neither a MyBatis stack trace nor a set of stray tables in the shared
-database. A prefix together with a creating `database-schema-update` ends the boot, and so
+database (`Camunda7TablePrefixSchemaTest`, which walks the creating values, the missing
+tables and the prefix naming a schema). A prefix together with a creating `database-schema-update` ends the boot, and so
 does a prefix whose tables are missing; both messages name the prefix, the datasource, the
 missing tables and the two ways on. `Camunda7TablePrefixIT` runs the working setup: two
 adapter ids on one H2 database, one of them prefixed, both deploying the workflow module
@@ -271,6 +285,11 @@ Outcomes:
   *Delegate expression* (an *Expression* task completes when the expression
   returns and could never stay open).
 
+`Camunda7TaskProcessingIT` runs every one of those outcomes against the embedded engine
+(`taskExceptionRoutesErrorBoundaryAndCommits`, `technicalExceptionRollsBackAndRetries`,
+`asyncTaskStaysOpen`, `asyncBeforeAndAfterForcedOntoServiceTasks`), and
+`Camunda7WorkflowLifecycleTest` runs the same flows on Quarkus.
+
 **The application does not start on that last defect.** While wiring,
 the adapter asks the core whether the method serving a task completes
 asynchronously (`WorkflowTaskInvoker#workflowTaskCompletesAsynchronously`,
@@ -278,7 +297,8 @@ answered by the `WorkflowTaskRegistry` from the method's `@TaskId` parameter) an
 aborts the deployment for every task wired by *Expression* whose method wants to
 keep it open. `Camunda7TaskELResolver` keeps the same guard for a model that
 reached the engine another way, and both report the identical message, which lives
-once in `Camunda7TaskConnectable#asynchronousTaskWiredByExpression`. The reverse
+once in `Camunda7TaskConnectable#asynchronousTaskWiredByExpression`
+(`Camunda7TaskWiringValidationIT#asynchronousTaskWiredByExpressionAbortsBoot`). The reverse
 case is deliberately silent: *Delegate expression* serves a method without
 `@TaskId` just as well, because the behavior leaves the activity when the handler
 returns.
@@ -320,7 +340,11 @@ none). That holds for running instances and for the history query behind a
 the business key, and `awarenessOfWorkflowForRedispatch` inherits it through the
 SPI default. So a workflow of another workflow module, of another tenant or of a
 process this application never wired is `UNKNOWN_TO_BPMS`, and the election
-continues to the BPMS which really holds it.
+continues to the BPMS which really holds it. `Camunda7AwarenessScopeTest` holds every one
+of those narrowings (`aForeignWorkflowIsNotClaimed`, `theTenantIsPartOfTheScope`,
+`anotherModuleOfTheSameAdapterIsNotClaimed`, `aSecondaryProcessIsClaimed`,
+`theHistoryIsScopedAsWell`), and `Camunda7AwarenessTest` what an unreachable engine
+answers.
 
 The write behind `aggregateChanged` answers for the same scope. It is
 the half where getting it wrong costs more than a wrong answer: in Camunda 7 a
@@ -333,7 +357,9 @@ instances within one scope end the operation with a message naming them instead 
 a `singleResult()` stack trace, and "the workflow is gone" - the tolerated case of
 an at-least-once phase two - is judged within the scope as well. The branch writing
 into the scope of a parked task needs no comparison: it is addressed by an
-execution id the engine handed out, which names exactly one execution.
+execution id the engine handed out, which names exactly one execution. The scoped push is
+`Camunda7AwarenessScopeTest#aPushReachesTheOwnWorkflowOnly`,
+`#aPushInAMigrationStaysWithItsAdapterId` and `#aPushOfAnEndedWorkflowIsTolerated`.
 
 **Message correlation:** `correlateMessage` is two-phase like every other
 progressing operation (tenant = workflow module, business key = aggregate ID). Phase
@@ -344,7 +370,9 @@ rollback therefore leaves the instance waiting. A correlation id matches via the
 local-variable convention `<primary bpmnProcessId>-<messageName>` at the receiving
 scope. `startWorkflowByMessage` uses `correlateStartMessage()` and is two-phase the
 same way, with an already-started pre-check. No variables are ever set - the payload
-doctrine.
+doctrine. `Camunda7TaskProcessingIT#correlateMessageResumesProcess`,
+`#correlateMessageWithCorrelationId`, `#rolledBackCorrelationLeavesInstanceWaiting` and
+`#startWorkflowByMessageStartsInstance` hold this.
 
 BPMN expressions like gateway conditions or multi-instance collections
 (`${riskAcceptable}`, `${items}`) resolve against the workflow aggregate
@@ -379,6 +407,12 @@ element of a multi-instance activity and the next iteration of a loop each get t
 puts it into the idempotency key of a message correlation planned while the handler runs, which is
 what keeps three siblings of one workflow aggregate from sharing a key.
 
+`Camunda7RepeatedDeliveryIT#deliveryRepetitionIsAnsweredFromTheDatasourceMode` holds the
+delivery half in both modes. The user-task half is an assumption rather than something a
+test holds: it follows from a user task getting no job of its own and from the task id
+being generated while the task is created, and a Camunda 7 which reused a task id across a
+rollback would disprove it.
+
 ## Outbound operations: one handler per operation
 
 Everything this adapter sends to the engine is a `PhaseOperationHandler`, contributed
@@ -399,6 +433,7 @@ skips an instance which already carries the business key, completing or cancelli
 checks the task, and correlating checks the subscription. Each check happens BEFORE the
 write, because a failing engine command marks the dispatcher's transaction rollback-only
 and would take the whole dispatch with it.
+`Camunda7TaskProcessingIT#awarenessAndPhaseTwoEdgeCases` walks the repeated dispatches.
 
 ## Keeping workflow modules apart
 
@@ -425,12 +460,20 @@ Two decisions worth recording:
   respectively the `camunda:formKey`, and it is resolved WITHIN the process by VanillaBP's
   EL resolver. Nothing subscribes to it engine-wide, so there is nothing to clash with.
 
+`Camunda7ScopingTest` holds what each mode rewrites (`usePrefixRewritesEngineWideIdentifiers`,
+`usePrefixKeepsTaskDefinitions`, `otherModesDoNotTouchTheModel`,
+`callActivityByExpressionStaysEvaluable`), `Camunda7DeploymentServiceTest#defaultsToByAdapter`
+and `#unscopedIdentifiersAreReported` the default and the WARN, and
+`Camunda7NameClashAvoidanceIT` a workflow running end to end with prefixed identifiers.
+
 A tenant id is an ATTRIBUTE of the deployment and of the process definitions, instances
 and tasks below it: any name is accepted, no tenant has to exist and none is created.
 Registered tenants (`ACT_ID_TENANT`, written by `IdentityService#newTenant`) exist for
 tenant memberships and the authorizations built on them, and most applications have none.
 Where an application registers tenants but not the one VanillaBP deploys into, the adapter
-WARNs, because the deployment works while nobody is authorized for those workflows.
+WARNs, because the deployment works while nobody is authorized for those workflows
+(`Camunda7TenantCheckTest#unregisteredTenantIsReported`, with
+`#noRegisteredTenantsStaySilent` for the ordinary application).
 
 Without a tenant the engine cannot answer which workflow module a running instance belongs
 to. The adapter resolves it from the process definition key it registered while wiring,
@@ -504,6 +547,14 @@ aggregate does not share - naming element, expression, attribute and fix. It is 
 never a failed deployment: the check reads expressions, and one it misreads must not keep an
 application from starting.
 
+Sharing is held by `Camunda7AggregateSyncIT`
+(`theGatewayBehindATaskReadsWhatTheTaskComputed`, `nestedValuesBecomeObjectVariables`,
+`unannotatedAggregateSharesEverything`) and `Camunda7VariablesTest` for the conversion,
+`Camunda7AggregateChangedIT` for the two scopes and the conditional event
+(`aConditionalEventWaitsForThePush`, `aTaskScopeIsSkipped`), `Camunda7EnginePluginsTest`
+for the plugin section, and `Camunda7ExpressionIdentifiersTest` for the expressions the
+startup reads.
+
 ## Signals
 
 `ProcessService.sendSignal(name)` broadcasts through `RuntimeService.createSignalEvent`
@@ -511,6 +562,8 @@ inside the caller's transaction, so a rollback takes the broadcast with it. The 
 scoped like every other identifier of the workflow module: sent for the module's tenant,
 or tenant-free where identifiers are prefixed. An engine on its own datasource cannot join
 that transaction and broadcasts after the commit through the outbox, like a remote BPMS.
+`Camunda7SendSignalIT#broadcastContinuesTheWaitingWorkflow` and
+`#rollbackTakesTheBroadcastWithIt` hold both halves.
 
 ## Workflows the engine starts itself and workflows which ended
 
@@ -538,6 +591,11 @@ aggregate again, an end notification whose transaction fails is delivered again 
 the at-least-once shape of that mode, and the reason a `@WorkflowEnded` method has to
 tolerate a repetition there.
 
+`Camunda7BpmsInitiatedStartIT#timerStartCreatesTheAggregate` holds the start,
+`Camunda7WorkflowEndedTest#workflowEndedIsReported` and
+`Camunda7DeploymentServiceTest#servedOrUnusedWorkflowEndStaysSilent` the end and the
+processes which get no listener.
+
 ## Versions of a process
 
 The engine counts a process definition's version upwards per BPMN process id and a running
@@ -552,6 +610,8 @@ process while the application starts (right after the deployment, so a tag deplo
 very start is included) and again only for a version it has never seen, which is what a
 rolling deployment produces. What the deployment itself reported costs no query at all: the
 deploy command names the version the engine assigned to every model, tag included.
+`Camunda7ProcessVersionIT#theVersionDecidesWhichMethodRuns` holds the routing and
+`Camunda7StartupQuestionCostTest` the number of questions a start asks.
 
 ### A suspended version counts, and how to get past it once
 
@@ -570,6 +630,9 @@ stand in the log of every start, one saying the exit was taken and what it costs
 versions it hid, and neither is remembered anywhere, because they are supposed to be in the way
 until the switch is gone. The reasoning, including why this is not a configuration property, is
 [decision 12](./DECISIONS.md#12-a-suspended-process-definition-counts-and-the-only-way-past-it-is-a-system-property).
+`Camunda7SuspendedProcessVersionsTest` holds the switch and both warnings,
+`Camunda7OldProcessVersionsIT#aSuspendedVersionIsStillReported` and
+`#theEmergencyExitTakesTheSuspendedVersionOut` the same against a running engine.
 
 Two things nearby are deliberately untouched. `Camunda7WorkflowViewer` reports the latest version
 of a called process whether or not it is suspended, and the version this boot runs on is the
@@ -590,6 +653,11 @@ owns the engines, so the module does two things:
 2. **VanillaBP's engines are registered with the runtime container**, because that is where
    the web applications look for engines rather than in the Spring context. When the
    application stops they are removed again.
+
+`Camunda7WebappsBootTest` holds both (`camundasOwnAutoConfigurationIsOff`,
+`theEngineIsTheOneVanillaBpBuilt`, `webappsAreServed`),
+`Camunda7WebappsRegistrationTest#enginesAreRegisteredAndReleased` the removal, and
+`Camunda7WebappsTwoAdapterIdsTest` the migration setup.
 
 The web applications are a servlet application built on Spring. There is no Quarkus
 equivalent and none is planned, so this module is Spring Boot only.
@@ -671,7 +739,10 @@ vanillabp:
 ```
 
 An unknown `data-source-name` and two adapter ids sharing one datasource fail the
-boot with guiding messages.
+boot with guiding messages (`Camunda7UnknownDataSourceNameTest`,
+`Camunda7SameDataSourceValidationTest`), and `Camunda7TwoEnginesTest` runs the two engines
+side by side. Native mode has no test because there is nothing to test: the extension is
+not registered for it.
 
 ## Viewing workflows
 
@@ -698,6 +769,12 @@ neither an eventual-consistency lag nor an application-version boundary.
   VanillaBP's BPMS election (instead of "unknown") - which is what makes viewing ended
   workflows work and keeps a re-dispatched start from starting a second instance of a workflow
   which already ran to its end.
+
+`Camunda7ViewerApiIT` holds the read path against the engine
+(`endedWorkflowsStayViewable`, `processDefinitionsIncludeCalledProcesses`,
+`historyReflectsExecutionAndOffersSecondaryContext`, `unknownSubjectsRaiseGuidingErrors`),
+`Camunda7ViewerApiTest` the same on Quarkus, and
+`Camunda7WorkflowVisibilityTest#embeddedEngineReportsNoVisibilityDelay` the absent lag.
 
 ## Decision log
 
@@ -741,7 +818,9 @@ follow-up of the engine-idiomatics story, no date yet.
 
 ## Test coverage
 
-`mvn install verify` builds one aggregated JaCoCo report per platform:
+`mvn install` builds one aggregated JaCoCo report per platform (`install`, not
+`install verify`: `install` already runs every phase `verify` has, so naming both walks two
+lifecycles per module and reports every compiler warning twice):
 
 1. **Spring Boot** (core + Spring Boot integration) - into `test-coverage-report/spring-boot/report`
 2. **Quarkus** (core + Quarkus extension) - into `test-coverage-report/quarkus/report`
@@ -758,7 +837,9 @@ repository gates on, and that is not the target: the rule is 90 per platform, so
 85 and 90 passes the build and still names a gap. The gate is where the gap has grown too big to
 carry, which is why it is never edited to make a build pass. It also compares every module
 producing a `jacoco.exec` against the two aggregates, so a module added to the build without being
-added to its report cannot stay unnoticed.
+added to its report cannot stay unnoticed. `CoverageGateTest` is where both of those measurements
+happen, and `TestClassConventionsTest` next to it is what keeps every test class on the output
+suppression the printed lines below depend on.
 
 The gate reports what it measured on every run, green ones included, which is the one place in
 VanillaBP where a passing test prints:
