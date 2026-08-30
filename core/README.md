@@ -60,7 +60,9 @@ Two deliberate exceptions exist, and both fail LOUDLY rather than silently:
   for it.
 
 A method that cannot do its job throws with a message naming the reason; a silent no-op
-would hide wiring bugs.
+would hide wiring bugs. What the SPI serves is held at the boundary by the integration
+tests of both platforms, `Camunda7TaskProcessingIT` and `Camunda7WorkflowLifecycleTest`
+for the runtime and `Camunda7TaskWiringValidationIT` for the deployment.
 
 ## Platform version guard
 
@@ -69,7 +71,8 @@ version of the VanillaBP platform integration it was built against
 (`platform.version=${adapter-platform.version}`, filled by resource filtering configured
 in `pom.xml`). The `Camunda7DeploymentService` constructor passes it to
 `AdapterPlatformVersion.requireCompatiblePlatform(...)`, which aborts the startup with a
-guiding message if the platform integration on the classpath is older — Maven does not
+guiding message if the platform integration on the classpath is older (the comparison
+itself is held by `AdapterPlatformVersionTest` of the platform repository) — Maven does not
 report that as a conflict, because a version managed by the application always wins over
 the version required transitively by this adapter, even as a downgrade. See
 `migration-adapter/README.md`, section "Adapter/platform version guard".
