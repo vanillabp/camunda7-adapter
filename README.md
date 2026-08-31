@@ -34,7 +34,11 @@ platform's code. Click a badge to open the respective report.
 ## Coordinates
 
 The adapter is built on top of `adapter-platform-integration` (the platform-neutral
-migration adapter plus the Spring Boot integration).
+migration adapter plus the Spring Boot integration). The mechanisms this adapter plugs into are
+drawn there rather than here, in the section of `migration-adapter/README.md` which describes each
+of them; [`diagrams/README.md`](https://github.com/vanillabp/adapter-platform-integration/blob/main/diagrams)
+lists them. Camunda 7 appears in most of the pictures as one branch beside Camunda 8 and the
+Process-Engine-API, which is the comparison this repository cannot draw on its own.
 
 ```xml
 <dependency>
@@ -406,6 +410,12 @@ The activation is answered by the engine in both modes:
 element of a multi-instance activity and the next iteration of a loop each get their own. The core
 puts it into the idempotency key of a message correlation planned while the handler runs, which is
 what keeps three siblings of one workflow aggregate from sharing a key.
+
+The engine datasource mode has a picture of its own, [Camunda 7 on an engine datasource of its
+own](https://github.com/vanillabp/adapter-platform-integration/blob/main/migration-adapter/README.md#deliveries-vanillabp-already-processed-taskdeliverylog-spi),
+which puts the two commits on a time line and shows the job the engine repeats being answered from
+the record. It sits next to the core's delivery log, because that mode is what makes a repetition
+visible to the core at all.
 
 `Camunda7RepeatedDeliveryIT#deliveryRepetitionIsAnsweredFromTheDatasourceMode` holds the
 delivery half in both modes. The user-task half is an assumption rather than something a
