@@ -8,7 +8,7 @@ root `README.md` documents the repository for contributors.
 ## What lives here
 
 Plain Java — **no Spring or Quarkus imports**. This module implements the VanillaBP
-adapter SPI (`io.vanillabp.adapter:migration-adapter-spi`) against the Camunda 7 engine
+adapter SPI (`io.vanillabp:vanillabp-adapter-spi`) against the Camunda 7 engine
 (`org.camunda.bpm:camunda-engine`, which also provides
 `org.camunda.bpm.model:camunda-bpmn-model`). Everything BPMS-specific belongs here; the
 `spring-boot` module only constructs and registers these objects.
