@@ -505,6 +505,35 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   @Override
+  public Camunda7ProcessingContext readDmn(
+      final String workflowModuleId,
+      final Camunda7ProcessingContext existingContext,
+      final String filename,
+      final java.io.InputStream dmn) {
+
+    // the decision travels as bytes: the engine reads it, this adapter only has to make
+    // sure the id it is deployed under matches what the business rule task points at
+    final var file = io.vanillabp.integration.adapter.spi.DmnDecisionIds.bytesOf(dmn);
+    final var prefixes = io.vanillabp.camunda7.wiring.Camunda7Scoping
+        .prefixes(workflowModuleId, adapterId, scoping);
+    final var toDeploy = prefixes
+        ? io.vanillabp.integration.adapter.spi.DmnDecisionIds
+            .rewrite(file, id -> scoping.scopedIdentifier(workflowModuleId, id, adapterId))
+        : file;
+    if (prefixes) {
+      log.debug(
+          "Camunda7[{}]: the decisions of '{}' are deployed under prefixed ids ({}), matching the "
+              + "'camunda:decisionRef' of the business rule tasks calling them",
+          adapterId,
+          filename,
+          io.vanillabp.integration.adapter.spi.DmnDecisionIds.of(toDeploy));
+    }
+    existingContext.addDecision(filename, toDeploy);
+    return existingContext;
+
+  }
+
+  @Override
   public void wireBpmn(
       final String workflowModuleId,
       final String filename,
@@ -707,6 +736,15 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                     Wire the task by 'camunda:expression' or 'camunda:delegateExpression' naming the \
                     @WorkflowTask method's task definition, e.g. ${%s}."""
                     .formatted(task.getId(), bpmnProcessId, describedSource, workflowModuleId, topic));
+          }
+          // a business rule task calling a DECISION is served by the engine, not by the
+          // application: the decision was deployed with this process, and asking for a
+          // @WorkflowTask method would make DMN unusable on this adapter. A business
+          // rule task wired by an expression is an ordinary VanillaBP task and falls
+          // through to the branches below
+          final var decisionRef = task.getAttributeValueNs(CAMUNDA_NS, "decisionRef");
+          if ((decisionRef != null) && !decisionRef.isBlank()) {
+            return;
           }
           final String rawExpression;
           final Camunda7TaskConnectable.Type type;
@@ -1042,6 +1080,15 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     bpmsProcessingContext
         .getResourcesByFilename()
         .forEach(deploymentBuilder::addModelInstance);
+    // the module's decision tables ride the SAME deployment: a business rule task
+    // binding its decision to the deployment finds it, and both are versioned together
+    final var builderWithProcesses = deploymentBuilder;
+    bpmsProcessingContext
+        .getDecisionsByFilename()
+        .forEach((
+            filename,
+            dmn) -> builderWithProcesses
+                .addInputStream(filename, new java.io.ByteArrayInputStream(dmn)));
 
     // deployWithResult reports the definitions the engine created, i.e. the version
     // it assigned to every model deployed now - they feed the version catalog, so the
@@ -1104,15 +1151,29 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
           }
         });
 
+    final var deployedDecisions = deployment.getDeployedDecisionDefinitions();
     log.info(
-        "Camunda7[{}]: deployed {} BPMN resource(s) of workflow module '{}' (tenant '{}') as deployment '{}'",
+        "Camunda7[{}]: deployed {} BPMN resource(s) and {} decision(s) of workflow module '{}' "
+            + "(tenant '{}') as deployment '{}'",
         adapterId,
         bpmsProcessingContext.getResourcesByFilename().size(),
+        bpmsProcessingContext.getDecisionsByFilename().size(),
         workflowModuleId,
         tenantId != null
             ? tenantId
             : "<none>",
         deployment.getId());
+    if ((deployedDecisions != null) && !deployedDecisions.isEmpty()) {
+      // the ids the ENGINE knows, which is what a business rule task has to name
+      log.info(
+          "Camunda7[{}]: the decisions of workflow module '{}' are known to the engine as {}",
+          adapterId,
+          workflowModuleId,
+          deployedDecisions
+              .stream()
+              .map(decision -> "%s (version %d)".formatted(decision.getKey(), decision.getVersion()))
+              .toList());
+    }
 
     // The deployment is done, so the version tags the application's
     // annotations name can be resolved against what the engine has now

@@ -53,12 +53,23 @@ public class Camunda7ScopingTest {
           <bpmn:serviceTask id="score" camunda:expression="${riskAssessment.scoreApplicant(execution)}"/>
           <bpmn:userTask id="approve" camunda:formKey="approveLoan"/>
           <bpmn:callActivity id="collectDocuments" calledElement="DocumentCollection"/>
+          <bpmn:businessRuleTask id="rate" camunda:decisionRef="creditRating" camunda:resultVariable="rating"/>
           <bpmn:endEvent id="end"/>
         </bpmn:process>
         <bpmn:process id="DocumentCollection" isExecutable="true">
           <bpmn:startEvent id="start2"/>
         </bpmn:process>
       </bpmn:definitions>
+      """;
+
+  private static final String DMN = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+          id="creditRatingDefinitions" name="creditRating" namespace="http://vanillabp.io/test">
+        <decision id="creditRating" name="Credit rating">
+          <decisionTable id="creditRatingTable" hitPolicy="UNIQUE"/>
+        </decision>
+      </definitions>
       """;
 
   private static BpmnModelInstance model() {
@@ -169,6 +180,47 @@ public class Camunda7ScopingTest {
     Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, null);
 
     assertEquals(List.of("DocumentCollection", "RiskAssessment"), processIds(model));
+
+  }
+
+  @Test
+  @DisplayName("a business rule task and its decision are renamed to the same string")
+  public void aBusinessRuleTaskFindsItsRenamedDecision() {
+
+    final var model = model();
+    final var scoping = new ScopingDouble(NameClashAvoidance.USE_PREFIX);
+
+    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, scoping);
+
+    // what the model points at has to be what the DMN file is deployed under, so both
+    // sides go through the same function of the core
+    final var decisionRef = first(model, org.camunda.bpm.model.bpmn.instance.BusinessRuleTask.class)
+        .getCamundaDecisionRef();
+    final var deployedDecisionId = io.vanillabp.integration.adapter.spi.DmnDecisionIds
+        .of(
+            io.vanillabp.integration.adapter.spi.DmnDecisionIds
+                .rewrite(
+                    DMN.getBytes(UTF_8),
+                    id -> scoping.scopedIdentifier(MODULE, id, ADAPTER_ID)))
+        .iterator()
+        .next();
+    assertEquals(deployedDecisionId, decisionRef);
+
+  }
+
+  @Test
+  @DisplayName("a decision addressed by an expression keeps it: the application owns that string")
+  public void aDecisionByExpressionStaysEvaluable() {
+
+    final var model = model();
+    first(model, org.camunda.bpm.model.bpmn.instance.BusinessRuleTask.class)
+        .setCamundaDecisionRef("${whichDecision}");
+
+    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new ScopingDouble(NameClashAvoidance.USE_PREFIX));
+
+    assertEquals(
+        "${whichDecision}",
+        first(model, org.camunda.bpm.model.bpmn.instance.BusinessRuleTask.class).getCamundaDecisionRef());
 
   }
 

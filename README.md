@@ -265,6 +265,14 @@ onto service-like tasks:
 every task runs in its own job transaction, aligning the embedded engine with
 remote BPMS.
 
+A business rule task calling a DECISION (`camunda:decisionRef`) is the one task the
+wiring leaves alone: the engine evaluates it against a decision table this module
+deployed, so there is no `@WorkflowTask` method to ask for. A business rule task wired by
+an expression stays an ordinary VanillaBP task. What the decision produced reaches a
+following task like any other variable, through the task's input mapping and a
+`@TaskParam` parameter - `Camunda7TaskProcessingIT#aDecisionTableOfTheModuleIsDeployedAndEvaluated`
+runs both rules of a table end to end.
+
 The other direction is validated as well, and no adapter has to remember it: a
 `@WorkflowTask` method which matches no task of any BPMN process of its workflow module
 ends the boot naming the method and the fix. The core runs that check itself
@@ -444,6 +452,22 @@ checks the task, and correlating checks the subscription. Each check happens BEF
 write, because a failing engine command marks the dispatcher's transaction rollback-only
 and would take the whole dispatch with it.
 `Camunda7TaskProcessingIT#awarenessAndPhaseTwoEdgeCases` walks the repeated dispatches.
+
+## Decision tables
+
+The `.dmn` files of a workflow module are deployed by the boot, in the SAME Camunda
+deployment as its BPMN files: same tenant, same duplicate filtering, one version step for
+process and decision together. A business rule task binding its decision to the deployment
+(`camunda:decisionRefBinding="deployment"`) therefore finds it, and so does the default
+`latest` binding.
+
+Under `use-prefix` the decision ids are rewritten like the process ids, and the
+`camunda:decisionRef` of the business rule tasks is rewritten with them, so both sides name
+the same string (`Camunda7ScopingTest#aBusinessRuleTaskFindsItsRenamedDecision`). A
+`decisionRef` given as an expression is the application's own string and stays untouched,
+like a call activity's `calledElement`. What this mode cannot do is follow a reference to a
+decision the module does not deploy: that one is renamed here and not in the engine. Deploy
+the decision with the module, or keep the tenant isolation of `by-adapter`.
 
 ## Keeping workflow modules apart
 
