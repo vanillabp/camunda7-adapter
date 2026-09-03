@@ -1,6 +1,7 @@
 package io.vanillabp.camunda7.wiring;
 
 import org.camunda.bpm.model.bpmn.BpmnModelInstance;
+import org.camunda.bpm.model.bpmn.instance.BusinessRuleTask;
 import org.camunda.bpm.model.bpmn.instance.CallActivity;
 import org.camunda.bpm.model.bpmn.instance.Error;
 import org.camunda.bpm.model.bpmn.instance.Escalation;
@@ -25,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
  * <tr><td>{@code bpmn:message name}</td><td>yes</td><td>message correlation resolves by name across definitions</td></tr>
  * <tr><td>{@code bpmn:signal name}, {@code bpmn:escalation escalationCode}</td><td>yes</td><td>broadcast by name</td></tr>
  * <tr><td>{@code bpmn:error errorCode}</td><td>yes</td><td>completeness with the other adapters - the application may raise it via {@code ProcessService#cancelTask}</td></tr>
+ * <tr><td>{@code camunda:decisionRef} of a business rule task</td><td>yes</td><td>it addresses a decision the module deploys, whose id was renamed the same way (see {@code DmnDecisionIds})</td></tr>
  * <tr><td>task definitions ({@code camunda:expression}, {@code camunda:delegateExpression}, {@code camunda:formKey})</td><td><b>no</b></td><td>they are PROCESS-LOCAL in Camunda 7: the expression is evaluated inside the process by VanillaBP's EL resolver, nothing subscribes to them engine-wide. Camunda 8 job types are the opposite case and ARE prefixed.</td></tr>
  * </table>
  * <p>
@@ -138,6 +140,21 @@ public final class Camunda7Scoping {
           }
           callActivity.setCalledElement(
               scoping.scopedProcessId(workflowModuleId, calledElement, adapterId));
+        });
+
+    // a business rule task addresses a decision BY ID, and the decisions this module
+    // deploys were renamed the same way while their files were read. An id given as an
+    // expression is the application's own string and stays untouched, like a call
+    // activity's
+    model
+        .getModelElementsByType(BusinessRuleTask.class)
+        .forEach(businessRuleTask -> {
+          final var decisionRef = businessRuleTask.getCamundaDecisionRef();
+          if ((decisionRef == null) || decisionRef.isBlank() || decisionRef.contains("${")) {
+            return;
+          }
+          businessRuleTask.setCamundaDecisionRef(
+              scoping.scopedIdentifier(workflowModuleId, decisionRef, adapterId));
         });
 
     model

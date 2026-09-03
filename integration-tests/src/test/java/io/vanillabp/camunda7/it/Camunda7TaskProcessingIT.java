@@ -63,7 +63,7 @@ public class Camunda7TaskProcessingIT {
           .of(
               "TaskProcess", "ErrorProcess", "FailProcess", "AsyncProcess", "MultiInstanceProcess",
               "AsyncCancelProcess", "CancelEventProcess", "MixedProcess", "UserTaskProcess",
-              "SilentUserTaskProcess", "MessageProcess"));
+              "SilentUserTaskProcess", "MessageProcess", "BusinessRuleProcess"));
 
   @Autowired
   private RuntimeService runtimeService;
@@ -107,6 +107,32 @@ public class Camunda7TaskProcessingIT {
           .createProcessInstanceByKey(bpmnProcessId)
           .processDefinitionTenantId(MODULE_ID)
           .businessKey(String.valueOf(saved.getId()))
+          .execute();
+      return saved.getId();
+    });
+
+  }
+
+  /**
+   * Starts the process reading the decision table, with the value the decision asks
+   * about as a process variable: what the aggregate contributes to the BPMS is the sync
+   * model's business and has tests of its own.
+   *
+   * @param approved What the decision decides on
+   * @return The aggregate's id
+   */
+  private Long startBusinessRuleProcess(
+      final boolean approved) {
+
+    return transactionTemplate.execute(status -> {
+      final var aggregate = new TaskTestAggregate();
+      aggregate.setApproved(approved);
+      final var saved = repository.save(aggregate);
+      runtimeService
+          .createProcessInstanceByKey("BusinessRuleProcess")
+          .processDefinitionTenantId(MODULE_ID)
+          .businessKey(String.valueOf(saved.getId()))
+          .setVariable("approved", approved)
           .execute();
       return saved.getId();
     });
@@ -938,6 +964,33 @@ public class Camunda7TaskProcessingIT {
                 .of(
                     io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "999999999",
                     io.vanillabp.integration.spi.PhaseTwoCall.ARG_BPMN_ERROR_CODE, "ERR"));
+
+  }
+
+  @Test
+  @DisplayName("A business rule task evaluates the module's decision table, and the result reaches the handler")
+  public void aDecisionTableOfTheModuleIsDeployedAndEvaluated() throws Exception {
+
+    // the decision table sits next to the BPMN files of this module, so the boot
+    // deployed it with them - nothing here deploys anything
+    final var approvedId = startBusinessRuleProcess(true);
+    awaitUntil(() -> processEnded(approvedId), "the approved BusinessRuleProcess to end");
+    assertEquals("rating=GOOD", repository.findById(approvedId).orElseThrow().getResults());
+
+    // the other rule of the same table, so it really is the decision deciding and not
+    // a constant somewhere
+    final var deniedId = startBusinessRuleProcess(false);
+    awaitUntil(() -> processEnded(deniedId), "the denied BusinessRuleProcess to end");
+    assertEquals("rating=POOR", repository.findById(deniedId).orElseThrow().getResults());
+
+    // and the engine holds it as a decision definition of this module's tenant
+    final var decision = processEngine
+        .getRepositoryService()
+        .createDecisionDefinitionQuery()
+        .decisionDefinitionKey("creditRating")
+        .tenantIdIn(MODULE_ID)
+        .singleResult();
+    assertNotNull(decision, "the decision table was deployed with the module's processes");
 
   }
 

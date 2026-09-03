@@ -14,8 +14,8 @@ import lombok.Getter;
  * pipeline and finally handed to
  * {@link io.vanillabp.camunda7.deployment.Camunda7DeploymentService#deployResources(String, Camunda7ProcessingContext)}.
  * <p>
- * It collects the parsed BPMN models to be deployed as a single Camunda 7 deployment
- * (using the workflow module ID as the Camunda tenant ID). Models are keyed by their
+ * It collects the parsed BPMN models and the module's decision tables, to be deployed as
+ * a single Camunda 7 deployment (using the workflow module ID as the Camunda tenant ID). Models are keyed by their
  * BPMN file name so that a file containing several executable processes contributes its
  * model only once (the deployment pipeline calls {@code prepareBpmn} once per executable
  * process, all sharing the same file-level model instance).
@@ -73,6 +73,29 @@ public class Camunda7ProcessingContext {
       final BpmnModelInstance model) {
 
     resourcesByFilename.putIfAbsent(filename, model);
+
+  }
+
+  /**
+   * The decision tables to be deployed with the module's processes, keyed by their file
+   * name. Bytes rather than a model: nothing here has to understand a decision, and the
+   * one thing which is rewritten - the decision id, where the module is scoped by
+   * prefixes - was rewritten while the file was read.
+   */
+  private final Map<String, byte[]> decisionsByFilename = new LinkedHashMap<>();
+
+  /**
+   * Remembers the given decision table for deployment.
+   *
+   * @param filename The DMN file name (used as the deployment resource name, so it keeps
+   *          its extension - Camunda 7 reads the resource type from it)
+   * @param dmn The file
+   */
+  public void addDecision(
+      final String filename,
+      final byte[] dmn) {
+
+    decisionsByFilename.putIfAbsent(filename, dmn);
 
   }
 

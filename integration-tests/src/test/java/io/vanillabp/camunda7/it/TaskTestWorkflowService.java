@@ -10,6 +10,7 @@ import io.vanillabp.spi.service.MultiInstanceTotal;
 import io.vanillabp.spi.service.TaskEvent;
 import io.vanillabp.spi.service.TaskException;
 import io.vanillabp.spi.service.TaskId;
+import io.vanillabp.spi.service.TaskParam;
 import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
@@ -31,7 +32,8 @@ import io.vanillabp.spi.service.WorkflowTask;
                         bpmnProcessId = "SilentUserTaskProcess"), @BpmnProcess(
                             bpmnProcessId = "MessageProcess"), @BpmnProcess(
                                 bpmnProcessId = "MessageStartProcess"), @BpmnProcess(
-                                    bpmnProcessId = "RollbackOnlyProcess")
+                                    bpmnProcessId = "RollbackOnlyProcess"), @BpmnProcess(
+                                        bpmnProcessId = "BusinessRuleProcess")
     })
 public class TaskTestWorkflowService {
 
@@ -52,6 +54,23 @@ public class TaskTestWorkflowService {
       final TaskTestAggregate aggregate) {
 
     return processService.startWorkflow(aggregate);
+
+  }
+
+  /**
+   * What a decision table produced reaches the application like any other process
+   * variable: the engine wrote the result of the business rule task into the workflow's
+   * scope, the task's input mapping brings it into the task's own scope, and the
+   * parameter names it. Nothing about DMN is visible here, which is the
+   * point - VanillaBP deploys the decision, the engine evaluates it.
+   */
+  @WorkflowTask(taskDefinition = "readTheRating")
+  public void readTheRating(
+      final TaskTestAggregate aggregate,
+      @TaskParam("rating") final String rating) {
+
+    aggregate.appendResult("rating="
+        + rating);
 
   }
 
