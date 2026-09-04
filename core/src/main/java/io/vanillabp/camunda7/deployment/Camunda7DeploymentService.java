@@ -217,6 +217,70 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * What this engine holds for a BPMN process this application declares without deploying
+   * a model under it - the old id of a renamed process, which the engine keeps with every
+   * version ever deployed under it and with the workflows still running on them.
+   * <p>
+   * It is the same catalog every deployed process of this adapter is registered with: it
+   * queries the definitions by the process key as the ENGINE knows it, so a prefix and a
+   * tenant reach the old id like any other.
+   */
+  @Override
+  public io.vanillabp.integration.adapter.spi.version.ProcessVersionCatalog processVersionCatalogOf(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    reportTasksOfADeclaredIdNobodySubscribed(workflowModuleId, bpmnProcessId);
+    return processVersions;
+
+  }
+
+  /**
+   * The workflow modules already told about the tasks of a declared id, so a declared id is
+   * spoken about once.
+   */
+  private final java.util.Set<String> reportedAsUnwired = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+  /**
+   * Says what this adapter can and cannot do for a BPMN process the application declares
+   * without deploying a model under it.
+   * <p>
+   * The engine evaluates the expressions of the model a workflow was STARTED with, and this
+   * adapter registers what those expressions resolve to per process it deployed. A workflow
+   * running under an id nothing was deployed under this boot therefore reaches its next task
+   * and finds nothing wired to it, which the engine answers with an incident once the
+   * retries are used up. What the declaration does reach is the check of the versions this
+   * engine still holds, which is why the catalog above is answered at all.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The declared BPMN process ID nothing was deployed under
+   */
+  private void reportTasksOfADeclaredIdNobodySubscribed(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    if (!reportedAsUnwired.add(workflowModuleId
+        + "|"
+        + bpmnProcessId)) {
+      return;
+    }
+    log.warn(
+        """
+            Camunda7[{}]: workflow module '{}' declares BPMN process '{}' without deploying a model \
+            under it - what renaming a BPMN process leaves behind. This adapter wires the tasks of the \
+            models it DEPLOYS, so a workflow still running under that id reaches its next task, finds \
+            nothing wired to it and ends in an incident. Until this engine serves a declared id as \
+            well, keep deploying the old model under its old id next to the new one, until the \
+            workflows running on it have ended - the start reports how many of them there still are. \
+            What the declaration already reaches is this check: the versions the engine holds under \
+            that id are read and their unserved tasks reported.""",
+        adapterId,
+        workflowModuleId,
+        bpmnProcessId);
+
+  }
+
+  /**
    * Fails the boot if a tenant is configured for this adapter id although no workflow
    * module is deployed into one, i.e. the mode says {@code none} or {@code use-prefix}
    * everywhere. Whether a tenant is what only {@code by-adapter} can use is this
