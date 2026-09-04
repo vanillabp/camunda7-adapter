@@ -2,6 +2,7 @@ package io.vanillabp.camunda7.deployment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -191,6 +192,33 @@ public class Camunda7DeploymentServiceTest {
     assertTrue(
         byDefault.getFirst().contains("vanillabp.adapters.myengine.accept-unscoped-identifiers: true"),
         byDefault::toString);
+
+  }
+
+  @Test
+  @DisplayName("A declared process nothing was deployed under is answered, and what it costs is said")
+  public void aDeclaredProcessIsAnsweredWithTheEnginesCatalog() {
+
+    final var service = serviceOfAdapterId("myengine");
+
+    final var reported = warningsOf(() -> assertNotNull(
+        service.processVersionCatalogOf(MODULE, "loan_approval"),
+        "the versions this engine holds under a declared id are what it can be asked about"));
+
+    assertEquals(1, reported.size(), reported::toString);
+    final var message = reported.getFirst();
+    assertTrue(message.contains("'loan_approval'"), () -> message);
+    // what this adapter cannot do yet has to be read before the rename is deployed,
+    // not after the first incident
+    assertTrue(message.contains("incident"), () -> message);
+    assertTrue(message.contains("keep deploying the old model under its old id"), () -> message);
+    // and what it does do: the check of the versions the engine still holds
+    assertTrue(message.contains("versions the engine holds"), () -> message);
+
+    assertEquals(
+        List.of(),
+        warningsOf(() -> service.processVersionCatalogOf(MODULE, "loan_approval")),
+        "a declared id is spoken about once");
 
   }
 
