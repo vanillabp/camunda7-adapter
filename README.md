@@ -647,6 +647,25 @@ deploy command names the version the engine assigned to every model, tag include
 `Camunda7ProcessVersionIT#theVersionDecidesWhichMethodRuns` holds the routing and
 `Camunda7StartupQuestionCostTest` the number of questions a start asks.
 
+### A process id which is only declared
+
+A workflow module may name a BPMN process id no file of it carries any more, which is how a
+renamed process keeps being served: the new id is the primary one and the old id is declared as
+a secondary process. Nothing is deployed under the old id, so the adapter never sees it while
+wiring, and only the core knows it was declared at all. The core therefore asks after the module
+was deployed (`AdapterDeploymentService#processVersionCatalogOf`), and this adapter answers with
+the catalog it answers everything else with, which costs one definition query for that id.
+
+What that reaches is the check: the versions the engine still holds under the old id are read
+like the older versions of any process, and the workflows running on them are counted. What it
+does not reach is the runtime. The engine evaluates the expressions of the model a workflow was
+STARTED with, and `Camunda7TaskRegistry` holds the connectables behind them per process this
+adapter deployed, so a workflow under the old id reaches its next task, finds nothing wired to
+it and ends in an incident. The adapter says so while the application starts and names the way
+through: keep deploying the old model under its old id until the workflows on it have ended.
+`Camunda7DeploymentServiceTest#aDeclaredProcessIsAnsweredWithTheEnginesCatalog` holds the answer
+and the warning.
+
 ### A suspended version counts, and how to get past it once
 
 Deleting a process definition removes it from this engine, so the startup check for old process
