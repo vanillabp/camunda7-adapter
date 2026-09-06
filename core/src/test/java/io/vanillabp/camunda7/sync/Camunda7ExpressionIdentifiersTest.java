@@ -67,6 +67,34 @@ public class Camunda7ExpressionIdentifiersTest {
   }
 
   @Test
+  @DisplayName("A conditional event's condition is not collected, although the class says it is")
+  public void aConditionalEventsConditionIsNotCollected() {
+
+    final var model = Bpmn
+        .readModelFromStream(
+            getClass()
+                .getClassLoader()
+                .getResourceAsStream("sync/ConditionalEventProcess.bpmn"));
+
+    // BEHAVIOUR UNDER EXAMINATION, NOT THE DESIRED ONE. The javadoc of the class under
+    // test promises "conditions of sequence flows and conditional events", and the second
+    // half of that sentence is not true: a conditional event carries its condition in a
+    // 'Condition' element, which extends Expression, while a sequence flow carries a
+    // 'ConditionExpression', which extends FormalExpression. The two are unrelated types,
+    // so asking the model for one never answers the other and a model whose ONLY
+    // expression is a conditional event yields nothing at all. Whoever fixes this deletes
+    // this case and asserts the name instead.
+    assertEquals(Set.of(), Camunda7ExpressionIdentifiers.of(model, "ConditionalEventProcess").keySet());
+
+    // the name is a variable by every other measure, so nothing but the element type
+    // keeps the check from seeing it
+    assertEquals(
+        Set.of("approvedByRiskOffice"),
+        Camunda7ExpressionIdentifiers.identifiersOf("${approvedByRiskOffice}"));
+
+  }
+
+  @Test
   @DisplayName("Keywords, functions, namespaces and member reads are not variables")
   public void whatIsNoVariable() {
 
