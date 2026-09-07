@@ -218,3 +218,30 @@ whose BPMS can suspend a definition - today only this one - and somebody searchi
 an emergency should find one switch instead of three. An application running two Camunda 7 adapter
 ids cannot take the exit for one of them alone. That is the price, and it is paid on purpose.
 `SuspendedProcessDefinitions` is the single place all of this lives.
+
+### 13. An extension reaches the engine through a customizer, not through the engine
+
+The Business Cockpit of version 1 got its engine hooks from Camunda's Spring Boot starter: an
+engine plugin carried its parse listener, and the starter's history eventing told it that a
+workflow had started or ended. This adapter builds the plain engine itself - both starters are
+version-locked to platform releases which have reached their end - so neither exists any more,
+and an extension had nowhere at all to put a listener.
+
+`Camunda7EngineCustomizer` is that place, and it is C7-specific SPI living in this repository
+rather than in the VanillaBP core: engine hooks belong to the engine's adapter, and a core which
+knew about BPMN parse listeners would be knowing about Camunda 7.
+
+Three things it can contribute, and each shape says something. Parse listeners go BEFORE or AFTER
+VanillaBP's own, because that is what decides the order of the listeners they attach to an
+element - a built-in task listener contributed "after" runs after the one the adapter attached,
+which is the order an extension tracking user tasks needs, and it is a property of Camunda's own
+pre/post parse-listener lists rather than of anything this adapter arranges
+(`Camunda7EngineCustomizerIT#theParseListenerSeesTheUserTasksAfterVanillaBp` is the pin). A
+history event handler is installed as a COMPOSITE next to the engine's own, so the history level
+and everything else about history stays as configured and history is still written. And
+`customize` hands over the configuration itself, for what these two do not cover.
+
+A customizer is asked once per configured adapter id, with that id. Two ids are two engines, and
+an extension registering something per engine has to be able to tell them apart - the same reason
+every other per-adapter object of this adapter exists once per id.
+

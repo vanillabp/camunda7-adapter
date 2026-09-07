@@ -225,6 +225,19 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
               .toList());
     }
 
+    // what an extension contributes to THIS engine: parse listeners before or after
+    // VanillaBP's own, and a history event handler installed next to the engine's
+    io.vanillabp.camunda7.engine.Camunda7EngineCustomizers
+        .apply(
+            adapterId,
+            configuration,
+            io.quarkus.arc.Arc
+                .container()
+                .listAll(io.vanillabp.camunda7.engine.Camunda7EngineCustomizer.class)
+                .stream()
+                .map(io.quarkus.arc.InstanceHandle::get)
+                .toList());
+
     this.processEngine = configuration.buildProcessEngine();
     this.jobExecutorLifecycle = new Camunda7JobExecutorLifecycle(
         adapterId, ((ProcessEngineConfigurationImpl) processEngine.getProcessEngineConfiguration()).getJobExecutor());

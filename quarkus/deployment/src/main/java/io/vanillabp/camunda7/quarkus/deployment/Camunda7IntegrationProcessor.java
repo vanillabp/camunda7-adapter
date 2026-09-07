@@ -90,4 +90,19 @@ class Camunda7IntegrationProcessor {
 
   }
 
+  /**
+   * Keeps the engine customizers of an extension alive. Nothing of the application
+   * injects them - the engine holder looks them up while it builds its engine - and ArC
+   * removes beans nobody injects.
+   *
+   * @return What must not be removed
+   */
+  @BuildStep
+  io.quarkus.arc.deployment.UnremovableBeanBuildItem keepEngineCustomizers() {
+
+    return io.quarkus.arc.deployment.UnremovableBeanBuildItem
+        .beanTypes(io.vanillabp.camunda7.engine.Camunda7EngineCustomizer.class);
+
+  }
+
 }

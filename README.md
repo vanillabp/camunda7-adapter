@@ -197,6 +197,32 @@ datasource. `Camunda7AdapterBootTest#configuredAdapterWithoutDataSourceFailsWith
 is that message, and `Camunda7UnknownDataSourceNameTest` the one for a `data-source-name`
 naming nothing.
 
+### What an extension may add to the engine
+
+An extension of VanillaBP - the Business Cockpit above all - needs hooks inside the engine: a
+BPMN parse listener to attach its own task listeners, and a way to learn that a workflow started
+or ended. Version 1 took both from Camunda's Spring Boot starter, which this adapter does not
+use. `Camunda7EngineCustomizer` (module `core`, package `io.vanillabp.camunda7.engine`) is what
+replaces it:
+
+|              Method               |                                What it contributes                                |
+|-----------------------------------|-----------------------------------------------------------------------------------|
+| `parseListenersBefore(adapterId)` | parse listeners running before VanillaBP's own — the model as its author wrote it |
+| `parseListenersAfter(adapterId)`  | parse listeners running after VanillaBP's own — the usual case                    |
+| `historyEventHandler(adapterId)`  | a handler for the engine's history events, installed next to the engine's own     |
+| `customize(adapterId, config)`    | the engine configuration itself, for what the three above do not cover            |
+
+Every method has a default, so an extension implements what it needs. A customizer is asked once
+per configured adapter id — two ids are two engines. On Spring Boot it is a bean of that type, on
+Quarkus a CDI bean; both engine holders collect them while they build their engine.
+
+Two properties are worth knowing. A built-in task listener attached by a parse listener
+contributed "after" runs AFTER the ones VanillaBP attaches, which is the order an extension
+tracking user tasks depends on. And the history event handler is installed as a
+`CompositeDbHistoryEventHandler`, so the engine writes its history exactly as before and the
+contributed handler sees every event as well. `Camunda7EngineCustomizerIT` holds both on Spring
+Boot, `Camunda7EngineCustomizerTest` on Quarkus.
+
 ### Two engines on one database: `table-prefix`
 
 `vanillabp.adapters.<id>.table-prefix` sets Camunda's `databaseTablePrefix`, which is how

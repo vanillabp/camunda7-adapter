@@ -323,6 +323,17 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
               .toList());
     }
 
+    // what an extension contributes to THIS engine: parse listeners before or after
+    // VanillaBP's own, and a history event handler installed next to the engine's
+    io.vanillabp.camunda7.engine.Camunda7EngineCustomizers
+        .apply(
+            adapterId,
+            configuration,
+            applicationContext
+                .getBeanProvider(io.vanillabp.camunda7.engine.Camunda7EngineCustomizer.class)
+                .orderedStream()
+                .toList());
+
     this.processEngine = configuration.buildProcessEngine();
     this.jobExecutorLifecycle = new Camunda7JobExecutorLifecycle(adapterId, this.jobExecutor);
 
