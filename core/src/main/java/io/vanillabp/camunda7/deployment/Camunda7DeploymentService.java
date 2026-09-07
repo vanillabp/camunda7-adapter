@@ -230,53 +230,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String workflowModuleId,
       final String bpmnProcessId) {
 
-    reportTasksOfADeclaredIdNobodySubscribed(workflowModuleId, bpmnProcessId);
     return processVersions;
-
-  }
-
-  /**
-   * The workflow modules already told about the tasks of a declared id, so a declared id is
-   * spoken about once.
-   */
-  private final java.util.Set<String> reportedAsUnwired = java.util.concurrent.ConcurrentHashMap.newKeySet();
-
-  /**
-   * Says what this adapter can and cannot do for a BPMN process the application declares
-   * without deploying a model under it.
-   * <p>
-   * The engine evaluates the expressions of the model a workflow was STARTED with, and this
-   * adapter registers what those expressions resolve to per process it deployed. A workflow
-   * running under an id nothing was deployed under this boot therefore reaches its next task
-   * and finds nothing wired to it, which the engine answers with an incident once the
-   * retries are used up. What the declaration does reach is the check of the versions this
-   * engine still holds, which is why the catalog above is answered at all.
-   *
-   * @param workflowModuleId The workflow module ID
-   * @param bpmnProcessId The declared BPMN process ID nothing was deployed under
-   */
-  private void reportTasksOfADeclaredIdNobodySubscribed(
-      final String workflowModuleId,
-      final String bpmnProcessId) {
-
-    if (!reportedAsUnwired.add(workflowModuleId
-        + "|"
-        + bpmnProcessId)) {
-      return;
-    }
-    log.warn(
-        """
-            Camunda7[{}]: workflow module '{}' declares BPMN process '{}' without deploying a model \
-            under it - what renaming a BPMN process leaves behind. This adapter wires the tasks of the \
-            models it DEPLOYS, so a workflow still running under that id reaches its next task, finds \
-            nothing wired to it and ends in an incident. Until this engine serves a declared id as \
-            well, keep deploying the old model under its old id next to the new one, until the \
-            workflows running on it have ended - the start reports how many of them there still are. \
-            What the declaration already reaches is this check: the versions the engine holds under \
-            that id are read and their unserved tasks reported.""",
-        adapterId,
-        workflowModuleId,
-        bpmnProcessId);
 
   }
 
@@ -756,6 +710,67 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         specs,
         null);
     return specs;
+
+  }
+
+  /**
+   * Collects the connectables of ONE version the engine holds under a declared BPMN process
+   * id, keyed so that a task several versions share is registered once.
+   * <p>
+   * A model the extraction refuses is skipped rather than allowed to end the boot. Refusing
+   * one is what a model wired by <code>camunda:topic</code> or by an expression VanillaBP
+   * does not understand gets, and the deployment of a MODEL THIS BOOT BRINGS should end over
+   * it - that is the same check. This model was deployed by an earlier generation of the
+   * application and nobody can change it any more, so the honest answer is one warning about
+   * the version which cannot be wired, while the versions which can are.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID nothing was deployed under
+   * @param scopedBpmnProcessId The process definition key the engine knows
+   * @param version The version the engine assigned
+   * @param definitionId The engine's process definition id of that version
+   * @param distinctConnectables Collects the connectables, by element, task definition and
+   *          type
+   */
+  private void wireTheModelOf(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String scopedBpmnProcessId,
+      final String version,
+      final String definitionId,
+      final Map<String, Camunda7TaskConnectable> distinctConnectables) {
+
+    final var specs = new LinkedList<BpmnTaskSpec>();
+    final var connectables = new LinkedList<Camunda7TaskConnectable>();
+    try {
+      collectTasks(
+          repositoryService.getBpmnModelInstance(definitionId),
+          workflowModuleId,
+          bpmnProcessId,
+          scopedBpmnProcessId,
+          "version %s".formatted(version),
+          specs,
+          connectables);
+    } catch (final RuntimeException e) {
+      log.warn(
+          """
+              Camunda7[{}]: version {} of the declared BPMN process '{}' (workflow module '{}') could \
+              not be wired, so a workflow still running on THAT version reaches its next task, finds \
+              nothing wired to it and ends in an incident. The other versions of that id are wired. \
+              Either deploy a model under the old id again until those workflows have ended, or \
+              complete them by other means.""",
+          adapterId,
+          version,
+          bpmnProcessId,
+          workflowModuleId,
+          e);
+      return;
+    }
+    connectables
+        .forEach(connectable -> distinctConnectables
+            .putIfAbsent(
+                "%s|%s|%s".formatted(connectable.elementId(), connectable.taskDefinition(), connectable.type()),
+                connectable));
 
   }
 
@@ -1249,6 +1264,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String workflowModuleId,
       final Camunda7ProcessingContext bpmsProcessingContext) {
 
+    // the workflows of a renamed BPMN process are served by the models the engine still
+    // holds under the old id - before the executor may hand any of their tasks out
+    wireTheProcessesNobodyDeployed(workflowModuleId);
+
     // asynchronous continuations (async-before/after, timers) run on the engine's
     // job executor - its activation is deferred to this point (the platform builds
     // the engine with the executor inactive)
@@ -1257,6 +1276,91 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         adapterId,
         workflowModuleId);
     workflowProcessingLifecycle.startWorkflowProcessing(workflowModuleId);
+
+  }
+
+  /**
+   * Wires the tasks of the models the engine still holds under a BPMN process id the
+   * application DECLARES without deploying anything under it - the old id of a renamed
+   * process, and the workflows which still run on it.
+   * <p>
+   * Camunda 7 evaluates the expressions of the model a workflow was STARTED with, so what
+   * such a workflow needs is not a subscription but the connectables of ITS model: the
+   * expression text of every task, keyed by the process id the engine reports and by the
+   * element the expression is evaluated at. That model is right here, in the engine's own
+   * repository, and reading it is what tells the difference between a task which completes
+   * when its expression returns and one which stays open - a difference nothing outside a
+   * model can be asked about, which is why what the core names as served is not enough on its
+   * own here: it says what to compose an identifier from, and a connectable is more than an
+   * identifier.
+   * <p>
+   * Every version the engine holds is wired, because a workflow may sit on any of them, and
+   * a task which two versions share is registered once. The wiring validation is NOT run
+   * over those models: they were deployed by an earlier generation of this application, a
+   * task the application dropped in the meantime is the core's startup check to report, and
+   * ending the boot over a model nobody can change any more would be the wrong answer to it.
+   *
+   * @param workflowModuleId The workflow module which is about to process workflows
+   */
+  private void wireTheProcessesNobodyDeployed(
+      final String workflowModuleId) {
+
+    workflowTaskWiring
+        .taskWiringOfProcessesNobodyDeployed(workflowModuleId)
+        .keySet()
+        .forEach(bpmnProcessId -> wireTheVersionsHeldUnder(workflowModuleId, bpmnProcessId));
+
+  }
+
+  /**
+   * Wires every version the engine holds under one declared BPMN process id and says what
+   * came of it.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID nothing was deployed under
+   */
+  private void wireTheVersionsHeldUnder(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
+    final var definitionIdsByVersion = processVersions.definitionIdsHeldUnder(workflowModuleId, bpmnProcessId);
+    if (definitionIdsByVersion.isEmpty()) {
+      // either the last workflow of the old id ended and the engine forgot the
+      // definitions, or the declared id is misspelled - the core's check says which,
+      // naming the ids this module deploys
+      log.debug(
+          "Camunda7[{}]: the engine holds no process definition under the declared BPMN process '{}' "
+              + "of workflow module '{}', so there is nothing of it to wire",
+          adapterId,
+          bpmnProcessId,
+          workflowModuleId);
+      return;
+    }
+    final var distinctConnectables = new java.util.LinkedHashMap<String, Camunda7TaskConnectable>();
+    definitionIdsByVersion
+        .forEach((
+            version,
+            definitionId) -> wireTheModelOf(
+                workflowModuleId,
+                bpmnProcessId,
+                scopedBpmnProcessId,
+                version,
+                definitionId,
+                distinctConnectables));
+    distinctConnectables.values().forEach(taskRegistry::register);
+    // a process without any task needs the way back from the engine's definition key too:
+    // the version of an execution and the workflow module it belongs to are read from here
+    taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
+    log.info(
+        "Camunda7[{}]: wired {} task(s) of the {} version(s) the engine holds under the declared BPMN "
+            + "process '{}' (workflow module '{}'), so the workflows still running on them keep being "
+            + "served",
+        adapterId,
+        distinctConnectables.size(),
+        definitionIdsByVersion.size(),
+        bpmnProcessId,
+        workflowModuleId);
 
   }
 

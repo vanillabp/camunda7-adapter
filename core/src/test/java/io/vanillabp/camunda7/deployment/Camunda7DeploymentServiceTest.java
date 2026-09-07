@@ -196,7 +196,7 @@ public class Camunda7DeploymentServiceTest {
   }
 
   @Test
-  @DisplayName("A declared process nothing was deployed under is answered, and what it costs is said")
+  @DisplayName("A declared process nothing was deployed under is answered with the engine's catalog")
   public void aDeclaredProcessIsAnsweredWithTheEnginesCatalog() {
 
     final var service = serviceOfAdapterId("myengine");
@@ -205,20 +205,11 @@ public class Camunda7DeploymentServiceTest {
         service.processVersionCatalogOf(MODULE, "loan_approval"),
         "the versions this engine holds under a declared id are what it can be asked about"));
 
-    assertEquals(1, reported.size(), reported::toString);
-    final var message = reported.getFirst();
-    assertTrue(message.contains("'loan_approval'"), () -> message);
-    // what this adapter cannot do yet has to be read before the rename is deployed,
-    // not after the first incident
-    assertTrue(message.contains("incident"), () -> message);
-    assertTrue(message.contains("keep deploying the old model under its old id"), () -> message);
-    // and what it does do: the check of the versions the engine still holds
-    assertTrue(message.contains("versions the engine holds"), () -> message);
-
     assertEquals(
         List.of(),
-        warningsOf(() -> service.processVersionCatalogOf(MODULE, "loan_approval")),
-        "a declared id is spoken about once");
+        reported,
+        "the versions of a declared id are a question, not a finding - what the wiring of those "
+            + "models comes to is said where it happens");
 
   }
 

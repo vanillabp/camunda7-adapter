@@ -79,6 +79,45 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   private final Map<String, String> deployedVersions = new ConcurrentHashMap<>();
 
   /**
+   * The engine's definition id per version, per (workflow module, BPMN process) and in
+   * deployment order - what the definition query brought back, kept whole so that reading
+   * the MODELS of a process costs no query of its own.
+   * <p>
+   * It holds a suspended definition as well, unlike what {@link #deployedVersionsOf}
+   * answers: the workflows of such a version keep running, so whoever wires their model
+   * has to see it.
+   */
+  private final Map<String, Map<String, String>> definitionIdsByProcess = new ConcurrentHashMap<>();
+
+  /**
+   * The engine's definition id per version of one BPMN process, oldest version first -
+   * how the models the engine still holds are reached, above all the ones of a BPMN
+   * process id the application declares without deploying anything under it.
+   * <p>
+   * The definition query behind it runs once per process and boot, because
+   * {@link #deployedVersionsOf} caches it and this method asks it rather than querying
+   * again - which is the shape decision 10 in the repository's DECISIONS.md asks for.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @return The definition ids by version, oldest first; empty where the engine holds
+   *         nothing under that id
+   */
+  public Map<String, String> definitionIdsHeldUnder(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    deployedVersionsOf(workflowModuleId, bpmnProcessId);
+    return definitionIdsByProcess
+        .getOrDefault(
+            workflowModuleId
+                + "|"
+                + bpmnProcessId,
+            Map.of());
+
+  }
+
+  /**
    * Reads the tasks of a model the engine holds - the deployment service' own
    * extraction.
    */
@@ -336,6 +375,13 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
     // takes it out of the answer: its workflows keep running and keep reporting the
     // version they are on
     definitions.forEach(definition -> remember(workflowModuleId, bpmnProcessId, definition));
+    final var byVersion = new java.util.LinkedHashMap<String, String>();
+    definitions
+        .forEach(definition -> byVersion.put(String.valueOf(definition.getVersion()), definition.getId()));
+    definitionIdsByProcess
+        .put(workflowModuleId
+            + "|"
+            + bpmnProcessId, byVersion);
     return SuspendedProcessDefinitions
         .definitionsWhichStillCount(adapterId, workflowModuleId, bpmnProcessId, definitions)
         .stream()

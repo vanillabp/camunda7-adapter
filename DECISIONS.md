@@ -219,7 +219,43 @@ an emergency should find one switch instead of three. An application running two
 ids cannot take the exit for one of them alone. That is the price, and it is paid on purpose.
 `SuspendedProcessDefinitions` is the single place all of this lives.
 
-### 13. An extension reaches the engine through a customizer, not through the engine
+### 13. The workflows of a renamed process are served from the models the engine still holds
+
+A workflow module may declare a BPMN process id it deploys nothing under, which is how a renamed
+process keeps being served. Camunda 7 evaluates the expressions of the model a workflow was
+STARTED with, so those workflows need the connectables of a model this application no longer has:
+the expression text of every task, the element it is evaluated at, and the way the task is wired.
+The engine has that model in its own repository, so the adapter reads it from there, version by
+version, through the same extraction a deployed model goes through.
+
+The alternative was to build the connectables from what the application says it serves. The core
+names that (`taskWiringOfProcessesNobodyDeployed`), and it is enough on a BPMS where a
+subscription is a name. Here it is not, because a connectable is more than a name. A
+`camunda:expression` task completes when its handler returns while a `camunda:delegateExpression`
+task can stay open for a `@TaskId` method, the difference decides what the EL resolver hands the
+engine back, and no list of task definitions says which of the two a task is. Guessing it would
+either close a task which has to stay open or keep one open which nobody will complete.
+
+Two things follow from reading the models. Every version the engine holds is wired, because a
+workflow may sit on any of them, and a task which several versions share is registered once. And
+the wiring validation is NOT run over them: they were deployed by an earlier generation of this
+application, a task it dropped in the meantime is what the check for old process versions reports
+with the count of the workflows affected, and ending a boot over a model nobody can change any
+more would answer that finding with the wrong instrument.
+
+A model the extraction refuses is skipped with a warning rather than allowed to end the boot. The
+same extraction refuses an external task and an expression VanillaBP does not understand, and a
+model THIS BOOT brings should be refused that way - it can still be fixed. A model deployed years
+ago cannot, so the versions which can be wired are wired and the one which cannot is named
+together with what a workflow on it walks into.
+
+The definition query this needs is the one the version check runs anyway. `fetchDeployedVersions`
+reads every version of the process and now keeps the definition ids by version, so reading the
+models costs no query of its own, which is what decision 10 asks for.
+`Camunda7DeclaredProcessWiringTest` holds the task kinds and the skipped version,
+`Camunda7RenamedProcessIT` the whole thing against a running engine.
+
+### 14. An extension reaches the engine through a customizer, not through the engine
 
 The Business Cockpit of version 1 got its engine hooks from Camunda's Spring Boot starter: an
 engine plugin carried its parse listener, and the starter's history eventing told it that a

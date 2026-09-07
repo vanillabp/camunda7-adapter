@@ -682,15 +682,31 @@ wiring, and only the core knows it was declared at all. The core therefore asks 
 was deployed (`AdapterDeploymentService#processVersionCatalogOf`), and this adapter answers with
 the catalog it answers everything else with, which costs one definition query for that id.
 
-What that reaches is the check: the versions the engine still holds under the old id are read
-like the older versions of any process, and the workflows running on them are counted. What it
-does not reach is the runtime. The engine evaluates the expressions of the model a workflow was
-STARTED with, and `Camunda7TaskRegistry` holds the connectables behind them per process this
-adapter deployed, so a workflow under the old id reaches its next task, finds nothing wired to
-it and ends in an incident. The adapter says so while the application starts and names the way
-through: keep deploying the old model under its old id until the workflows on it have ended.
-`Camunda7DeploymentServiceTest#aDeclaredProcessIsAnsweredWithTheEnginesCatalog` holds the answer
-and the warning.
+That reaches the check: the versions the engine still holds under the old id are read like the
+older versions of any process, and the workflows running on them are counted.
+
+The runtime is the second half, and it needs more than a catalog. The engine evaluates the
+expressions of the model a workflow was STARTED with, and `Camunda7TaskRegistry` holds the
+connectables behind them per process this adapter WIRED, so nothing was wired for the old id and
+a workflow on it used to reach its next task, find nothing and end in an incident. It is wired
+now: `startWorkflowProcessing` asks the core which ids the module declares without a model
+(`WorkflowTaskWiring#taskWiringOfProcessesNobodyDeployed`) and reads the model of every
+version the engine holds under each of them, straight out of the engine's own repository, through
+the same extraction a deployed model goes through. The connectables come from those models
+because the type of a task lives there and nowhere else: a `camunda:expression` task completes
+when its handler returns, while a `camunda:delegateExpression` task can stay open for a
+`@TaskId` method, and no list of task definitions says which of the two a task is. A task two
+versions share is registered once, and the wiring validation is not run over those models -
+a task the application dropped in the meantime is what the version check reports, and ending the
+boot over a model nobody can change any more would be the wrong answer to it.
+A model the extraction refuses is skipped with one warning naming the version, since nobody can
+change a model deployed years ago the way they could change one this boot brings.
+[Decision 13](./DECISIONS.md#13-the-workflows-of-a-renamed-process-are-served-from-the-models-the-engine-still-holds)
+carries the reasoning for all of it, `Camunda7DeclaredProcessWiringTest` holds the task kinds and
+the skipped version. `Camunda7RenamedProcessIT` is the acceptance test: a workflow started
+under the old id, an application which deploys only the new one, and the workflow running to its
+end through the methods of that application, its open `camunda:delegateExpression` task
+included.
 
 ### A suspended version counts, and how to get past it once
 
