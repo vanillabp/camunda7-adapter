@@ -51,3 +51,30 @@ scalar variable, and `${amount > 1000}` compares numbers as it did before.
 The [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#nested-values-and-why-java-serialization-is-not-an-option)
 of the wiki carries the narrated version, and why a nested value travels in the engine's own format
 rather than as a JSON string is decision 9 in the repository's [`DECISIONS.md`](./DECISIONS.md).
+
+### A renamed BPMN process no longer needs its old model deployed
+
+An application may declare a BPMN process id it deploys nothing under
+(`@WorkflowService(secondaryBpmnProcesses = ...)`), which is how a renamed process keeps being
+served. On version 1 that declaration reached the handler registry and not the engine: this
+adapter wired the tasks of the models it deployed, so a workflow still running under the old id
+reached its next task, found nothing wired to it and ended in an incident. The way through was to
+keep the old BPMN file next to the new one until those workflows had ended.
+
+Version 2 wires the old id as well. While a workflow module starts processing, the adapter asks
+the core which ids it declares without a model and reads the model of every version the engine
+still holds under each of them, out of the engine's own repository. Those workflows then reach the
+`@WorkflowTask` methods of the current application, which is what the declaration always promised.
+
+Nothing has to be configured for it and nothing has to be removed. An application which keeps the
+old model deployed is unaffected, since then nothing is declared without a model. An application
+which deleted the old file gains one line per declared id in the log of every start, saying how
+many versions were wired, and it costs no query beyond the one the check for old process versions
+runs anyway.
+
+Two things are worth knowing while the declaration stands. The engine has to still hold the old
+definitions, which it does as long as workflows run on them, and a version whose tasks the
+application dropped is reported by the check for old process versions with the number of workflows
+it affects, exactly as for the older versions of any process. The
+[recipe for a rename](https://github.com/vanillabp/adapter-platform-integration/wiki/Renaming-a-BPMN-process)
+is on the platform's wiki.
