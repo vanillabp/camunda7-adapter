@@ -44,6 +44,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * case naming the expression, instead of as a workflow which silently takes the wrong
  * branch in somebody's application.
  * <p>
+ * Where the silence is the ENGINE's own and no adapter can change it, the finding moved to
+ * the startup check rather than to the runtime. Those cases still assert the silence here,
+ * and {@code Camunda7UnsharedExpressionCheckIT} asserts that the boot named the expression
+ * which will be quiet.
+ * <p>
  * One subclass per serialization world, because the format is engine configuration and
  * therefore needs a Spring context of its own. There is no third subclass for
  * {@code application/xstream}: the artifact {@code org.camunda:camunda-xstream} which
@@ -335,11 +340,11 @@ public abstract class AbstractNestedExpressionsIT {
         awaitIncidentAt(workflow, "EC_Gw_C07").contains("Unknown property used in expression"),
         awaitIncidentAt(workflow, "EC_Gw_C07"));
 
-    // BEHAVIOUR UNDER EXAMINATION, NOT THE DESIRED ONE. C08 reads an unshared nested
-    // attribute and C21 navigates into an absent nested object. Both are null, both
-    // comparisons are false, and the gateway takes its default flow without a word. This
-    // is the silent failure the whole suite exists for, and the prompt about the
-    // deployment check never seeing past the first name of a path is what will change it.
+    // C08 reads an unshared nested attribute and C21 navigates into an absent nested
+    // object. Both are null, both comparisons are false, and the gateway takes its default
+    // flow without a word. The RUNTIME is silent here and stays that way, which is why the
+    // startup check reads the whole path now and names both of these while the application
+    // boots (Camunda7UnsharedExpressionCheckIT).
     awaitActivityReached(workflow, "EC_False_C08");
     awaitActivityReached(workflow, "EC_False_C21");
     assertNoIncidentAt(workflow, "EC_Gw_C08");
@@ -408,15 +413,15 @@ public abstract class AbstractNestedExpressionsIT {
         awaitIncidentAt(workflow, "EX_P19").contains("condition expression returns null"),
         awaitIncidentAt(workflow, "EX_P19"));
 
-    // BEHAVIOUR UNDER EXAMINATION, NOT THE DESIRED ONE. Every conditional event behaviour
-    // of Camunda 7 evaluates through UelExpressionCondition.tryEvaluate, which answers
-    // false for a property-not-found instead of failing. So P03 is silent here while the
-    // very same expression is an incident on a gateway, and P02, whose key is simply
-    // absent, is silent for the older reason. Both events were entered and wait for a
-    // condition which can never become true. Two prompts meet in these two lines: the one
-    // about the deployment check never seeing a conditional event's condition, which
-    // would at least name the model, and the one about the check never looking past the
-    // first name of a path, which is what P02 needs.
+    // Every conditional event behaviour of Camunda 7 evaluates through
+    // UelExpressionCondition.tryEvaluate, which answers false for a property-not-found
+    // instead of failing. So P03 is silent here while the very same expression is an
+    // incident on a gateway, and P02, whose key is simply absent, is silent for the older
+    // reason. Both events were entered and wait for a condition which can never become
+    // true, and neither will ever say so. This is the engine's behaviour and no adapter can
+    // change it, so the startup check is where both are named instead: it reads the
+    // condition of a conditional event and the whole path it navigates
+    // (Camunda7UnsharedExpressionCheckIT).
     awaitWaitingAt(workflow, "EX_P03");
     awaitWaitingAt(workflow, "EX_P02");
     assertNoIncidentAt(workflow, "EX_P03");
@@ -463,10 +468,11 @@ public abstract class AbstractNestedExpressionsIT {
         awaitIncidentSaying(workflow, "ENGINE-02024").contains("didn't resolve to type 'Collection'"),
         awaitIncidentSaying(workflow, "ENGINE-02024"));
 
-    // BEHAVIOUR UNDER EXAMINATION, NOT THE DESIRED ONE. A completion condition which is
-    // always false lets the multi-workflow run to its natural end, so the branch looks
-    // exactly like a branch which did what it was told. The prompt about the deployment
-    // check never looking past the first name of a path is what will change it.
+    // A completion condition which is always false lets the multi-workflow run to its
+    // natural end, so the branch looks exactly like a branch which did what it was told.
+    // The startup check reads that path now, and where the same path is also read by a
+    // conditional event of the model it is reported there, because that is the placement a
+    // developer has the least chance of noticing.
     awaitActivityReached(workflow, "EX_End_P16");
     assertNoIncidentAt(workflow, "EX_P16");
 
@@ -523,9 +529,10 @@ public abstract class AbstractNestedExpressionsIT {
           .getId();
     });
 
-    // BEHAVIOUR UNDER EXAMINATION, NOT THE DESIRED ONE. The condition reads an unshared
-    // nested attribute, is false and stays false, so the event subprocess never runs. The
-    // workflow itself looks healthy, which is what makes this the hardest shape to find.
+    // The condition reads an unshared nested attribute, is false and stays false, so the
+    // event subprocess never runs. The workflow itself looks healthy, which is what makes
+    // this the hardest shape to find at runtime and the reason the startup check names
+    // 'EQ_SubStart' while the application boots (Camunda7UnsharedExpressionCheckIT).
     awaitWaitingAt(workflow, "EQ_Park");
     assertNoIncidentAt(workflow, "EQ_Park");
     assertActivityNeverReached(workflow, "EQ_SubStart");

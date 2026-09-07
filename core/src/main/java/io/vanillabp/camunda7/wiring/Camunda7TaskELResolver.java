@@ -85,19 +85,6 @@ public class Camunda7TaskELResolver extends ELResolver {
 
   private final Camunda7TaskRegistry taskRegistry;
 
-  /**
-   * Needed to translate a {@code TaskException}'s error code into what the
-   * engine knows. Settable - the resolver is created by the engine configuration.
-   */
-  @lombok.Setter
-  private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
-
-  /**
-   * The adapter id this resolver serves.
-   */
-  @lombok.Setter
-  private String adapterId;
-
   private final WorkflowTaskInvoker workflowTaskInvoker;
 
   public Camunda7TaskELResolver(
@@ -172,7 +159,7 @@ public class Camunda7TaskELResolver extends ELResolver {
     if (connectable.isPresent()) {
       context.setPropertyResolved(true);
       final var behavior = new Camunda7WorkflowTaskBehavior(
-          connectable.get(), workflowTaskInvoker, scoping, adapterId, taskRegistry);
+          connectable.get(), workflowTaskInvoker, taskRegistry.getScoping(), taskRegistry.getAdapterId(), taskRegistry);
       if (connectable.get().type() == Camunda7TaskConnectable.Type.DELEGATE_EXPRESSION) {
         // the engine treats the resolved object as the task's activity behavior
         return behavior;
@@ -275,7 +262,7 @@ public class Camunda7TaskELResolver extends ELResolver {
             where this adapter writes the shared values. A number which keeps growing means new \
             workflows run into the same gap, and then the model reads something which is not \
             shared - the startup names those expressions.""",
-        adapterId,
+        taskRegistry.getAdapterId(),
         usage().atLeast()
             ? "at least "
             : "",
@@ -351,7 +338,7 @@ public class Camunda7TaskELResolver extends ELResolver {
             it is shared (@SyncWithBPMS on the getter, or an aggregate class which shares \
             everything - the default). Workflows which were already running when you upgraded keep \
             working through this fallback until they end.""",
-        adapterId,
+        taskRegistry.getAdapterId(),
         propertyName,
         bpmnProcessId,
         workflowModuleId);

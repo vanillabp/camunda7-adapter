@@ -1,38 +1,48 @@
 package io.vanillabp.camunda7.sync;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.camunda.bpm.model.bpmn.BpmnModelInstance;
 import org.camunda.bpm.model.bpmn.instance.CompletionCondition;
+import org.camunda.bpm.model.bpmn.instance.Condition;
 import org.camunda.bpm.model.bpmn.instance.ConditionExpression;
 import org.camunda.bpm.model.bpmn.instance.LoopCardinality;
 import org.camunda.bpm.model.bpmn.instance.MultiInstanceLoopCharacteristics;
 import org.camunda.bpm.model.bpmn.instance.Process;
+import org.camunda.bpm.model.bpmn.instance.SequenceFlow;
 import org.camunda.bpm.model.bpmn.instance.TimerEventDefinition;
 import org.camunda.bpm.model.xml.instance.ModelElementInstance;
 
 /**
- * Reads the identifiers the expressions of a BPMN process rely on - the input of the
- * startup check: a name which is an attribute of the workflow aggregate but is not
- * shared with the BPMS always evaluates to <code>null</code>, and Camunda 7 then behaves
- * as if the condition was false. No exception, no log line, the default flow.
+ * Reads the attribute PATHS the expressions of a BPMN process rely on - the input of the
+ * startup check: a path whose segment is not shared with the BPMS always evaluates to
+ * <code>null</code>, and what Camunda 7 does with that null depends on where the
+ * expression sits, which is why every path is reported with its {@link Placement}.
  * <p>
- * What is read: conditions of sequence flows and conditional events, the definitions of
- * timers, and the cardinality, collection and completion condition of multi-instance
- * elements. Everything else a model can carry either names a wired task (which the EL
+ * What is read: the conditions of sequence flows, the conditions of conditional events
+ * (an intermediate catching event, a boundary event, the start event of an event
+ * subprocess), the definitions of timers, and the cardinality, collection and completion
+ * condition of multi-instance elements. What is deliberately NOT read: the input
+ * expressions of a business rule task, so a decision reading something unshared is found
+ * by the engine rather than here; and everything which names a wired task (which the EL
  * resolver serves) or is an input mapping, where a missing value shows up as an incident
  * rather than as a silent decision.
  * <p>
- * The extraction is deliberately conservative: it collects TOP-LEVEL names of
+ * The extraction is conservative about what it calls a path. It collects
  * <code>${...}</code> and <code>#{...}</code> expressions and skips what is clearly not a
- * variable - EL keywords, function calls, and members read from something else
- * (<code>a.b</code> yields <code>a</code>, never <code>b</code>). An expression it cannot
- * make sense of contributes nothing, because a wrong warning about a model which works is
- * worse than a missing one.
+ * variable read: EL keywords, function calls and namespace prefixes. A path ENDS where a
+ * method call or an indexed access begins, so <code>order.status.name()</code> is read as
+ * <code>order.status</code> and <code>order.items[0].price</code> as
+ * <code>order.items</code>: what such a call resolves to depends on the runtime class the
+ * engine's serialization produced, and the check judges declared types only. An
+ * expression it cannot make sense of contributes nothing, because a wrong warning about a
+ * model which works is worse than a missing one.
  */
 public final class Camunda7ExpressionIdentifiers {
 
@@ -42,13 +52,17 @@ public final class Camunda7ExpressionIdentifiers {
   private static final Pattern EXPRESSION = Pattern.compile("[#$]\\{([^}]*)\\}");
 
   /**
-   * A Java-ish identifier, possibly followed by what makes it a member access or a call.
+   * A dotted chain of Java-ish identifiers, followed by what ends it: an opening
+   * parenthesis or a colon make the last segment a call rather than a value, a bracket
+   * begins an indexed access.
    */
-  private static final Pattern IDENTIFIER = Pattern
-      .compile("(?<![\\w.$:])([A-Za-z_$][\\w$]*)\\s*(?<call>[(:])?");
+  private static final Pattern PATH = Pattern
+      .compile(
+          "(?<![\\w.$:])([A-Za-z_$][\\w$]*(?:\\s*\\.\\s*[A-Za-z_$][\\w$]*)*)\\s*(?<ends>[(:\\[])?");
 
   /**
-   * Names which are part of the language rather than a variable.
+   * Names which are part of the language rather than a variable. A path beginning with
+   * one of them is none of this check's business.
    */
   private static final Set<String> KEYWORDS = Set
       .of(
@@ -61,50 +75,108 @@ public final class Camunda7ExpressionIdentifiers {
   }
 
   /**
-   * The identifiers read by the expressions of one BPMN process, mapped to where they
-   * were read - the element's ID and the expression itself, so a message can name both.
+   * Where in a model an expression sits, which is what decides what the engine does with
+   * a <code>null</code> it produces. Camunda 7 is loud in some of these places and
+   * silent in others, and the silent ones are why the check exists.
+   */
+  public enum Placement {
+
+    /**
+     * The condition of a conditional event. Camunda 7 evaluates it with
+     * {@code tryEvaluate}, which answers false for a property the value has not got, so
+     * the event simply keeps waiting.
+     */
+    CONDITIONAL_EVENT,
+
+    /**
+     * The completion condition of a multi-instance element. A condition which is never
+     * true lets every instance run, so the element ends the way it would without one.
+     */
+    MULTI_INSTANCE_COMPLETION_CONDITION,
+
+    /**
+     * The condition of a sequence flow leaving an element which has a default flow.
+     */
+    SEQUENCE_FLOW_CONDITION,
+
+    /**
+     * The condition of a sequence flow leaving an element without a default flow, where
+     * a condition nothing satisfies leaves the engine with nowhere to go.
+     */
+    SEQUENCE_FLOW_CONDITION_WITHOUT_DEFAULT_FLOW,
+
+    /**
+     * The duration, date or cycle of a timer.
+     */
+    TIMER,
+
+    /**
+     * The cardinality of a multi-instance element.
+     */
+    MULTI_INSTANCE_CARDINALITY,
+
+    /**
+     * The collection a multi-instance element iterates.
+     */
+    MULTI_INSTANCE_COLLECTION
+
+  }
+
+  /**
+   * The attribute paths read by the expressions of one BPMN process, mapped to where
+   * they were read - the element's ID, the expression itself and the placement, so a
+   * message can name all three.
+   * <p>
+   * A path read by several elements is reported ONCE, with the placement which fails
+   * most quietly: the order the types are collected in puts the conditional event and
+   * the completion condition first, because a timer reading the same path raises an
+   * incident the developer cannot miss anyway.
    *
    * @param model The deployed model
    * @param scopedBpmnProcessId The process ID as the engine knows it
-   * @return The identifiers with their origin, in the order found
+   * @return The paths with their origin, segments separated by dots, in the order found
    */
   public static Map<String, Origin> of(
       final BpmnModelInstance model,
       final String scopedBpmnProcessId) {
 
-    final var identifiers = new LinkedHashMap<String, Origin>();
+    final var paths = new LinkedHashMap<String, Origin>();
     final var process = model.getModelElementById(scopedBpmnProcessId);
     if (!(process instanceof Process)) {
-      return identifiers;
+      return paths;
     }
-    collect(model, ConditionExpression.class, process, identifiers);
-    collect(model, TimerEventDefinition.class, process, identifiers);
-    collect(model, LoopCardinality.class, process, identifiers);
-    collect(model, CompletionCondition.class, process, identifiers);
-    collect(model, MultiInstanceLoopCharacteristics.class, process, identifiers);
-    return identifiers;
+    collect(model, Condition.class, process, paths);
+    collect(model, CompletionCondition.class, process, paths);
+    collect(model, ConditionExpression.class, process, paths);
+    collect(model, TimerEventDefinition.class, process, paths);
+    collect(model, LoopCardinality.class, process, paths);
+    collect(model, MultiInstanceLoopCharacteristics.class, process, paths);
+    return paths;
 
   }
 
   /**
-   * Where an identifier was read.
+   * Where a path was read.
    *
    * @param elementId The ID of the BPMN element carrying the expression
    * @param expression The expression as the model has it
+   * @param placement Where in the model that expression sits
    */
-  public record Origin(String elementId, String expression) {
+  public record Origin(
+                       String elementId,
+                       String expression,
+                       Placement placement) {
   }
 
   /**
    * Collects from the elements of one type, reading the texts a model puts an expression
-   * into - the element's own text (a condition, a timer, a cardinality) and the Camunda
-   * attribute naming a multi-instance collection.
+   * into.
    */
   private static void collect(
       final BpmnModelInstance model,
       final Class<? extends ModelElementInstance> type,
       final ModelElementInstance process,
-      final Map<String, Origin> identifiers) {
+      final Map<String, Origin> paths) {
 
     model
         .getModelElementsByType(model.getModel().getType(type))
@@ -112,27 +184,97 @@ public final class Camunda7ExpressionIdentifiers {
         .filter(element -> belongsTo(element, process))
         .forEach(element -> {
           final var elementId = elementIdOf(element);
-          textsOf(element).forEach(text -> identifiersOf(text)
-              .forEach(name -> identifiers.putIfAbsent(name, new Origin(elementId, text.trim()))));
+          final var placement = placementOf(element);
+          textsOf(element).forEach(text -> pathsOf(text)
+              .forEach(path -> paths.putIfAbsent(path, new Origin(elementId, text.trim(), placement))));
         });
 
   }
 
   /**
-   * The texts of one element which may carry an expression.
+   * Which placement an element of one of the collected types is.
+   */
+  private static Placement placementOf(
+      final ModelElementInstance element) {
+
+    if (element instanceof Condition) {
+      return Placement.CONDITIONAL_EVENT;
+    }
+    if (element instanceof CompletionCondition) {
+      return Placement.MULTI_INSTANCE_COMPLETION_CONDITION;
+    }
+    if (element instanceof ConditionExpression) {
+      return hasADefaultFlow(element)
+          ? Placement.SEQUENCE_FLOW_CONDITION
+          : Placement.SEQUENCE_FLOW_CONDITION_WITHOUT_DEFAULT_FLOW;
+    }
+    if (element instanceof TimerEventDefinition) {
+      return Placement.TIMER;
+    }
+    if (element instanceof LoopCardinality) {
+      return Placement.MULTI_INSTANCE_CARDINALITY;
+    }
+    return Placement.MULTI_INSTANCE_COLLECTION;
+
+  }
+
+  /**
+   * Whether the element the conditional sequence flow leaves declares a default flow -
+   * the difference between a workflow which quietly continues elsewhere and one the
+   * engine cannot move on at all. Read from the DOM attribute, because
+   * <code>default</code> is declared on the gateways and on the activities separately
+   * and a condition may hang off any of them.
+   */
+  private static boolean hasADefaultFlow(
+      final ModelElementInstance element) {
+
+    final var flow = closest(element, SequenceFlow.class);
+    if (flow == null) {
+      return false;
+    }
+    final var source = flow.getSource();
+    if (source == null) {
+      return false;
+    }
+    final var declared = source
+        .getDomElement()
+        .getAttribute("default");
+    return (declared != null) && !declared.isBlank();
+
+  }
+
+  /**
+   * The element itself or the closest ancestor of the given type.
+   */
+  private static <T> T closest(
+      final ModelElementInstance element,
+      final Class<T> type) {
+
+    for (var candidate = element; candidate != null; candidate = candidate.getParentElement()) {
+      if (type.isInstance(candidate)) {
+        return type.cast(candidate);
+      }
+    }
+    return null;
+
+  }
+
+  /**
+   * The texts of one element which may carry an expression. Read per type rather than
+   * from the element's whole text content, which in the DOM is the concatenation of
+   * everything below it: a multi-instance element would otherwise answer with its
+   * cardinality and its completion condition glued together.
    */
   private static Set<String> textsOf(
       final ModelElementInstance element) {
 
     final var texts = new LinkedHashSet<String>();
-    if ((element.getTextContent() != null) && !element.getTextContent().isBlank()) {
-      texts.add(element.getTextContent());
-    }
     if (element instanceof TimerEventDefinition timer) {
       // a timer holds its definition in a child element
       addIfPresent(texts, timer.getTimeDuration());
       addIfPresent(texts, timer.getTimeDate());
       addIfPresent(texts, timer.getTimeCycle());
+      return texts;
     }
     if (element instanceof MultiInstanceLoopCharacteristics multiInstance) {
       // the collection a multi-instance element iterates: an expression naming an
@@ -140,7 +282,11 @@ public final class Camunda7ExpressionIdentifiers {
       if (multiInstance.getCamundaCollection() != null) {
         texts.add(multiInstance.getCamundaCollection());
       }
+      return texts;
     }
+    // a condition, a cardinality and a completion condition carry their expression as
+    // their own text
+    addIfPresent(texts, element);
     return texts;
 
   }
@@ -191,17 +337,17 @@ public final class Camunda7ExpressionIdentifiers {
   }
 
   /**
-   * The top-level identifiers of one expression text.
+   * The attribute paths of one expression text.
    *
    * @param text The attribute value or element text, possibly without any expression
-   * @return The identifiers found
+   * @return The paths found, segments separated by dots
    */
-  static Set<String> identifiersOf(
+  static Set<String> pathsOf(
       final String text) {
 
-    final var names = new LinkedHashSet<String>();
+    final var paths = new LinkedHashSet<String>();
     if (text == null) {
-      return names;
+      return paths;
     }
     final var expressions = EXPRESSION.matcher(text);
     while (expressions.find()) {
@@ -211,21 +357,48 @@ public final class Camunda7ExpressionIdentifiers {
           .group(1)
           .replaceAll("'[^']*'", "''")
           .replaceAll("\"[^\"]*\"", "\"\"");
-      final var candidates = IDENTIFIER.matcher(body);
+      final var candidates = PATH.matcher(body);
       while (candidates.find()) {
-        if (candidates.group("call") != null) {
-          // a function call ('fn(...)') or a namespace prefix ('fn:x(...)'), not a
-          // variable
+        final var segments = segmentsOf(candidates.group(1), candidates.group("ends"));
+        if (segments.isEmpty() || KEYWORDS.contains(segments.get(0))) {
           continue;
         }
-        final var name = candidates.group(1);
-        if (KEYWORDS.contains(name)) {
-          continue;
-        }
-        names.add(name);
+        paths.add(String.join(".", segments));
       }
     }
-    return names;
+    return paths;
+
+  }
+
+  /**
+   * The segments a matched chain contributes. Where the chain ended in a parenthesis or a
+   * namespace colon, its last segment is a method or a function name rather than a value,
+   * so the path is everything before it; otherwise the whole chain is the path.
+   *
+   * @param chain The dotted chain as it was matched
+   * @param ends What followed it, or <code>null</code>
+   * @return The segments, possibly none
+   */
+  private static List<String> segmentsOf(
+      final String chain,
+      final String ends) {
+
+    final var segments = new ArrayList<String>();
+    for (final var segment : chain.split("\\.")) {
+      segments.add(segment.trim());
+    }
+    if (ends == null) {
+      return segments;
+    }
+    if ("[".equals(ends)) {
+      // an indexed access: what the element is depends on the collection's runtime
+      // content, so the path ends at the collection itself
+      return segments;
+    }
+    // a method call or a namespace-prefixed function: the last segment is neither an
+    // attribute nor a value
+    segments.remove(segments.size() - 1);
+    return segments;
 
   }
 

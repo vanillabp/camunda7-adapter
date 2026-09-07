@@ -602,18 +602,38 @@ attributes without a getter or through an `isX()` returning a non-boolean. Each 
 is logged once with the way out, and version 2.1 removes the fallback together with the SPI
 methods behind it (`workflowAggregateHasProperty`, `resolveWorkflowAggregateProperty`).
 
-While the application starts, `wireBpmn` reports every expression reading an attribute the
-aggregate does not share - naming element, expression, attribute and fix. It is a WARN and
-never a failed deployment: the check reads expressions, and one it misreads must not keep an
-application from starting.
+While the application starts, `wireBpmn` reports the expressions whose PATH stops short of
+a value the engine holds, naming the element, the expression, the segment which stops it,
+what the engine will do with the null and the fix. It reads the whole path
+(`order.customer.address.city`), not only its first name, because the shared values are a
+structure and the sync model meets an expression at every segment. What stops a path is one
+of three things: the segment is a readable attribute which is not shared, the type before it
+has no such attribute at all, or the value before it reaches the engine as one value, a
+number or a text, and carries nothing below it. An enum arrives as its name, so it counts
+as a text.
+
+The message differs per PLACEMENT rather than per severity, because the same null costs
+very different things: a sequence flow with a default flow continues quietly, one without
+raises an incident, a timer or a multi-instance collection refuses the null and says what
+it wanted, and a conditional event answers false and waits for good with no incident and
+no log line. A path read by several elements is reported once, with the placement which
+fails most quietly. The migration fallback is promised only where it exists, which is a
+top-level name; a reported path is told that nothing answers it.
+
+Where the declared types cannot decide, the check says nothing at all: a `Map`, an
+interface, an abstract type, a collection which does not say what its elements are. Nor
+does it judge a method call, so the path ends before `getTotal()` and before an indexed
+access. It is a WARN and never a failed deployment: the check reads expressions, and one it
+misreads must not keep an application from starting.
 
 Sharing is held by `Camunda7AggregateSyncIT`
 (`theGatewayBehindATaskReadsWhatTheTaskComputed`, `nestedValuesBecomeObjectVariables`,
 `unannotatedAggregateSharesEverything`) and `Camunda7VariablesTest` for the conversion,
 `Camunda7AggregateChangedIT` for the two scopes and the conditional event
 (`aConditionalEventWaitsForThePush`, `aTaskScopeIsSkipped`), `Camunda7EnginePluginsTest`
-for the plugin section, and `Camunda7ExpressionIdentifiersTest` for the expressions the
-startup reads.
+for the plugin section, `Camunda7ExpressionIdentifiersTest` for the paths and placements
+the startup reads, and `Camunda7UnsharedExpressionCheckIT` for what a boot actually says
+about the models of the expression suite.
 
 ## Signals
 
