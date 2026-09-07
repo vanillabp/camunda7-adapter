@@ -62,6 +62,34 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * The core's name-clash-avoidance model, which the {@link Camunda7TaskELResolver}
+   * needs to translate the error code of a {@code TaskException} into what the engine
+   * knows. It lives here for the same reason {@link #adapterId} does: the resolver is
+   * built by the engine configuration, so nothing which creates it can hand it
+   * anything. May be <code>null</code> (tests): the plain identifiers apply then.
+   */
+  private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
+
+  /**
+   * @param scoping The core's name-clash-avoidance model
+   */
+  public void setScoping(
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping) {
+
+    this.scoping = scoping;
+
+  }
+
+  /**
+   * @return The core's name-clash-avoidance model or <code>null</code>
+   */
+  public io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport getScoping() {
+
+    return scoping;
+
+  }
+
+  /**
    * Whether this engine was given a datasource of its own
    * (<code>vanillabp.adapters.&lt;id&gt;.data-source-name</code>), which is the one thing
    * about the engine every listener building an invocation context has to know: an engine

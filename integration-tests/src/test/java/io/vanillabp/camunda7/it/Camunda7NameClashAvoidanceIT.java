@@ -204,4 +204,41 @@ public class Camunda7NameClashAvoidanceIT {
 
   }
 
+  @Test
+  @DisplayName("a TaskException reaches its boundary error event although the model's error codes are prefixed")
+  public void taskExceptionReachesThePrefixedBoundaryEvent() throws Exception {
+
+    final var aggregateId = transactionTemplate.execute(status -> {
+      final var aggregate = new TaskTestAggregate();
+      aggregate.setApproved(true);
+      final var saved = taskRepository.save(aggregate);
+      runtimeService
+          .createProcessInstanceByKey(PREFIX
+              + "ErrorProcess")
+          .processDefinitionWithoutTenantId()
+          .businessKey(String.valueOf(saved.getId()))
+          .execute();
+      return saved.getId();
+    });
+
+    // the handler throws a TaskException carrying the PLAIN error code the model
+    // declares, and under this mode the deployed model carries the prefixed one - so
+    // the BPMN error the adapter raises has to be prefixed as well or the boundary
+    // event never sees it and the job retries until it gives up
+    awaitUntil(
+        () -> runtimeService
+            .createProcessInstanceQuery()
+            .processInstanceBusinessKey(String.valueOf(aggregateId))
+            .count() == 0,
+        "ErrorProcess to end through its boundary error event");
+    assertEquals(
+        "error-raised|handled",
+        taskRepository
+            .findById(aggregateId)
+            .orElseThrow()
+            .getResults(),
+        "the handler behind the boundary error event has to have run");
+
+  }
+
 }

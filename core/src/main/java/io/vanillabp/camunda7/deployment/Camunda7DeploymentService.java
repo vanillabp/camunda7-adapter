@@ -332,6 +332,9 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       taskRegistry.setProcessVersions(processVersions);
       // every inbound delivery reports which adapter it came from
       taskRegistry.setAdapterId(adapterId);
+      // the EL resolver builds the task behavior and needs both to raise a BPMN error
+      // the deployed model still carries; it cannot be handed anything itself
+      taskRegistry.setScoping(scoping);
     }
 
   }
