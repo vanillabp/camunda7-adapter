@@ -61,6 +61,24 @@
       <artifactId>h2</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!-- the second serialization world of Camunda7NestedExpressionsJsonIT needs a real
+         dataformat in the engine: the SPIN plugin is what
+         'vanillabp.adapters.<id>.engine-plugins' loads, and the Jackson dataformat is
+         what serves 'application/json'. Both are inert unless an adapter configures the
+         plugin, so no other test of this module notices them. -->
+    <dependency>
+      <groupId>org.camunda.bpm</groupId>
+      <artifactId>camunda-engine-plugin-spin</artifactId>
+      <version>${camunda.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.camunda.spin</groupId>
+      <artifactId>camunda-spin-dataformat-json-jackson</artifactId>
+      <version>${camunda.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
