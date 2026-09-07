@@ -3,7 +3,6 @@ package io.vanillabp.camunda7.engine;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
-import java.util.List;
 
 import org.camunda.bpm.engine.impl.bpmn.parser.BpmnParseListener;
 import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
@@ -87,22 +86,6 @@ public final class Camunda7EngineCustomizers {
                 .stream()
                 .map(customizer -> customizer.getClass().getName())
                 .toList());
-
-  }
-
-  /**
-   * @param customizers The customizers of the application
-   * @return The same, as a list which never contains <code>null</code>
-   */
-  public static List<Camunda7EngineCustomizer> of(
-      final Collection<Camunda7EngineCustomizer> customizers) {
-
-    return customizers == null
-        ? List.of()
-        : customizers
-            .stream()
-            .filter(java.util.Objects::nonNull)
-            .toList();
 
   }
 
