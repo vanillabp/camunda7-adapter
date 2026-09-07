@@ -52,6 +52,37 @@ The [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Conf
 of the wiki carries the narrated version, and why a nested value travels in the engine's own format
 rather than as a JSON string is decision 9 in the repository's [`DECISIONS.md`](./DECISIONS.md).
 
+### What the startup check tells you about your expressions, and what it cannot
+
+Version 1 answered every BPMN expression from the live workflow aggregate, so nothing a model read
+could be missing. Version 2 writes what the aggregate SHARES, so an expression reading something
+unshared reads `null` instead, and on Camunda 7 a null is often silent: a gateway with a default
+flow takes it, a conditional event answers false and keeps waiting without an incident and without
+a log line, and a completion condition which is never true lets a multi-instance element end as if
+it had done its work.
+
+The adapter therefore lists such expressions while your application boots, one WARN each, naming
+the element, the expression, the segment which stops the path, what this engine will do with the
+null and how to fix it. Nothing fails: an expression the check misreads must not keep your
+application from starting. Treat the list as your migration backlog and work it off before you go
+live, because the runtime will not remind you.
+
+Know where the list ends. The check reads the DECLARED types of an expression's path and stays
+silent wherever they cannot decide, which is a `Map`, an interface, an abstract type or a
+collection which does not say what its elements are. It judges no method call either, so
+`${order.getTotal()}` and `${order.status.name()}` are not in the list although both stop working
+on version 2: the flattened value is a map and a text, neither of which has those methods. Those
+two shapes are LOUD at runtime, an incident naming the expression and the class it looked at, which
+is why they are left to the engine. What is silent at runtime is what the check is for.
+
+The list also does not cover the input expressions of a business rule task, and it says nothing
+about Camunda 8 or the Process-Engine-API. Those adapters share the same flattening, so the same
+expressions meet the same missing keys there, but neither hands the adapter a parsed model of this
+shape and FEEL is not JUEL. The gap is known and not closed here.
+
+The [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#migrating-from-an-adapter-which-read-the-aggregate-live)
+of the wiki carries the narrated version.
+
 ### A renamed BPMN process no longer needs its old model deployed
 
 An application may declare a BPMN process id it deploys nothing under

@@ -625,7 +625,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // evaluates to null, and Camunda 7 then takes the default flow without saying a
     // word. The adapter knows the model, the core knows what is shared - together they
     // can say it while the application starts
-    warnAboutUnsharedAggregateProperties(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
+    warnAboutUnsharedAggregatePaths(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
 
     // This engine reports the end of a workflow, so a @WorkflowEnded
     // method staying silent means the adapter was not wired - which used to be
@@ -922,58 +922,184 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * Reports every expression of the model which reads an attribute of the workflow
-   * aggregate that is NOT shared with the BPMS.
+   * Reports every expression of the model which reads a path of workflow-aggregate
+   * attributes the BPMS is not given, at the segment where the path stops.
    * <p>
    * A WARN, not a failed deployment: the check reads expressions, and an expression it
    * misreads must not keep an application from starting. What it finds is precise enough
-   * to act on - the element, the expression, the attribute and the annotation which fixes
-   * it - and a model which works produces nothing at all.
+   * to act on - the element, the expression, the segment, what the engine will do with
+   * the null and the way out - and a model which works produces nothing at all.
+   * <p>
+   * The severity is the same for every placement, and the SENTENCE is not: a conditional
+   * event waits forever without a trace while a timer raises an incident, and which of
+   * the two a reader is looking at is what they need to know. A second severity would
+   * only invite filtering.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID as the application knows it
    * @param scopedBpmnProcessId The process ID as the engine knows it
    * @param model The deployed model
    */
-  private void warnAboutUnsharedAggregateProperties(
+  private void warnAboutUnsharedAggregatePaths(
       final String workflowModuleId,
       final String bpmnProcessId,
       final String scopedBpmnProcessId,
       final BpmnModelInstance model) {
 
-    final var identifiers = io.vanillabp.camunda7.sync.Camunda7ExpressionIdentifiers
+    final var origins = io.vanillabp.camunda7.sync.Camunda7ExpressionIdentifiers
         .of(model, scopedBpmnProcessId);
-    if (identifiers.isEmpty()) {
+    if (origins.isEmpty()) {
       return;
     }
     workflowTaskWiring
-        .unsharedWorkflowAggregateProperties(
+        .unsharedWorkflowAggregatePaths(
             workflowModuleId,
             bpmnProcessId,
-            identifiers.keySet(),
+            origins.keySet(),
             io.vanillabp.camunda7.processservice.Camunda7ProcessService.SYNC_MODE)
-        .forEach(name -> {
-          final var origin = identifiers.get(name);
-          log.warn(
-              """
-                  Camunda7[{}]: the expression '{}' of element '{}' (BPMN process '{}' of workflow \
-                  module '{}') reads '{}', which IS an attribute of the workflow aggregate but is \
-                  NOT shared with the BPMS - the engine evaluates it as null, so a condition \
-                  reading it takes the default flow without any error. Three ways out, pick the \
-                  one which applies: share the attribute (@SyncWithBPMS on its getter); give it a \
-                  readable getter if it has none, because the shared values are read from getX() \
-                  and from isX() returning boolean, never from a field and never from an isX() \
-                  returning something else (VanillaBP 1 read those, this version does not); or let \
-                  the expression read something the aggregate does share. Until you do, VanillaBP \
-                  2.0 still answers this expression by reading the aggregate directly - version \
-                  2.1 removes that fallback.""",
-              adapterId,
-              origin.expression(),
-              origin.elementId(),
-              bpmnProcessId,
-              workflowModuleId,
-              name);
-        });
+        .forEach((
+            path,
+            verdict) -> reportOneExpression(
+                workflowModuleId,
+                bpmnProcessId,
+                path,
+                origins.get(path),
+                verdict));
+
+  }
+
+  /**
+   * One WARN about one expression. The top-level case and the path case are two texts and
+   * not one with a hole in it, because the last sentence differs in what it PROMISES: the
+   * migration fallback of the EL resolver answers a top-level name and stops as soon as
+   * something stands before the dot, so a reported path must not be offered it.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID as the application knows it
+   * @param path The path the expression reads, segments separated by dots
+   * @param origin Where in the model it was read
+   * @param verdict What the core's walk found
+   */
+  private void reportOneExpression(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String path,
+      final io.vanillabp.camunda7.sync.Camunda7ExpressionIdentifiers.Origin origin,
+      final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.PathVerdict verdict) {
+
+    if (verdict.segmentIndex() == 0) {
+      log.warn(
+          """
+              Camunda7[{}]: the expression '{}' of element '{}' (BPMN process '{}' of workflow \
+              module '{}') reads '{}', which IS an attribute of the workflow aggregate but is \
+              NOT shared with the BPMS, so the engine holds no value of that name. {} Three \
+              ways out, pick the one which applies: share the attribute (@SyncWithBPMS on its \
+              getter); give it a readable getter if it has none, because the shared values are \
+              read from getX() and from isX() returning boolean, never from a field and never \
+              from an isX() returning something else (VanillaBP 1 read those, this version \
+              does not); or let the expression read something the aggregate does share. Until \
+              you do, VanillaBP 2.0 still answers this expression by reading the aggregate \
+              directly - version 2.1 removes that fallback.""",
+          adapterId,
+          origin.expression(),
+          origin.elementId(),
+          bpmnProcessId,
+          workflowModuleId,
+          verdict.segment(),
+          whatTheEngineDoesWithTheNull(origin.placement()));
+      return;
+    }
+    log.warn(
+        """
+            Camunda7[{}]: the expression '{}' of element '{}' (BPMN process '{}' of workflow \
+            module '{}') reads the path '{}', and the BPMS holds nothing at that path: {} {} \
+            Nothing answers this expression in the meantime: the migration fallback of \
+            VanillaBP 2.0 reads the workflow aggregate for a top-level name only, so an \
+            expression reading past the first dot is already answered with null.""",
+        adapterId,
+        origin.expression(),
+        origin.elementId(),
+        bpmnProcessId,
+        workflowModuleId,
+        path,
+        whereThePathStops(verdict),
+        whatTheEngineDoesWithTheNull(origin.placement()));
+
+  }
+
+  /**
+   * Where the path stops finding anything, and what to do about it. Reads as one or two
+   * sentences in the middle of the warning.
+   *
+   * @param verdict What the core's walk found
+   * @return The sentences naming the segment and the way out
+   */
+  private static String whereThePathStops(
+      final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync.PathVerdict verdict) {
+
+    return switch (verdict.kind()) {
+      case NOT_SHARED -> """
+          '%s' IS a readable attribute of '%s' and is NOT shared with the BPMS. Share it \
+          (@SyncWithBPMS on its getter in '%s'), give it a readable getter if it has none, or let \
+          the expression read something the aggregate does share.""".formatted(
+          verdict.segment(),
+          verdict.segmentOwner(),
+          verdict.segmentOwner());
+      case NO_SUCH_ATTRIBUTE -> """
+          '%s' has no readable attribute '%s', so the values it shares carry no such member. \
+          Either the model spells the name differently than the aggregate does, or the attribute \
+          needs a getter ('%s' shares what getX() and isX() returning boolean answer, never a \
+          field).""".formatted(
+          verdict.segmentOwner(),
+          verdict.segment(),
+          verdict.segmentOwner());
+      default -> """
+          the segment before '%s' is a '%s', which reaches the BPMS as ONE value, a number or a \
+          text, and therefore carries nothing below it (an enum arrives as its name, which is a \
+          text as well). Let the expression read that value itself, or give the aggregate a \
+          getter which answers what the expression wants and share that.""".formatted(
+          verdict.segment(),
+          verdict.segmentOwner());
+    };
+
+  }
+
+  /**
+   * What Camunda 7 does with the <code>null</code> such an expression produces, which
+   * the placement decides. Every sentence here was measured on an embedded engine
+   * 7.24.0; {@code Camunda7NestedExpressionsIT} keeps the silent ones honest.
+   *
+   * @param placement Where in the model the expression sits
+   * @return One sentence about the outcome
+   */
+  private static String whatTheEngineDoesWithTheNull(
+      final io.vanillabp.camunda7.sync.Camunda7ExpressionIdentifiers.Placement placement) {
+
+    return switch (placement) {
+      case CONDITIONAL_EVENT -> """
+          This is the condition of a CONDITIONAL EVENT, the placement Camunda 7 says nothing \
+          about at all: the engine answers a condition it cannot evaluate with false, so the \
+          event keeps waiting for good, without an incident and without a log line.""";
+      case MULTI_INSTANCE_COMPLETION_CONDITION -> """
+          This is the completion condition of a multi-instance element: a condition which is \
+          never true lets every instance run, so the element ends the way it would without one \
+          and nothing says why.""";
+      case SEQUENCE_FLOW_CONDITION -> """
+          This is a sequence flow condition and the element it leaves declares a default flow, \
+          so the workflow quietly continues along that flow.""";
+      case SEQUENCE_FLOW_CONDITION_WITHOUT_DEFAULT_FLOW -> """
+          This is a sequence flow condition and the element it leaves declares no default flow, \
+          so the engine finds no outgoing flow to continue on and raises an incident.""";
+      case TIMER -> """
+          This is a timer definition, which refuses the null out loud: the engine raises an \
+          incident saying the timer was not configured with a valid duration or time.""";
+      case MULTI_INSTANCE_CARDINALITY -> """
+          This is the cardinality of a multi-instance element, which refuses the null out loud: \
+          the engine raises an incident saying the expression has to be a number.""";
+      case MULTI_INSTANCE_COLLECTION -> """
+          This is the collection of a multi-instance element, which refuses the null out loud: \
+          the engine raises an incident saying the expression did not resolve to a collection.""";
+    };
 
   }
 
