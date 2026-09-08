@@ -2,8 +2,6 @@ package io.vanillabp.camunda7.wiring;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.util.List;
-
 import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.repository.ProcessDefinition;
@@ -131,11 +129,7 @@ public class Camunda7StartupQuestionCostTest {
     versions = new Camunda7ProcessVersions(
         "c7", repositoryService, (
             workflowModuleId,
-            bpmnProcessId) -> bpmnProcessId, workflowModuleId -> null, (
-                workflowModuleId,
-                bpmnProcessId,
-                version,
-                model) -> List.of());
+            bpmnProcessId) -> bpmnProcessId, workflowModuleId -> null, new HeldModelsAnsweringNothing());
     versions.setRuntimeService(runtimeService);
     queries.clear();
 

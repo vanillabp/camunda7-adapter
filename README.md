@@ -737,6 +737,15 @@ own copy of the model), the task after the start event is served, and the end re
 core asks for the id's version catalog, because whatever reads that catalog next makes the
 engine parse the old definitions, and the parse is when the end listener is attached or lost
 for good.
+
+Those starts are what the catalog answers `startEventsOfVersion` with. Nothing wires the declared
+id while the application boots, so a `@WorkflowStartedByBpms` method kept for it used to be
+judged by nobody, and a typo in its `id` stayed one while the old timer fired every night. The
+adapter reads the start events of every version the engine holds under the id, through the same
+walk a deployed model goes through, and the core names the method no held version starts on. It
+reads and warns, nothing more: a model deployed years ago is not one anybody can go back and fix.
+`Camunda7StartEventsOfHeldVersionsTest` holds what is read out of such a model, the plain signal
+name included.
 [Decision 15](./DECISIONS.md#15-a-check-reads-the-engines-models-without-asking-who-deployed-them)
 carries the timing, `Camunda7DeclaredIdRuntimeIT` measures all three notifications against a
 running engine under `use-prefix`.

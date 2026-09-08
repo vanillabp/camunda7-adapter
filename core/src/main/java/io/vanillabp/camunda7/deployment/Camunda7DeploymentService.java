@@ -334,7 +334,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // What the engine's process definitions are versioned as - the
     // registry hands it to every listener building an invocation context
     this.processVersions = new io.vanillabp.camunda7.wiring.Camunda7ProcessVersions(
-        adapterId, repositoryService, this::scopedProcessId, this::tenantIdOf, this::tasksOfDeployedModel);
+        adapterId, repositoryService, this::scopedProcessId, this::tenantIdOf, new HeldModels());
     // the emergency exit past the old-versions check is meant to be the decision of THIS
     // start, so every start says out loud that it was taken
     io.vanillabp.camunda7.wiring.SuspendedProcessDefinitions.reportIfTheSwitchIsSet(adapterId);
@@ -704,6 +704,37 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * What this adapter's extraction says about a model the engine still holds, handed to
+   * the version catalog so its questions about an old version are answered by the walks a
+   * deployed model goes through.
+   */
+  private final class HeldModels implements io.vanillabp.camunda7.wiring.Camunda7ProcessVersions.HeldModelReading {
+
+    @Override
+    public java.util.Collection<BpmnTaskSpec> tasksOf(
+        final String workflowModuleId,
+        final String bpmnProcessId,
+        final String version,
+        final BpmnModelInstance model) {
+
+      return tasksOfDeployedModel(workflowModuleId, bpmnProcessId, version, model);
+
+    }
+
+    @Override
+    public java.util.Collection<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec> startEventsOf(
+        final String workflowModuleId,
+        final String bpmnProcessId,
+        final String version,
+        final BpmnModelInstance model) {
+
+      return startEventsOfHeldModel(workflowModuleId, bpmnProcessId, version, model);
+
+    }
+
+  }
+
+  /**
    * The tasks of a model the engine still holds, read for the old-versions startup
    * check - the same extraction the deployed model goes through, so both directions
    * cannot disagree about what a task is.
@@ -768,7 +799,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       // signal start event, and for a model only the engine holds nobody registered
       // one - it is right here, in the engine's own copy of the model, so a workflow
       // the engine starts under the old id is told which signal fired
-      registerSignalStartEventsOf(workflowModuleId, scopedBpmnProcessId, model);
+      registerSignalStartEventsOf(
+          workflowModuleId, scopedBpmnProcessId, startEventsOf(workflowModuleId, scopedBpmnProcessId, model));
       collectTasks(
           model,
           workflowModuleId,
@@ -1229,6 +1261,46 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       return;
     }
 
+    final var startEvents = startEventsOf(workflowModuleId, scopedBpmnProcessId, model);
+    registerSignalStartEventsOf(workflowModuleId, scopedBpmnProcessId, startEvents);
+
+    // throwing here honors the deployment-failure policy, like the task wiring
+    bpmsInitiatedStartInvoker.validateBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, startEvents);
+
+    if (!startEvents.isEmpty()) {
+      log
+          .info(
+              "Camunda7[{}]: BPMN process '{}' (workflow module '{}') is started by the BPMS itself: {}",
+              adapterId,
+              bpmnProcessId,
+              workflowModuleId,
+              startEvents);
+    }
+
+  }
+
+  /**
+   * The start events of one BPMN process which the engine fires on its own - a timer, a
+   * signal or a condition - read from a model, whether this boot brings it or the engine
+   * holds it.
+   * <p>
+   * One walk for both directions: the core validates the
+   * <code>&#64;WorkflowStartedByBpms</code> methods of a deployed process against it, and
+   * asks the same of a version the engine holds under an id nothing was deployed under, so
+   * the two cannot disagree about what a start event is. A signal name is reported PLAIN,
+   * because name-clash avoidance is nothing the application above this boundary knows
+   * about.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param scopedBpmnProcessId The process definition key the engine knows
+   * @param model The BPMN model
+   * @return The start events, in the order the model lists them
+   */
+  private List<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec> startEventsOf(
+      final String workflowModuleId,
+      final String scopedBpmnProcessId,
+      final BpmnModelInstance model) {
+
     final var startEvents = new LinkedList<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec>();
     model
         .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.StartEvent.class)
@@ -1255,15 +1327,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                 final var scopedSignalName = definition.getSignal() == null
                     ? null
                     : definition.getSignal().getName();
-                final var signalName = plainIdentifier(workflowModuleId, scopedSignalName);
                 startEvents
                     .add(
                         new io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec(
-                            startEvent
-                                .getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.SIGNAL, signalName, "signal"));
-                taskRegistry
-                    .registerSignalStartEvent(
-                        workflowModuleId, scopedBpmnProcessId, startEvent.getId(), signalName);
+                            startEvent.getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.SIGNAL, plainIdentifier(
+                                workflowModuleId, scopedSignalName), "signal"));
               });
           definitions
               .stream()
@@ -1275,61 +1343,58 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                           startEvent
                               .getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.CONDITIONAL, null, "conditional")));
         });
-
-    // throwing here honors the deployment-failure policy, like the task wiring
-    bpmsInitiatedStartInvoker.validateBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, startEvents);
-
-    if (!startEvents.isEmpty()) {
-      log
-          .info(
-              "Camunda7[{}]: BPMN process '{}' (workflow module '{}') is started by the BPMS itself: {}",
-              adapterId,
-              bpmnProcessId,
-              workflowModuleId,
-              startEvents);
-    }
+    return startEvents;
 
   }
 
   /**
-   * Remembers the PLAIN signal names of the signal start events of a model the ENGINE
-   * holds - the same registration every deployed model gets in
-   * {@link #wireBpmsInitiatedStarts}, without the validation: the model was deployed by
-   * an earlier generation of this application, so there is nothing left to validate
-   * about it, only workflows to serve.
+   * The start events of a model the engine still holds, read for the core's judgement of
+   * the <code>&#64;WorkflowStartedByBpms</code> methods kept for a BPMN process id the
+   * application declares without deploying anything under it.
+   * <p>
+   * Nothing wires such an id while this application boots, so those methods are judged by
+   * nothing unless the old models are read - while the engine keeps firing the old
+   * version's timer and keeps matching its signal subscription.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param version The version the engine assigned
+   * @param model The model of that version
+   * @return The start events of that version
+   */
+  private java.util.Collection<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec> startEventsOfHeldModel(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version,
+      final BpmnModelInstance model) {
+
+    return startEventsOf(workflowModuleId, scopedProcessId(workflowModuleId, bpmnProcessId), model);
+
+  }
+
+  /**
+   * Remembers the PLAIN signal names of the signal start events of a model, which is what
+   * the listener attached at parse time asks for once such a start fires.
+   * <p>
+   * A model the engine holds needs it as much as one this boot deploys: nothing was
+   * deployed under a declared id, so nobody registered its signals, and a workflow the
+   * engine starts under that id has to be told which signal fired.
    *
    * @param workflowModuleId The workflow module ID
    * @param scopedBpmnProcessId The process definition key the engine knows
-   * @param model The model as the engine holds it
+   * @param startEvents What {@link #startEventsOf} read from that model
    */
   private void registerSignalStartEventsOf(
       final String workflowModuleId,
       final String scopedBpmnProcessId,
-      final BpmnModelInstance model) {
+      final List<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec> startEvents) {
 
-    model
-        .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.StartEvent.class)
+    startEvents
         .stream()
-        .filter(startEvent -> scopedBpmnProcessId.equals(owningProcessId(startEvent)))
-        .forEach(startEvent -> startEvent
-            .getEventDefinitions()
-            .stream()
-            .filter(org.camunda.bpm.model.bpmn.instance.SignalEventDefinition.class::isInstance)
-            .map(org.camunda.bpm.model.bpmn.instance.SignalEventDefinition.class::cast)
-            .findFirst()
-            .ifPresent(definition -> {
-              // the model carries the SCOPED signal name where identifiers are
-              // prefixed - the application is told the plain one
-              final var scopedSignalName = definition.getSignal() == null
-                  ? null
-                  : definition.getSignal().getName();
-              taskRegistry
-                  .registerSignalStartEvent(
-                      workflowModuleId,
-                      scopedBpmnProcessId,
-                      startEvent.getId(),
-                      plainIdentifier(workflowModuleId, scopedSignalName));
-            }));
+        .filter(startEvent -> startEvent.kind() == io.vanillabp.spi.service.BpmsStartTrigger.Kind.SIGNAL)
+        .forEach(startEvent -> taskRegistry
+            .registerSignalStartEvent(
+                workflowModuleId, scopedBpmnProcessId, startEvent.elementId(), startEvent.signalName()));
 
   }
 

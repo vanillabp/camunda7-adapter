@@ -2,25 +2,15 @@ package io.vanillabp.camunda7.deployment;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.camunda.bpm.engine.RepositoryService;
-import org.camunda.bpm.engine.repository.ProcessDefinition;
-import org.camunda.bpm.engine.repository.ProcessDefinitionQuery;
-import org.camunda.bpm.model.bpmn.Bpmn;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mockito;
 
 import io.vanillabp.camunda7.TestCollaborators;
 import io.vanillabp.camunda7.wiring.Camunda7TaskRegistry;
@@ -128,59 +118,13 @@ public class Camunda7HeldModelReadingTest {
       final String model) {
 
     final var service = new Camunda7DeploymentService(
-        "c7", anEngineHolding(Map.of("3", model)), mock(Camunda7WorkflowProcessingLifecycle.class), TestCollaborators
-            .builder()
-            .build(), new Camunda7TaskRegistry());
+        "c7", AnEngineHolding.theseModels(PROCESS_ID, Map.of("3", model)), mock(
+            Camunda7WorkflowProcessingLifecycle.class), TestCollaborators
+                .builder()
+                .build(), new Camunda7TaskRegistry());
     return service
         .processVersionCatalogOf(MODULE, PROCESS_ID)
         .tasksOfVersion(MODULE, PROCESS_ID, "3");
-
-  }
-
-  /**
-   * A repository service answering with the given versions of the process and with
-   * their models.
-   */
-  private static RepositoryService anEngineHolding(
-      final Map<String, String> modelsByVersion) {
-
-    // every mock is built BEFORE the first stubbing: creating one between when() and
-    // thenReturn() leaves Mockito with a stubbing it considers unfinished
-    final var definitions = definitions(modelsByVersion.keySet());
-    final var repositoryService = mock(RepositoryService.class);
-    final var query = mock(ProcessDefinitionQuery.class, RETURNS_SELF);
-    Mockito.lenient().when(query.list()).thenReturn(definitions);
-    // the version catalog resolves one version at a time - this engine holds one
-    Mockito.lenient().when(query.singleResult()).thenReturn(definitions.getFirst());
-    when(repositoryService.createProcessDefinitionQuery()).thenReturn(query);
-    modelsByVersion
-        .forEach((
-            version,
-            model) -> Mockito
-                .lenient()
-                .when(repositoryService.getBpmnModelInstance("definition-"
-                    + version))
-                .thenReturn(
-                    Bpmn.readModelFromStream(new ByteArrayInputStream(model.getBytes(StandardCharsets.UTF_8)))));
-    return repositoryService;
-
-  }
-
-  private static List<ProcessDefinition> definitions(
-      final Collection<String> versions) {
-
-    return versions
-        .stream()
-        .map(version -> {
-          final var definition = mock(ProcessDefinition.class);
-          Mockito.lenient().when(definition.getId()).thenReturn("definition-"
-              + version);
-          Mockito.lenient().when(definition.getVersion()).thenReturn(Integer.valueOf(version));
-          Mockito.lenient().when(definition.getKey()).thenReturn(PROCESS_ID);
-          return definition;
-        })
-        .map(ProcessDefinition.class::cast)
-        .toList();
 
   }
 

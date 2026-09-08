@@ -100,11 +100,7 @@ public class Camunda7SuspendedProcessVersionsTest {
     final var versions = new Camunda7ProcessVersions(
         ADAPTER, repositoryService, (
             workflowModuleId,
-            bpmnProcessId) -> bpmnProcessId, workflowModuleId -> null, (
-                workflowModuleId,
-                bpmnProcessId,
-                version,
-                model) -> List.of());
+            bpmnProcessId) -> bpmnProcessId, workflowModuleId -> null, new HeldModelsAnsweringNothing());
     return versions
         .deployedVersionsOf(MODULE, PROCESS)
         .stream()
