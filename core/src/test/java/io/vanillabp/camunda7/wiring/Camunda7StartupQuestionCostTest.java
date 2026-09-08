@@ -41,6 +41,14 @@ public class Camunda7StartupQuestionCostTest {
    */
   private static final int VERSIONS = 4;
 
+  /**
+   * How many of the questions about an older version read its model: its tasks, what starts
+   * it, and which of its elements can put a second token into a workflow. The engine parses
+   * a definition once and answers the rest from its deployment cache, so the number to watch
+   * is the definition query below.
+   */
+  private static final int MODEL_READING_QUESTIONS = 3;
+
   private RepositoryService repositoryService;
 
   private RuntimeService runtimeService;
@@ -137,7 +145,7 @@ public class Camunda7StartupQuestionCostTest {
 
   /**
    * What the startup check does per BPMN process: it asks for the versions once and then
-   * asks two questions about every older one.
+   * asks four questions about every older one.
    */
   private void whatAStartAsks() {
 
@@ -149,6 +157,8 @@ public class Camunda7StartupQuestionCostTest {
         .forEach(version -> {
           versions.activeInstanceCountOf(MODULE, PROCESS, version);
           versions.tasksOfVersion(MODULE, PROCESS, version);
+          versions.startEventsOfVersion(MODULE, PROCESS, version);
+          versions.concurrentTokenElementsOfVersion(MODULE, PROCESS, version);
         });
 
   }
@@ -170,9 +180,10 @@ public class Camunda7StartupQuestionCostTest {
         () -> "one count per version older than the deployed one, but was "
             + queries);
     assertEquals(
-        VERSIONS - 1,
+        MODEL_READING_QUESTIONS * (VERSIONS - 1),
         queries.getOrDefault("getBpmnModelInstance", 0),
-        () -> "one model per version older than the deployed one, but was "
+        () -> "one model read per question about an older version, which the engine answers "
+            + "from the definition it parsed for the first of them, but was "
             + queries);
 
   }

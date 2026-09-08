@@ -761,6 +761,19 @@ name included.
 carries the timing, `Camunda7DeclaredIdRuntimeIT` measures all three notifications against a
 running engine under `use-prefix`.
 
+Those workflows end like any other, so the warning about a `@WorkflowEnded` method this engine
+cannot serve is given for a declared id as well, while the id is being wired. No model of this
+boot passes by such an id, so nothing else would have said it. Where the engine holds no version
+under the id nothing is said at all: no version means no workflow which could end, and a
+misspelled declared id is the core's check to name, together with the ids the module really
+deploys.
+
+The deployment checks which stay with the model this boot brings stay there on purpose. Refusing
+an asynchronous task wired by expression, warning about an expression which reads what the
+aggregate does not share and refusing colliding process ids all judge something a modeller can
+still change and deploy again. A model the engine already holds is not that, and what a workflow
+running on one can still walk into is asked of the version catalog instead.
+
 ### A suspended version counts, and how to get past it once
 
 Deleting a process definition removes it from this engine, so the startup check for old process

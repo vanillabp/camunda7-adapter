@@ -595,6 +595,14 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // deployment-failure policy for non-first-priority adapter ids
     workflowTaskWiring.validateTaskWiring(workflowModuleId, bpmnProcessId, specs);
 
+    // What follows judges the model this boot brings, and the checks whose finding a
+    // modeller can still act on belong here and nowhere else: an asynchronous task wired
+    // by expression and an expression reading what the aggregate does not share are both
+    // answers to something which can be changed and deployed again. The findings which
+    // outlive a deployment are asked of the version catalog instead, over the models the
+    // engine holds, because a workflow started years ago runs into them just the same
+    // and nobody can go back and change the model it is on.
+
     // A task wired by 'camunda:expression' completes as soon as the
     // expression returns, so a method declaring @TaskId can never keep it open.
     // The engine's EL resolver says the same at runtime, but only once a workflow
@@ -647,7 +655,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // This engine reports the end of a workflow, so a @WorkflowEnded
     // method staying silent means the adapter was not wired - which used to be
     // invisible: the application booted, the workflow ran, the method was never
-    // called and nothing was logged
+    // called and nothing was logged. The same is asked for a declared id in
+    // wireTheVersionsHeldUnder, where no model of this boot passes by
     warnAboutUnservedWorkflowEndedHandlers(workflowModuleId, bpmnProcessId);
 
     wireBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
@@ -1248,6 +1257,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * once: the Quarkus producer did not hand the invoker over, and nothing said
    * so. The deployment is not failed over it: the workflow itself runs, only the
    * notification is missing.
+   * <p>
+   * Asked for every process this boot deploys and for every BPMN process id the engine
+   * holds versions under while the application only declares it: a workflow of a renamed
+   * process ends like any other, and the method kept for the old id is the one nothing
+   * else would have spoken about.
    *
    * Visible for tests.
    *
@@ -1637,7 +1651,9 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * identifier.
    * <p>
    * Every version the engine holds is wired, because a workflow may sit on any of them, and
-   * a task which two versions share is registered once. The wiring validation is NOT run
+   * a task which two versions share is registered once. It is also where the id gets the
+   * warning about a <code>&#64;WorkflowEnded</code> method this engine cannot serve, since
+   * no model of this boot passes by such an id. The wiring validation is NOT run
    * over those models: they were deployed by an earlier generation of this application, a
    * task the application dropped in the meantime is the core's startup check to report, and
    * ending the boot over a model nobody can change any more would be the wrong answer to it.
@@ -1686,6 +1702,12 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // process without any task: the version of an execution and the workflow module it
     // belongs to are read from here
     taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
+
+    // the workflows of those versions end like any other, so the application is told here
+    // as well when this engine cannot deliver the end to a @WorkflowEnded method it kept
+    // for the old id - no model of this boot passes by such an id, so nothing else says it
+    warnAboutUnservedWorkflowEndedHandlers(workflowModuleId, bpmnProcessId);
+
     final var distinctConnectables = new java.util.LinkedHashMap<String, Camunda7TaskConnectable>();
     definitionIdsByVersion
         .forEach((

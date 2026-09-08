@@ -40,10 +40,14 @@ public final class AnEngineHolding {
     final var definitions = definitions(bpmnProcessId, modelsByVersion.keySet());
     final var repositoryService = mock(RepositoryService.class);
     final var query = mock(ProcessDefinitionQuery.class, RETURNS_SELF);
+    // a version the list did not hold is looked up on its own - these engines hold what
+    // they were built with, so the first definition is the honest answer, and an engine
+    // holding nothing answers nothing
+    final var singleResult = definitions.isEmpty()
+        ? null
+        : definitions.getFirst();
     Mockito.lenient().when(query.list()).thenReturn(definitions);
-    // a version the list did not hold is looked up on its own - these engines hold
-    // what they were built with, so the first definition is the honest answer
-    Mockito.lenient().when(query.singleResult()).thenReturn(definitions.getFirst());
+    Mockito.lenient().when(query.singleResult()).thenReturn(singleResult);
     when(repositoryService.createProcessDefinitionQuery()).thenReturn(query);
     modelsByVersion
         .forEach((

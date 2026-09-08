@@ -109,3 +109,10 @@ application dropped is reported by the check for old process versions with the n
 it affects, exactly as for the older versions of any process. The
 [recipe for a rename](https://github.com/vanillabp/adapter-platform-integration/wiki/Renaming-a-BPMN-process)
 is on the platform's wiki.
+
+Version 2 also judges the declaration itself. The engine keeps firing the old model's timer and
+keeps matching its signal subscription, so the adapter reads the start events of the versions it
+holds under the old id, and you are told about a `@WorkflowStartedByBpms` method none of them has
+a start event for. A `@WorkflowEnded` method kept for the old id is
+checked in the same place. Both are warnings and neither stops a start: they read models nobody
+can change any more.
