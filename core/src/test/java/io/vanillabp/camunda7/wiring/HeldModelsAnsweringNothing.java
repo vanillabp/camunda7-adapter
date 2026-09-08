@@ -30,6 +30,17 @@ public class HeldModelsAnsweringNothing implements Camunda7ProcessVersions.HeldM
   }
 
   @Override
+  public Collection<String> concurrentTokenElementsOf(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version,
+      final BpmnModelInstance model) {
+
+    return List.of();
+
+  }
+
+  @Override
   public Collection<BpmsInitiatedStartSpec> startEventsOf(
       final String workflowModuleId,
       final String bpmnProcessId,

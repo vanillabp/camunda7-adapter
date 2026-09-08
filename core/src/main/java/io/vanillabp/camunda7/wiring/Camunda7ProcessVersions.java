@@ -148,6 +148,16 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
         String version,
         BpmnModelInstance model);
 
+    /**
+     * The elements of that model which can put a second token into a running workflow,
+     * as the deployment reports them.
+     */
+    java.util.Collection<String> concurrentTokenElementsOf(
+        String workflowModuleId,
+        String bpmnProcessId,
+        String version,
+        BpmnModelInstance model);
+
   }
 
   private final HeldModelReading heldModelReading;
@@ -233,6 +243,23 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
       return java.util.List.of();
     }
     return heldModelReading.startEventsOf(workflowModuleId, bpmnProcessId, version, model);
+
+  }
+
+  @Override
+  public java.util.Collection<String> concurrentTokenElementsOfVersion(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    if (heldModelReading == null) {
+      return null;
+    }
+    final var model = modelOfVersion(workflowModuleId, bpmnProcessId, version);
+    if (model == null) {
+      return java.util.List.of();
+    }
+    return heldModelReading.concurrentTokenElementsOf(workflowModuleId, bpmnProcessId, version, model);
 
   }
 

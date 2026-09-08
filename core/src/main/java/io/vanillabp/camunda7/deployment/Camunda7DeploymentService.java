@@ -732,6 +732,42 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     }
 
+    @Override
+    public java.util.Collection<String> concurrentTokenElementsOf(
+        final String workflowModuleId,
+        final String bpmnProcessId,
+        final String version,
+        final BpmnModelInstance model) {
+
+      return concurrentTokenElementsOfHeldModel(workflowModuleId, bpmnProcessId, model);
+
+    }
+
+  }
+
+  /**
+   * The elements of a model the engine still holds which can put a SECOND token into one of
+   * its workflows - the same walk this adapter reports to the core while wiring, run over an
+   * old version.
+   * <p>
+   * The versions which run longest are the ones a look at this boot's model never reaches: a
+   * parallel gateway the newest model dropped keeps forking every workflow started before
+   * it, and two branches writing one workflow aggregate lose an update there exactly as they
+   * would in the model just deployed.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param model The model of that version
+   * @return The IDs of the elements producing a second token in that version
+   */
+  private java.util.Collection<String> concurrentTokenElementsOfHeldModel(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final BpmnModelInstance model) {
+
+    return Camunda7ConcurrentTokens
+        .elementIdsOf(model, scopedProcessId(workflowModuleId, bpmnProcessId));
+
   }
 
   /**

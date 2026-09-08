@@ -693,6 +693,17 @@ deploy command names the version the engine assigned to every model, tag include
 `Camunda7ProcessVersionIT#theVersionDecidesWhichMethodRuns` holds the routing and
 `Camunda7StartupQuestionCostTest` the number of questions a start asks.
 
+The models of those versions are read for more than the tasks they carry. A workflow on an older
+version loses an update exactly as one on the newest model does: two tokens in one workflow are
+two branches writing one workflow aggregate, and without a version attribute on that aggregate
+one of the two writes disappears without an error. So the adapter also answers which elements of
+a held version can put a second token into a workflow, through the walk it reports for the model
+it just deployed, and the core warns once per BPMN process naming the version they came from.
+The case worth the read is a parallel gateway the newest model dropped: the workflows which
+still carry it were started before that change, and they are the ones which run longest.
+`Camunda7ConcurrentTokensTest` holds the constructs and the reading of a held version; the core
+asks only about a version workflows really run on.
+
 ### A process id which is only declared
 
 A workflow module may name a BPMN process id no file of it carries any more, which is how a
