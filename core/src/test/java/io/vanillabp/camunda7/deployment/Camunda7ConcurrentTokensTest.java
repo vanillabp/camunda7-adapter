@@ -1,11 +1,15 @@
 package io.vanillabp.camunda7.deployment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import org.camunda.bpm.model.bpmn.Bpmn;
 import org.camunda.bpm.model.bpmn.BpmnModelInstance;
@@ -13,6 +17,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import io.vanillabp.camunda7.TestCollaborators;
+import io.vanillabp.camunda7.wiring.Camunda7TaskRegistry;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
@@ -25,6 +31,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7ConcurrentTokensTest {
+
+  private static final String MODULE = "test-module";
+
+  private static final String PROCESS_ID = "TestProcess";
 
   private static BpmnModelInstance model(
       final String processContent) {
@@ -55,7 +65,7 @@ public class Camunda7ConcurrentTokensTest {
   private static List<String> elementsOf(
       final String processContent) {
 
-    return Camunda7ConcurrentTokens.elementIdsOf(model(processContent), "TestProcess");
+    return Camunda7ConcurrentTokens.elementIdsOf(model(processContent), PROCESS_ID);
 
   }
 
@@ -168,6 +178,63 @@ public class Camunda7ConcurrentTokensTest {
 
     // the forking parallel gateway of 'OtherProcess' belongs to the other process
     assertTrue(found.isEmpty(), found.toString());
+
+  }
+
+  @Test
+  @DisplayName("The elements of a version the ENGINE holds are answered from its model")
+  public void aHeldVersionIsWalkedLikeADeployedOne() {
+
+    final var found = elementsOfHeldVersion("""
+            <bpmn:parallelGateway id="Gateway_Dropped">
+              <bpmn:outgoing>Flow_1</bpmn:outgoing>
+              <bpmn:outgoing>Flow_2</bpmn:outgoing>
+            </bpmn:parallelGateway>
+            <bpmn:serviceTask id="Activity_Approve" camunda:delegateExpression="${approve}" />
+            <bpmn:serviceTask id="Activity_Notify" camunda:delegateExpression="${notify}" />
+            <bpmn:sequenceFlow id="Flow_1" sourceRef="Gateway_Dropped" targetRef="Activity_Approve" />
+            <bpmn:sequenceFlow id="Flow_2" sourceRef="Gateway_Dropped" targetRef="Activity_Notify" />
+        """);
+
+    assertEquals(
+        List.of("Gateway_Dropped"),
+        found,
+        "the gateway a newer model dropped keeps forking the workflows started before it");
+
+  }
+
+  @Test
+  @DisplayName("A held version without such an element is an empty answer, not 'cannot say'")
+  public void aSequentialHeldVersionIsAnEmptyAnswer() {
+
+    final var found = elementsOfHeldVersion("""
+            <bpmn:startEvent id="Start" />
+            <bpmn:serviceTask id="Activity_Approve" camunda:delegateExpression="${approve}" />
+        """);
+
+    assertNotNull(
+        found,
+        "this adapter reads the model, so null would switch the core's check off although "
+            + "the answer is known");
+    assertTrue(found.isEmpty(), found.toString());
+
+  }
+
+  /**
+   * The same question about version 3 of a process the ENGINE holds, asked the way the
+   * core's check asks it: through the version catalog rather than about a model at hand.
+   */
+  private static Collection<String> elementsOfHeldVersion(
+      final String processContent) {
+
+    final var service = new Camunda7DeploymentService(
+        "c7", AnEngineHolding.theseModels(PROCESS_ID, Map.of("3", Bpmn.convertToString(model(processContent)))), mock(
+            Camunda7WorkflowProcessingLifecycle.class), TestCollaborators
+                .builder()
+                .build(), new Camunda7TaskRegistry());
+    return service
+        .processVersionCatalogOf(MODULE, PROCESS_ID)
+        .concurrentTokenElementsOfVersion(MODULE, PROCESS_ID, "3");
 
   }
 

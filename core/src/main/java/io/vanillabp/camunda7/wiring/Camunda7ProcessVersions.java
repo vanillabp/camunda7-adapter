@@ -12,6 +12,7 @@ import org.camunda.bpm.model.bpmn.BpmnModelInstance;
 
 import io.vanillabp.integration.adapter.spi.version.CachingProcessVersionCatalog;
 import io.vanillabp.integration.adapter.spi.version.DeployedProcessVersion;
+import io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec;
 import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 
 /**
@@ -118,13 +119,40 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * Reads the tasks of a model the engine holds - the deployment service' own
-   * extraction.
+   * What the deployment service' own extraction says about a model the engine holds. Every
+   * question is the walk a model this boot brings goes through, run over an old version,
+   * so the two directions of a question cannot disagree about what they are looking at.
+   * <p>
+   * Handed in rather than done here, because reading a model needs what the deployment
+   * service has: the process id as the ENGINE knows it and the plain identifiers behind a
+   * prefix.
    */
-  @FunctionalInterface
-  public interface TasksOfModel {
+  public interface HeldModelReading {
 
-    java.util.Collection<BpmnTaskSpec> of(
+    /**
+     * The tasks of that model, as the wiring validation would report them.
+     */
+    java.util.Collection<BpmnTaskSpec> tasksOf(
+        String workflowModuleId,
+        String bpmnProcessId,
+        String version,
+        BpmnModelInstance model);
+
+    /**
+     * The start events the engine fires on its own in that model, as the start
+     * validation would report them.
+     */
+    java.util.Collection<BpmsInitiatedStartSpec> startEventsOf(
+        String workflowModuleId,
+        String bpmnProcessId,
+        String version,
+        BpmnModelInstance model);
+
+    /**
+     * The elements of that model which can put a second token into a running workflow,
+     * as the deployment reports them.
+     */
+    java.util.Collection<String> concurrentTokenElementsOf(
         String workflowModuleId,
         String bpmnProcessId,
         String version,
@@ -132,7 +160,7 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
 
   }
 
-  private final TasksOfModel tasksOfModel;
+  private final HeldModelReading heldModelReading;
 
   /**
    * The engine's runtime, asked how many workflows still run on an old version.
@@ -146,13 +174,13 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
       final RepositoryService repositoryService,
       final BiFunction<String, String, String> scopedProcessIds,
       final Function<String, String> tenants,
-      final TasksOfModel tasksOfModel) {
+      final HeldModelReading heldModelReading) {
 
     this.adapterId = adapterId;
     this.repositoryService = repositoryService;
     this.scopedProcessIds = scopedProcessIds;
     this.tenants = tenants;
-    this.tasksOfModel = tasksOfModel;
+    this.heldModelReading = heldModelReading;
 
   }
 
@@ -190,18 +218,71 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
       final String bpmnProcessId,
       final String version) {
 
-    if (tasksOfModel == null) {
+    if (heldModelReading == null) {
       return null;
     }
-    final var definitionId = definitionIdOf(workflowModuleId, bpmnProcessId, version);
-    if (definitionId == null) {
-      // the engine does not hold that version any more (a deployment was deleted
-      // between the query and this call) - nothing to check, and nothing to warn
-      // about either
+    final var model = modelOfVersion(workflowModuleId, bpmnProcessId, version);
+    if (model == null) {
       return java.util.List.of();
     }
-    return tasksOfModel
-        .of(workflowModuleId, bpmnProcessId, version, repositoryService.getBpmnModelInstance(definitionId));
+    return heldModelReading.tasksOf(workflowModuleId, bpmnProcessId, version, model);
+
+  }
+
+  @Override
+  public java.util.Collection<BpmsInitiatedStartSpec> startEventsOfVersion(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    if (heldModelReading == null) {
+      return null;
+    }
+    final var model = modelOfVersion(workflowModuleId, bpmnProcessId, version);
+    if (model == null) {
+      return java.util.List.of();
+    }
+    return heldModelReading.startEventsOf(workflowModuleId, bpmnProcessId, version, model);
+
+  }
+
+  @Override
+  public java.util.Collection<String> concurrentTokenElementsOfVersion(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    if (heldModelReading == null) {
+      return null;
+    }
+    final var model = modelOfVersion(workflowModuleId, bpmnProcessId, version);
+    if (model == null) {
+      return java.util.List.of();
+    }
+    return heldModelReading.concurrentTokenElementsOf(workflowModuleId, bpmnProcessId, version, model);
+
+  }
+
+  /**
+   * The model of one version as the engine holds it, or <code>null</code> where the engine
+   * does not hold that version any more - a deployment deleted between the version query
+   * and this call, which is nothing to check and nothing to warn about either.
+   * <p>
+   * Every question about a version asks for the model itself rather than passing one
+   * around, because the engine parses a definition once and answers from its deployment
+   * cache afterwards, and no question can then be answered from a model another question
+   * happened to have read.
+   */
+  private BpmnModelInstance modelOfVersion(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    final var definitionId = definitionIdOf(workflowModuleId, bpmnProcessId, version);
+    if (definitionId == null) {
+      return null;
+    }
+    return repositoryService.getBpmnModelInstance(definitionId);
 
   }
 

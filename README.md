@@ -693,6 +693,17 @@ deploy command names the version the engine assigned to every model, tag include
 `Camunda7ProcessVersionIT#theVersionDecidesWhichMethodRuns` holds the routing and
 `Camunda7StartupQuestionCostTest` the number of questions a start asks.
 
+The models of those versions are read for more than the tasks they carry. A workflow on an older
+version loses an update exactly as one on the newest model does: two tokens in one workflow are
+two branches writing one workflow aggregate, and without a version attribute on that aggregate
+one of the two writes disappears without an error. So the adapter also answers which elements of
+a held version can put a second token into a workflow, through the walk it reports for the model
+it just deployed, and the core warns once per BPMN process naming the version they came from.
+The case worth the read is a parallel gateway the newest model dropped: the workflows which
+still carry it were started before that change, and they are the ones which run longest.
+`Camunda7ConcurrentTokensTest` holds the constructs and the reading of a held version; the core
+asks only about a version workflows really run on.
+
 ### A process id which is only declared
 
 A workflow module may name a BPMN process id no file of it carries any more, which is how a
@@ -737,9 +748,31 @@ own copy of the model), the task after the start event is served, and the end re
 core asks for the id's version catalog, because whatever reads that catalog next makes the
 engine parse the old definitions, and the parse is when the end listener is attached or lost
 for good.
+
+Those starts are what the catalog answers `startEventsOfVersion` with. Nothing wires the declared
+id while the application boots, so a `@WorkflowStartedByBpms` method kept for it used to be
+judged by nobody, and a typo in its `id` stayed one while the old timer fired every night. The
+adapter reads the start events of every version the engine holds under the id, through the same
+walk a deployed model goes through, and the core names the method no held version starts on. It
+reads and warns, nothing more: a model deployed years ago is not one anybody can go back and fix.
+`Camunda7StartEventsOfHeldVersionsTest` holds what is read out of such a model, the plain signal
+name included.
 [Decision 15](./DECISIONS.md#15-a-check-reads-the-engines-models-without-asking-who-deployed-them)
 carries the timing, `Camunda7DeclaredIdRuntimeIT` measures all three notifications against a
 running engine under `use-prefix`.
+
+Those workflows end like any other, so the warning about a `@WorkflowEnded` method this engine
+cannot serve is given for a declared id as well, while the id is being wired. No model of this
+boot passes by such an id, so nothing else would have said it. Where the engine holds no version
+under the id nothing is said at all: no version means no workflow which could end, and a
+misspelled declared id is the core's check to name, together with the ids the module really
+deploys.
+
+The deployment checks which stay with the model this boot brings stay there on purpose. Refusing
+an asynchronous task wired by expression, warning about an expression which reads what the
+aggregate does not share and refusing colliding process ids all judge something a modeller can
+still change and deploy again. A model the engine already holds is not that, and what a workflow
+running on one can still walk into is asked of the version catalog instead.
 
 ### A suspended version counts, and how to get past it once
 

@@ -1,25 +1,17 @@
 package io.vanillabp.camunda7.deployment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-import org.camunda.bpm.engine.RepositoryService;
-import org.camunda.bpm.engine.repository.ProcessDefinition;
-import org.camunda.bpm.engine.repository.ProcessDefinitionQuery;
-import org.camunda.bpm.model.bpmn.Bpmn;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mockito;
 
 import io.vanillabp.camunda7.Camunda7ProcessingContext;
 import io.vanillabp.camunda7.TestCollaborators;
@@ -135,6 +127,84 @@ public class Camunda7DeclaredProcessWiringTest {
 
   }
 
+  @Test
+  @DisplayName("A @WorkflowEnded method kept for the declared id is told when this engine cannot serve it")
+  public void theEndOfAWorkflowOfTheDeclaredIdIsCheckedToo(
+      final CapturedOutput output) {
+
+    final var service = adapterServing(
+        new Camunda7TaskRegistry(),
+        Map.of("1", A_MODEL_WITH_BOTH_KINDS_OF_TASK),
+        endHandlersFor(OLD_ID));
+    // the wire between the platform module and the engine is missing, which is the only
+    // way an end goes unreported on Camunda 7
+    service.setEngineDeliversWorkflowEnded(false);
+
+    service.startWorkflowProcessing(MODULE, new Camunda7ProcessingContext(MODULE));
+
+    final var logged = output.getOut() + output.getErr();
+    assertTrue(
+        logged.contains("A @WorkflowEnded method serves BPMN process 'loan_approval'"),
+        () -> "nothing of this boot names the old id, so this check is the only one which "
+            + "could say it: "
+            + logged);
+
+  }
+
+  @Test
+  @DisplayName("An id the engine holds nothing under says nothing about ends either")
+  public void anIdTheEngineHoldsNothingUnderStaysSilent(
+      final CapturedOutput output) {
+
+    final var service = adapterServing(
+        new Camunda7TaskRegistry(),
+        Map.of(),
+        endHandlersFor(OLD_ID));
+    service.setEngineDeliversWorkflowEnded(false);
+
+    service.startWorkflowProcessing(MODULE, new Camunda7ProcessingContext(MODULE));
+
+    final var logged = output.getOut() + output.getErr();
+    assertFalse(
+        logged.contains("A @WorkflowEnded method serves BPMN process"),
+        () -> "no version means no workflow which could end, and a misspelled declared id "
+            + "is the core's finding to report: "
+            + logged);
+
+  }
+
+  /**
+   * A core which knows an end handler for the given BPMN process, reduced to the question
+   * the deployment asks it.
+   */
+  private static io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker endHandlersFor(
+      final String bpmnProcessId) {
+
+    return new io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker() {
+
+      @Override
+      public boolean workflowEndedHandlerExists(
+          final String module,
+          final String process) {
+
+        return MODULE.equals(module) && bpmnProcessId.equals(process);
+
+      }
+
+      @Override
+      public void workflowEnded(
+          final String module,
+          final String process,
+          final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedContext context) {
+
+        throw new UnsupportedOperationException("not part of this test");
+
+      }
+
+    };
+
+  }
+
   /**
    * An adapter whose core declares one BPMN process id without a model, and whose engine
    * holds the given models under it, keyed by version.
@@ -143,59 +213,30 @@ public class Camunda7DeclaredProcessWiringTest {
       final Camunda7TaskRegistry taskRegistry,
       final Map<String, String> modelsByVersion) {
 
-    final var core = mock(WorkflowTaskWiring.class);
-    when(core.taskWiringOfProcessesNobodyDeployed(MODULE))
-        .thenReturn(Map.of(OLD_ID, List.<String>of("checkCredit", "approve")));
-    return new Camunda7DeploymentService(
-        "c7", anEngineHolding(modelsByVersion), mock(Camunda7WorkflowProcessingLifecycle.class), TestCollaborators
-            .builder()
-            .workflowTaskWiring(core)
-            .build(), taskRegistry);
+    return adapterServing(taskRegistry, modelsByVersion, mock(
+        io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker.class));
 
   }
 
   /**
-   * A repository service answering with the given versions of the declared process and
-   * with their models.
+   * The same with a core which knows what the application waits for once a workflow of the
+   * declared id ends.
    */
-  private static RepositoryService anEngineHolding(
-      final Map<String, String> modelsByVersion) {
+  private static Camunda7DeploymentService adapterServing(
+      final Camunda7TaskRegistry taskRegistry,
+      final Map<String, String> modelsByVersion,
+      final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker) {
 
-    // every mock is built BEFORE the first stubbing: creating one between when() and
-    // thenReturn() leaves Mockito with a stubbing it considers unfinished
-    final var definitions = definitions(modelsByVersion.keySet());
-    final var repositoryService = mock(RepositoryService.class);
-    final var query = mock(ProcessDefinitionQuery.class, RETURNS_SELF);
-    Mockito.lenient().when(query.list()).thenReturn(definitions);
-    when(repositoryService.createProcessDefinitionQuery()).thenReturn(query);
-    modelsByVersion
-        .forEach((
-            version,
-            model) -> Mockito
-                .lenient()
-                .when(repositoryService.getBpmnModelInstance("definition-"
-                    + version))
-                .thenReturn(
-                    Bpmn.readModelFromStream(new ByteArrayInputStream(model.getBytes(StandardCharsets.UTF_8)))));
-    return repositoryService;
-
-  }
-
-  private static List<ProcessDefinition> definitions(
-      final Collection<String> versions) {
-
-    return versions
-        .stream()
-        .map(version -> {
-          final var definition = mock(ProcessDefinition.class);
-          Mockito.lenient().when(definition.getId()).thenReturn("definition-"
-              + version);
-          Mockito.lenient().when(definition.getVersion()).thenReturn(Integer.valueOf(version));
-          Mockito.lenient().when(definition.getKey()).thenReturn(OLD_ID);
-          return definition;
-        })
-        .map(ProcessDefinition.class::cast)
-        .toList();
+    final var core = mock(WorkflowTaskWiring.class);
+    when(core.taskWiringOfProcessesNobodyDeployed(MODULE))
+        .thenReturn(Map.of(OLD_ID, List.<String>of("checkCredit", "approve")));
+    return new Camunda7DeploymentService(
+        "c7", AnEngineHolding.theseModels(OLD_ID, modelsByVersion), mock(
+            Camunda7WorkflowProcessingLifecycle.class), TestCollaborators
+                .builder()
+                .workflowTaskWiring(core)
+                .workflowEndedInvoker(workflowEndedInvoker)
+                .build(), taskRegistry);
 
   }
 
