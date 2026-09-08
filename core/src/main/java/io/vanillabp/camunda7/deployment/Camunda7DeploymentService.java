@@ -230,6 +230,16 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String workflowModuleId,
       final String bpmnProcessId) {
 
+    // being asked about a declared id is the FIRST thing which happens to it, and
+    // whatever reads the catalog next makes the engine PARSE the definitions the id
+    // still has - the moment the parse listener decides, by exactly this
+    // registration, whether the end of such a workflow is reported. Registering any
+    // later loses the end listener for good, because a parsed definition stays
+    // cached (measured by Camunda7DeclaredIdRuntimeIT). May be null in tests
+    if (taskRegistry != null) {
+      taskRegistry
+          .registerProcess(workflowModuleId, bpmnProcessId, scopedProcessId(workflowModuleId, bpmnProcessId));
+    }
     return processVersions;
 
   }
@@ -572,7 +582,14 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // them), while the core is keyed by the plain ones - so the model is searched
     // by the scoped id and the invoker is called with the plain one
     final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
-    collectTasks(model, workflowModuleId, bpmnProcessId, scopedBpmnProcessId, filename, specs, connectables);
+    collectTasks(
+        model,
+        workflowModuleId,
+        bpmnProcessId,
+        scopedBpmnProcessId,
+        "file '%s'".formatted(filename),
+        specs,
+        connectables);
 
     // both directions with guiding messages; throwing here honors the
     // deployment-failure policy for non-first-priority adapter ids
@@ -746,8 +763,14 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     final var specs = new LinkedList<BpmnTaskSpec>();
     final var connectables = new LinkedList<Camunda7TaskConnectable>();
     try {
+      final var model = repositoryService.getBpmnModelInstance(definitionId);
+      // the start listener attached at parse time asks for the PLAIN signal name of a
+      // signal start event, and for a model only the engine holds nobody registered
+      // one - it is right here, in the engine's own copy of the model, so a workflow
+      // the engine starts under the old id is told which signal fired
+      registerSignalStartEventsOf(workflowModuleId, scopedBpmnProcessId, model);
       collectTasks(
-          repositoryService.getBpmnModelInstance(definitionId),
+          model,
           workflowModuleId,
           bpmnProcessId,
           scopedBpmnProcessId,
@@ -791,11 +814,14 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The PLAIN BPMN process ID
    * @param scopedBpmnProcessId The BPMN process ID as the engine knows it
-   * @param describedSource What to name in a message about a broken model (the file
-   *          for the deployed model, the version for an older one)
+   * @param describedSource What to name in a message about the model, self-describing
+   *          ("file 'x.bpmn'" for the deployed model, "version 3" for one the engine
+   *          holds)
    * @param specs Collects the task specs
    * @param connectables Collects the connectables, or <code>null</code> for a model
-   *          which is not being deployed
+   *          which is only being READ on behalf of a check: such a model is never
+   *          refused - one this boot deploys may be, one the engine already holds is
+   *          reported by a warning instead, because nobody can change it any more
    */
   private void collectTasks(
       final BpmnModelInstance model,
@@ -811,9 +837,29 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
           final var expression = task.getAttributeValueNs(CAMUNDA_NS, "expression");
           final var topic = task.getAttributeValueNs(CAMUNDA_NS, "topic");
           if ((topic != null) && !topic.isBlank()) {
+            if (connectables == null) {
+              // the subject of the refusal below is a model being DEPLOYED. This model
+              // is only being READ, on behalf of a check about versions the engine
+              // already holds, and nobody can change it any more - so the boot goes
+              // on, and the check does not see this task
+              log.warn(
+                  """
+                      Camunda7[{}]: task '{}' of BPMN process '{}' ({}, workflow module '{}') is \
+                      implemented as an external task (camunda:topic '{}'), which VanillaBP does \
+                      not serve. The model is already in the engine, so nothing here can change \
+                      that - workflows reaching the task are served by whatever polls the topic, \
+                      and the report about older versions says nothing about it.""",
+                  adapterId,
+                  task.getId(),
+                  bpmnProcessId,
+                  describedSource,
+                  workflowModuleId,
+                  topic);
+              return;
+            }
             throw new IllegalStateException(
                 """
-                    Task '%s' of BPMN process '%s' (file '%s', workflow module '%s') is implemented \
+                    Task '%s' of BPMN process '%s' (%s, workflow module '%s') is implemented \
                     as an external task (camunda:topic) which is not supported by VanillaBP yet! \
                     Wire the task by 'camunda:expression' or 'camunda:delegateExpression' naming the \
                     @WorkflowTask method's task definition, e.g. ${%s}."""
@@ -842,8 +888,32 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             specs.add(new BpmnTaskSpec(task.getId(), null));
             return;
           }
-          final var taskDefinition = unwrapExpression(
-              rawExpression, task.getId(), bpmnProcessId, describedSource, workflowModuleId);
+          final String taskDefinition;
+          if (connectables == null) {
+            // a model only being READ: an expression VanillaBP cannot read costs the
+            // check its view of THIS task, never the boot
+            try {
+              taskDefinition = unwrapExpression(
+                  rawExpression, task.getId(), bpmnProcessId, describedSource, workflowModuleId);
+            } catch (final IllegalStateException e) {
+              log.warn(
+                  """
+                      Camunda7[{}]: the expression '{}' of task '{}' of BPMN process '{}' ({}, \
+                      workflow module '{}') cannot be read by VanillaBP. The model is already in \
+                      the engine, so nothing here can change that - the report about older \
+                      versions says nothing about this task.""",
+                  adapterId,
+                  rawExpression,
+                  task.getId(),
+                  bpmnProcessId,
+                  describedSource,
+                  workflowModuleId);
+              return;
+            }
+          } else {
+            taskDefinition = unwrapExpression(
+                rawExpression, task.getId(), bpmnProcessId, describedSource, workflowModuleId);
+          }
           specs.add(new BpmnTaskSpec(task.getId(), taskDefinition));
           if (connectables != null) {
             connectables.add(new Camunda7TaskConnectable(
@@ -905,17 +975,17 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String rawExpression,
       final String elementId,
       final String bpmnProcessId,
-      final String filename,
+      final String describedSource,
       final String workflowModuleId) {
 
     final var matcher = EL_PATTERN.matcher(rawExpression.trim());
     if (!matcher.matches()) {
       throw new IllegalStateException(
           """
-              The expression '%s' of task '%s' of BPMN process '%s' (file '%s', workflow module \
+              The expression '%s' of task '%s' of BPMN process '%s' (%s, workflow module \
               '%s') is not supported by VanillaBP! Use a simple expression naming the @WorkflowTask \
               method's task definition, e.g. ${myTaskDefinition}."""
-              .formatted(rawExpression, elementId, bpmnProcessId, filename, workflowModuleId));
+              .formatted(rawExpression, elementId, bpmnProcessId, describedSource, workflowModuleId));
     }
     return matcher.group(1).trim();
 
@@ -1222,6 +1292,48 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * Remembers the PLAIN signal names of the signal start events of a model the ENGINE
+   * holds - the same registration every deployed model gets in
+   * {@link #wireBpmsInitiatedStarts}, without the validation: the model was deployed by
+   * an earlier generation of this application, so there is nothing left to validate
+   * about it, only workflows to serve.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param scopedBpmnProcessId The process definition key the engine knows
+   * @param model The model as the engine holds it
+   */
+  private void registerSignalStartEventsOf(
+      final String workflowModuleId,
+      final String scopedBpmnProcessId,
+      final BpmnModelInstance model) {
+
+    model
+        .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.StartEvent.class)
+        .stream()
+        .filter(startEvent -> scopedBpmnProcessId.equals(owningProcessId(startEvent)))
+        .forEach(startEvent -> startEvent
+            .getEventDefinitions()
+            .stream()
+            .filter(org.camunda.bpm.model.bpmn.instance.SignalEventDefinition.class::isInstance)
+            .map(org.camunda.bpm.model.bpmn.instance.SignalEventDefinition.class::cast)
+            .findFirst()
+            .ifPresent(definition -> {
+              // the model carries the SCOPED signal name where identifiers are
+              // prefixed - the application is told the plain one
+              final var scopedSignalName = definition.getSignal() == null
+                  ? null
+                  : definition.getSignal().getName();
+              taskRegistry
+                  .registerSignalStartEvent(
+                      workflowModuleId,
+                      scopedBpmnProcessId,
+                      startEvent.getId(),
+                      plainIdentifier(workflowModuleId, scopedSignalName));
+            }));
+
+  }
+
+  /**
    * Removes the workflow module's prefix from an identifier the model carries, so
    * the application sees what it modelled. Without scoping, or without a
    * prefix, the identifier is returned unchanged.
@@ -1466,6 +1578,13 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
           workflowModuleId);
       return;
     }
+    // the way back from the engine's definition key has to exist BEFORE any of those
+    // models is read: reading one makes the engine PARSE the definition, and the parse
+    // listener decides by exactly this registration whether the end of such a workflow
+    // is reported (Camunda7AsyncBpmnParseListener#parseProcess). It also serves a
+    // process without any task: the version of an execution and the workflow module it
+    // belongs to are read from here
+    taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
     final var distinctConnectables = new java.util.LinkedHashMap<String, Camunda7TaskConnectable>();
     definitionIdsByVersion
         .forEach((
@@ -1478,9 +1597,6 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                 definitionId,
                 distinctConnectables));
     distinctConnectables.values().forEach(taskRegistry::register);
-    // a process without any task needs the way back from the engine's definition key too:
-    // the version of an execution and the workflow module it belongs to are read from here
-    taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
     log.info(
         "Camunda7[{}]: wired {} task(s) of the {} version(s) the engine holds under the declared BPMN "
             + "process '{}' (workflow module '{}'), so the workflows still running on them keep being "
