@@ -21,6 +21,9 @@ import org.camunda.bpm.engine.impl.util.xml.Element;
  */
 public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
 
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
+      .getLogger(Camunda7AsyncBpmnParseListener.class);
+
   /**
    * Delivers CANCELED lifecycle events to subscribing handlers - attached as an END
    * execution listener to service-like activities (see
@@ -81,8 +84,17 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
     }
     // a model must not pay for a notification the application did not ask for
     if (!workflowEndedHandlerExists.test(processDefinition.getTenantId(), processDefinition.getKey())) {
+      log.debug(
+          "Camunda7: no end listener for process definition '{}' (tenant '{}') - nothing asked "
+              + "for the end of its workflows at the moment the engine parsed it",
+          processDefinition.getKey(),
+          processDefinition.getTenantId());
       return;
     }
+    log.debug(
+        "Camunda7: end listener attached to process definition '{}' (tenant '{}')",
+        processDefinition.getKey(),
+        processDefinition.getTenantId());
     // 'addListener' and not the deprecated 'addExecutionListener', which does nothing but
     // delegate here, and not 'addBuiltInListener' either: a built-in listener is the
     // ENGINE's own and is the only kind which still runs when a caller skips custom
