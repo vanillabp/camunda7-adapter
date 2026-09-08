@@ -281,3 +281,30 @@ A customizer is asked once per configured adapter id, with that id. Two ids are 
 an extension registering something per engine has to be able to tell them apart - the same reason
 every other per-adapter object of this adapter exists once per id.
 
+### 15. A check reads the engine's models without asking who deployed them
+
+The platform's decision 38 carries the rule: a check against a BPMN model must not depend on
+which application version deployed the model it judges, and a check which cannot see every model
+that could carry the answer stays silent instead of refusing. On this adapter the rule lands in
+three places.
+
+The engine STARTS workflows of a declared-only id on its own. The timer of the old model's
+latest version keeps firing after the rename, and its signal subscription keeps matching, so
+every listener serving such a start has to find its way back from the engine's definition key to
+the workflow module and the plain id. That registration happens the moment the core asks for the
+id's version catalog (`processVersionCatalogOf`), not later: the first read of that catalog makes
+the engine parse the old definitions, the parse listener decides by exactly this registration
+whether an end listener is attached, and a parsed definition stays cached - registering after
+the parse loses the end notification for good. The plain signal names of a held model's signal
+start events are read from the engine's own copy while its versions are wired, because nobody
+registered them at deployment: nothing was deployed.
+
+The refusals of the extraction judge a model being DEPLOYED. A model the engine already holds is
+only being read - by the wiring of a declared id (decision 13 skips such a version with one
+warning) or by the startup check about older versions, which used to END THE BOOT over an
+external task (`camunda:topic`) in a version deployed years ago. Both read paths warn now,
+naming the version as a version instead of rendering it into a message slot which said "file",
+and the check answers for the rest of the model.
+
+`Camunda7DeclaredIdRuntimeIT` measures the starts and the end against a running engine under
+`use-prefix`, `Camunda7HeldModelReadingTest` the reading which never refuses.

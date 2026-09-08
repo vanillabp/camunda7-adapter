@@ -728,6 +728,19 @@ under the old id, an application which deploys only the new one, and the workflo
 end through the methods of that application, its open `camunda:delegateExpression` task
 included.
 
+The engine also STARTS workflows under such an id on its own: the timer of the old model's
+latest version keeps firing after the rename, and its signal subscription keeps matching a
+broadcast. Those workflows are full VanillaBP workflows too - the aggregate is built through
+`@WorkflowStartedByBpms` (a signal start is told the plain signal name, read from the engine's
+own copy of the model), the task after the start event is served, and the end reaches
+`@WorkflowEnded`. The way back from the engine's definition key is registered the moment the
+core asks for the id's version catalog, because whatever reads that catalog next makes the
+engine parse the old definitions, and the parse is when the end listener is attached or lost
+for good.
+[Decision 15](./DECISIONS.md#15-a-check-reads-the-engines-models-without-asking-who-deployed-them)
+carries the timing, `Camunda7DeclaredIdRuntimeIT` measures all three notifications against a
+running engine under `use-prefix`.
+
 ### A suspended version counts, and how to get past it once
 
 Deleting a process definition removes it from this engine, so the startup check for old process
@@ -912,6 +925,11 @@ the engine's own execution (`camunda:expression`/`camunda:delegateExpression`, s
 [Task processing](#task-processing-execution-model)), and the external-task API is a
 second delivery mechanism with its own lock, retry and completion model. Nobody asked for
 it yet, so there is no timeline.
+
+Deploying such a task is refused with a guiding message. Meeting one in a version the engine
+ALREADY holds is a warning naming the version instead: that model is only being read, on
+behalf of the startup check about older versions, and nobody can change it any more - see
+[decision 15](./DECISIONS.md#15-a-check-reads-the-engines-models-without-asking-who-deployed-them).
 
 ### New jobs wait for the next acquisition cycle
 
