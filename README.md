@@ -472,6 +472,14 @@ nothing waits for, a correlation id no execution expects, a message start event 
 not deployed - all of them fail where the application made the call.
 `Camunda7PhaseOneChecksTest` holds that.
 
+A check which finds the task gone throws `io.vanillabp.spi.process.TaskNotFoundException`,
+the type the SPI documents for a task no BPMS knows any more, and the type the platform
+raises when its own probe found out. Which of the two answers is decided by whether a
+delivery record exists, which only the own-datasource mode writes, and an application
+cannot see that - so it must not decide what an application can catch.
+`Camunda7RepeatedDeliveryIT#aStaleCompletionRaisesTheGuidingException` drives it against
+an engine on its own datasource, the one setup where the record exists.
+
 Every phase two is idempotent, because the outbox dispatches at-least-once: a start
 skips an instance which already carries the business key, completing or cancelling
 checks the task, and correlating checks the subscription. Each check happens BEFORE the
