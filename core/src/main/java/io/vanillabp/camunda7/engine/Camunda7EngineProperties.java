@@ -63,9 +63,10 @@ public class Camunda7EngineProperties {
   private String tablePrefix;
 
   /**
-   * The serialization format nested values shared by a workflow aggregate are stored in,
-   * e.g. {@code application/xstream} (camunda-xstream) or
-   * {@code application/json} (SPIN). It is applied twice: to the engine's
+   * The serialization format a shared value the engine has no variable type for is stored
+   * in, e.g. {@code application/json} (the SPIN JSON dataformat) or
+   * {@code application/xstream} (camunda-xstream). That is a nested value and a number
+   * this engine cannot store as itself. It is applied twice: to the engine's
    * {@code defaultSerializationFormat}, so an application configures the format once, and
    * per written variable, so a workflow module or a single workflow may override it
    * ({@code vanillabp.workflow-modules.<module>.adapters.<id>.serialization-format},

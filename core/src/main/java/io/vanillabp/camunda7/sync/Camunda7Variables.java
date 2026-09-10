@@ -47,8 +47,9 @@ import org.slf4j.LoggerFactory;
  * versions. That is worth exactly one warning, which this class logs the first time it
  * writes such a value.
  * <p>
- * What is written is decision 1 in the repository's DECISIONS.md, and in which
- * format is decision 9 in the repository's
+ * What is written is decision 1 in the repository's DECISIONS.md, in which format is
+ * decision 9 in the repository's DECISIONS.md, and that a number the engine has no type for
+ * keeps its class rather than being widened is decision 16 in the repository's
  * DECISIONS.md.
  */
 public final class Camunda7Variables {

@@ -1,8 +1,9 @@
 package io.vanillabp.camunda7.sync;
 
 /**
- * Which serialization format Camunda 7 stores a NESTED shared value in,
- * resolved per workflow with a fallback to the workflow module and to the adapter:
+ * Which serialization format Camunda 7 stores a shared value it has no variable type for
+ * in - a nested value, and a number the engine cannot store as itself - resolved per
+ * workflow with a fallback to the workflow module and to the adapter:
  *
  * <pre>
  * vanillabp.workflow-modules.&lt;module&gt;.workflows.&lt;workflow&gt;.adapters.&lt;id&gt;.serialization-format
@@ -11,9 +12,9 @@ package io.vanillabp.camunda7.sync;
  * </pre>
  *
  * The value is a Camunda serialization data format, e.g.
+ * <code>application/json</code> for the SPIN JSON dataformat or
  * <code>application/xstream</code> for
- * <a href="https://github.com/RasPelikan/camunda-xstream">camunda-xstream</a> or
- * <code>application/json</code> for the SPIN JSON dataformat. The engine needs the
+ * <a href="https://github.com/RasPelikan/camunda-xstream">camunda-xstream</a>. The engine needs the
  * matching dataformat on its classpath - which is the application's dependency, and the
  * adapter-level value is additionally applied to the engine's
  * <code>defaultSerializationFormat</code>, so an application configures the format once
@@ -26,17 +27,23 @@ package io.vanillabp.camunda7.sync;
  * to the application's class versions - so the adapter says so, once, when it writes such
  * a value.
  * <p>
+ * A format is not free of loss either. It decides what a value reads as, and JSON has one
+ * number type, so a decimal of <code>120.50</code> comes back as <code>120.5</code>. The
+ * deployment measures that through the engine's own serializer and warns about every
+ * attribute the models read whose value would not come back as it went in (see
+ * {@link Camunda7SerializationRoundTrip}).
+ * <p>
  * Implemented by the platform integrations, since each of them binds its own
  * configuration; the resolution across the three levels is
  * {@link #firstConfigured(String...)}.
  * <p>
- * Why a nested value is written in the engine's own format instead of as a JSON string is decision
+ * Why such a value is written in the engine's own format instead of as a JSON string is decision
  * 9 in the repository's DECISIONS.md.
  */
 public interface Camunda7SerializationFormats {
 
   /**
-   * The format for nested values of the given workflow.
+   * The format for the values of the given workflow which the engine has no type for.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID

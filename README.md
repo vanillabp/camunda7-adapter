@@ -559,12 +559,20 @@ decides on what that task just computed, so the values are written INSIDE the en
 transaction, right after the handler returned and before the activity is left. A broadcast
 signal writes nothing, since it reaches workflows of other aggregates.
 
-A scalar becomes a scalar variable, a nested value an object variable in the format the
-application configures (`vanillabp.adapters.<id>.serialization-format`, overridable per
-workflow module and per workflow) - which is what keeps `${order.customer.name}` working,
-because the engine deserializes before EL navigates. Without a format the engine falls back to Java serialization,
+A value the engine has a variable type for becomes a scalar variable: a short, an integer,
+a long, a double, a boolean, a string, a date and bytes, plus a `Character`, which is
+written as a string. Everything else keeps its class in an object variable of the format
+the application configures (`vanillabp.adapters.<id>.serialization-format`, overridable per
+workflow module and per workflow) - a nested value, which is what keeps
+`${order.customer.name}` working because the engine deserializes before EL navigates, and a
+number this engine has no type for: a `BigDecimal`, a `BigInteger` or a `Float`. Those are
+not widened to a double, so a model reads the value the application holds, the way version 1
+did (see decision 16 in the repository's DECISIONS.md). Without a format the engine falls back to Java serialization,
 which the adapter warns about once: a blob in Cockpit, and the engine's database holding
-serialized instances of the application's classes.
+serialized instances of the application's classes. And where the configured format cannot
+carry a type unchanged, the deployment says so per attribute the models read, measured
+through the engine's own serializer rather than claimed from a list
+(`Camunda7SerializationRoundTrip`, `Camunda7LossyFormatCheckIT`).
 
 A format needs a dataformat plugin (camunda-xstream, SPIN), and a plugin reaches an
 embedded engine this adapter builds under `vanillabp.adapters.<id>.engine-plugins`: a named

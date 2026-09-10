@@ -148,9 +148,9 @@ public interface VanillaBpCamunda7Properties {
     Optional<String> tablePrefix();
 
     /**
-     * OPTIONAL serialization format nested values shared by a workflow aggregate are
-     * stored in, e.g. <code>application/xstream</code> (camunda-xstream) or
-     * <code>application/json</code> (SPIN). Applied to the engine's
+     * OPTIONAL serialization format a shared value the engine has no variable type for
+     * is stored in, e.g. <code>application/json</code> (the SPIN JSON dataformat) or
+     * <code>application/xstream</code> (camunda-xstream). Applied to the engine's
      * <code>defaultSerializationFormat</code> and to the variables VanillaBP writes;
      * overridable per workflow module and per workflow (see
      * {@link VanillaBpCamunda7Properties#workflowModules()}). The matching dataformat is

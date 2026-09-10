@@ -1181,6 +1181,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * <code>defaultSerializationFormat</code> is not something this adapter reads back. Such
    * an application hears about the blob in Cockpit from the missing-format warning
    * instead, which is the other half of the same story.
+   * <p>
+   * That a value the engine has no type for keeps its class, and that a format which
+   * cannot carry it is reported rather than worked around, is decision 16 in the
+   * repository's DECISIONS.md.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID as the application knows it
