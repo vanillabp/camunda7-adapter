@@ -657,7 +657,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // can say it while the application starts
     warnAboutUnsharedAggregatePaths(workflowModuleId, bpmnProcessId, expressionOrigins);
 
-    // And a value which IS shared may still reach the expression as something else than
+    // And a value which IS shared may still reach the expression as something other than
     // the application holds, because a value the engine has no type for travels through
     // the configured serialization format
     warnAboutTypesTheFormatCannotCarry(workflowModuleId, bpmnProcessId, expressionOrigins);
@@ -1247,7 +1247,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             Camunda7[{}]: BPMN process '{}' of workflow module '{}' shares '{}' as a {}, and the \
             serialization format '{}' configured for it cannot carry that type without loss: the \
             engine reads a value of {}. An expression rendering that value, or comparing it for \
-            equality, therefore answers something else than your code holds, while a comparison \
+            equality, therefore answers something other than your code holds, while a comparison \
             (${amount > 100}) is unaffected, because EL coerces both sides to BigDecimal. Three \
             ways out, pick the one which applies: keep the value out of the BPMS \
             (@NoSyncWithBPMS on its getter) and let the model decide on what your code decided; \
