@@ -646,11 +646,21 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             bpmnProcessId,
             Camunda7ConcurrentTokens.elementIdsOf(model, scopedBpmnProcessId));
 
+    // What the expressions of this model read, which two checks ask the core about. The
+    // model is parsed for them once: both questions are about the same paths
+    final var expressionOrigins = io.vanillabp.camunda7.sync.Camunda7ExpressionIdentifiers
+        .of(model, scopedBpmnProcessId);
+
     // An expression reading an attribute the aggregate does not share
     // evaluates to null, and Camunda 7 then takes the default flow without saying a
     // word. The adapter knows the model, the core knows what is shared - together they
     // can say it while the application starts
-    warnAboutUnsharedAggregatePaths(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
+    warnAboutUnsharedAggregatePaths(workflowModuleId, bpmnProcessId, expressionOrigins);
+
+    // And a value which IS shared may still reach the expression as something else than
+    // the application holds, because a value the engine has no type for travels through
+    // the configured serialization format
+    warnAboutTypesTheFormatCannotCarry(workflowModuleId, bpmnProcessId, expressionOrigins);
 
     // This engine reports the end of a workflow, so a @WorkflowEnded
     // method staying silent means the adapter was not wired - which used to be
@@ -691,6 +701,45 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * workflows of a process run. May be <code>null</code> in tests.
    */
   private org.camunda.bpm.engine.RuntimeService runtimeService;
+
+  /**
+   * How the serialization format of a workflow is resolved, which the startup check needs
+   * because a workflow may deviate from its module and a module from the adapter. Set by
+   * the platform integration, like the identity service. May be <code>null</code> (tests):
+   * nothing is then reported about a format.
+   */
+  private io.vanillabp.camunda7.sync.Camunda7SerializationFormats serializationFormats;
+
+  /**
+   * Sets the format resolution of the platform integration.
+   *
+   * @param serializationFormats The format per workflow, module and adapter
+   */
+  public void setSerializationFormats(
+      final io.vanillabp.camunda7.sync.Camunda7SerializationFormats serializationFormats) {
+
+    this.serializationFormats = serializationFormats;
+
+  }
+
+  /**
+   * What a configured format does to a value, measured through this engine's own
+   * serializers. May be <code>null</code> (tests, or an engine which does not hand its
+   * configuration over): nothing is reported then.
+   */
+  private io.vanillabp.camunda7.sync.Camunda7SerializationRoundTrip serializationRoundTrip;
+
+  /**
+   * Sets the probe reading this engine's serializers.
+   *
+   * @param serializationRoundTrip The probe, or <code>null</code>
+   */
+  public void setSerializationRoundTrip(
+      final io.vanillabp.camunda7.sync.Camunda7SerializationRoundTrip serializationRoundTrip) {
+
+    this.serializationRoundTrip = serializationRoundTrip;
+
+  }
 
   /**
    * The process definition the engine considers current for that process - what this
@@ -1084,17 +1133,13 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID as the application knows it
-   * @param scopedBpmnProcessId The process ID as the engine knows it
-   * @param model The deployed model
+   * @param origins What the expressions of the model read, keyed by the path
    */
   private void warnAboutUnsharedAggregatePaths(
       final String workflowModuleId,
       final String bpmnProcessId,
-      final String scopedBpmnProcessId,
-      final BpmnModelInstance model) {
+      final Map<String, io.vanillabp.camunda7.sync.Camunda7ExpressionIdentifiers.Origin> origins) {
 
-    final var origins = io.vanillabp.camunda7.sync.Camunda7ExpressionIdentifiers
-        .of(model, scopedBpmnProcessId);
     if (origins.isEmpty()) {
       return;
     }
@@ -1112,6 +1157,133 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                 path,
                 origins.get(path),
                 verdict));
+
+  }
+
+  /**
+   * Reports every value the models read whose type the configured serialization format
+   * cannot carry unchanged.
+   * <p>
+   * A value Camunda 7 has no variable type for keeps its class in an object variable, and
+   * what an expression reads back is then the serializer's answer. That answer must not
+   * depend on the format, and where this adapter cannot prevent that it says so instead
+   * of staying quiet. It says it here, while the application boots, rather than leaving it
+   * to be found in a rendered form months later.
+   * <p>
+   * Only what the MODELS read is asked about, the same list the unshared check walks: a
+   * value nothing reads costs nobody a wrong decision, and a message about it would be a
+   * message nobody can act on. A value which is only rendered into a form or an email is
+   * the price of that, and it is not this check's subject.
+   * <p>
+   * Silence where no format is configured is deliberate. Every one of these types
+   * round-trips exactly through Java serialization, so there would be nothing to report,
+   * and what an application set on the engine's own
+   * <code>defaultSerializationFormat</code> is not something this adapter reads back. Such
+   * an application hears about the blob in Cockpit from the missing-format warning
+   * instead, which is the other half of the same story.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID as the application knows it
+   * @param origins What the expressions of the model read, keyed by the path
+   */
+  private void warnAboutTypesTheFormatCannotCarry(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final Map<String, io.vanillabp.camunda7.sync.Camunda7ExpressionIdentifiers.Origin> origins) {
+
+    if ((serializationRoundTrip == null) || (serializationFormats == null) || origins.isEmpty()) {
+      return;
+    }
+    final var serializationFormat = serializationFormats.formatFor(workflowModuleId, bpmnProcessId);
+    if ((serializationFormat == null) || serializationFormat.isBlank()) {
+      return;
+    }
+    workflowTaskWiring
+        .declaredTypesOfWorkflowAggregatePaths(
+            workflowModuleId,
+            bpmnProcessId,
+            origins.keySet(),
+            io.vanillabp.camunda7.processservice.Camunda7ProcessService.SYNC_MODE)
+        .forEach((
+            path,
+            declaredType) -> serializationRoundTrip
+                // a path with a dot in it reaches the engine inside the map the sync
+                // model built, which is where a format loses the TYPE rather than a digit
+                .whatTheFormatChangesAbout(serializationFormat, declaredType, path.contains("."))
+                .ifPresent(whatComesBack -> reportLossyFormat(
+                    workflowModuleId,
+                    bpmnProcessId,
+                    path,
+                    declaredType,
+                    serializationFormat,
+                    whatComesBack)));
+
+  }
+
+  /**
+   * One WARN about one value the format changes.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID as the application knows it
+   * @param path The path the expression reads, segments separated by dots
+   * @param declaredType The type the application declares that value as
+   * @param serializationFormat The format configured for this workflow
+   * @param whatComesBack What the measurement found
+   */
+  private void reportLossyFormat(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String path,
+      final Class<?> declaredType,
+      final String serializationFormat,
+      final io.vanillabp.camunda7.sync.Camunda7SerializationRoundTrip.WhatComesBack whatComesBack) {
+
+    log.warn(
+        """
+            Camunda7[{}]: BPMN process '{}' of workflow module '{}' shares '{}' as a {}, and the \
+            serialization format '{}' configured for it cannot carry that type without loss: the \
+            engine reads a value of {}. An expression rendering that value, or comparing it for \
+            equality, therefore answers something else than your code holds, while a comparison \
+            (${amount > 100}) is unaffected, because EL coerces both sides to BigDecimal. Three \
+            ways out, pick the one which applies: keep the value out of the BPMS \
+            (@NoSyncWithBPMS on its getter) and let the model decide on what your code decided; \
+            share it as its text (a getter returning String) where an operator only has to read \
+            it; or configure a format which carries the type, at the price the missing-format \
+            warning names.""",
+        adapterId,
+        bpmnProcessId,
+        workflowModuleId,
+        path,
+        declaredType.getName(),
+        serializationFormat,
+        whatTheFormatMadeOfIt(declaredType, whatComesBack));
+
+  }
+
+  /**
+   * What the round trip did to the sample, as the middle of a sentence. The class is named
+   * only where it changed, which is what tells a nested value apart from a top-level one:
+   * a format which drops a digit is a different problem than a format which drops the
+   * type.
+   *
+   * @param declaredType The type the application declares the value as
+   * @param whatComesBack What the measurement found
+   * @return A phrase reading "120.50 back as 120.5"
+   */
+  private static String whatTheFormatMadeOfIt(
+      final Class<?> declaredType,
+      final io.vanillabp.camunda7.sync.Camunda7SerializationRoundTrip.WhatComesBack whatComesBack) {
+
+    if (declaredType.equals(whatComesBack.readBackType())) {
+      return "%s back as %s".formatted(whatComesBack.written(), whatComesBack.readBack());
+    }
+    return "%s back as a %s of %s"
+        .formatted(
+            whatComesBack.written(),
+            whatComesBack
+                .readBackType()
+                .getName(),
+            whatComesBack.readBack());
 
   }
 

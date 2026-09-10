@@ -308,6 +308,10 @@ public abstract class AbstractNestedExpressionsIT {
   @DisplayName("The nested BigDecimal is whatever the serialization format made of it")
   void theNestedBigDecimalIsWhateverTheSerializationFormatMadeOfIt() {
 
+    // this is the answer the startup check reports while the application boots: a nested
+    // value travels inside the map the sync model built, so a format which has one number
+    // type hands back a Double where the aggregate holds a BigDecimal, and no expression
+    // says where that came from. Camunda7LossyFormatCheckIT reads the boot's side of it
     assertEquals(theTextOfTheNestedBigDecimal(), valueOf("${order.total.toString()}"));
     assertWhatTheNestedNumberAnswersToScale();
 

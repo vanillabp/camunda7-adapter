@@ -150,6 +150,16 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                         .bean(VanillaBpCamunda7Properties.class)
                         .enginePropertiesFor(adapterId)
                         .isAcceptUnscopedIdentifiers());
+                // Which format a workflow's values travel in, and what this engine's
+                // serializers make of them - the startup check reads both
+                final var deploymentOverlay = supplierContext.bean(VanillaBpCamunda7Properties.class);
+                deploymentService.setSerializationFormats(
+                    (
+                        workflowModuleId,
+                        bpmnProcessId) -> deploymentOverlay
+                            .serializationFormatFor(adapterId, workflowModuleId, bpmnProcessId));
+                deploymentService.setSerializationRoundTrip(
+                    io.vanillabp.camunda7.sync.Camunda7SerializationRoundTrip.of(engine.getProcessEngine()));
                 return deploymentService;
               }));
 
