@@ -36,10 +36,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * model into a map of process variables, and what the engine does with the answer at
  * every site a model can put an expression into.
  * <p>
- * <b>This class pins what the code does today, not what it should do.</b> Several of the
- * cases below assert a behaviour which is known to be wrong and is being changed
- * elsewhere; each of those says so where it stands, so that nobody reads the assertion as
- * approval. What the suite is good for is the opposite: a change to the sync model, to
+ * <b>This class pins what the code does today, not what it should do.</b> One case below
+ * still asserts a behaviour which is known to be wrong and is being changed elsewhere,
+ * the conditional start event whose failure lands in the outbox; it says so where it
+ * stands, so that nobody reads the assertion as approval. What the suite is good for is
+ * the opposite: a change to the sync model, to
  * the variables the adapter writes or to the engine version shows up here as a failing
  * case naming the expression, instead of as a workflow which silently takes the wrong
  * branch in somebody's application.
@@ -285,14 +286,13 @@ public abstract class AbstractNestedExpressionsIT {
   // ------------------------------------------------------------- the top-level BigDecimal
 
   @Test
-  @DisplayName("A top-level BigDecimal arrives as a double and loses the scale it was written with")
-  void aTopLevelBigDecimalArrivesAsADoubleAndLosesItsScale() {
+  @DisplayName("A top-level BigDecimal keeps its class, and what it renders as is the format's answer")
+  void aTopLevelBigDecimalKeepsItsClass() {
 
-    // BEHAVIOUR UNDER EXAMINATION, NOT THE DESIRED ONE. The aggregate carries 120.50 and
-    // a version-1 model rendering it read '120.50'; Camunda7Variables turns a top-level
-    // BigDecimal into a double, so the same model reads '120.5' now and nothing says so.
-    // Both worlds answer the same today, and each of them says so for itself, so the
-    // change of that conversion shows up per world instead of hiding in one constant.
+    // Camunda 7 has no variable type for a BigDecimal, so the value keeps its class in an
+    // object variable and the configured format decides what it renders as. That is the
+    // version-1 answer: the model reads the value the application holds, rather than a
+    // double somebody widened it to on the way in.
     assertEquals(theTextOfTheTopLevelBigDecimal(), valueOf("${total.toString()}"));
     assertEquals(theClassOfTheTopLevelBigDecimal(), valueOf("${total}").getClass());
 

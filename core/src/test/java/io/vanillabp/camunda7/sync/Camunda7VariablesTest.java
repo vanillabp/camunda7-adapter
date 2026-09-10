@@ -19,9 +19,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * How the values a workflow aggregate shares become Camunda 7 variables - a
- * scalar stays comparable, a nested structure becomes an object variable in the
- * configured serialization format (which is what keeps dot-notated expressions working).
+ * How the values a workflow aggregate shares become Camunda 7 variables - a value the
+ * engine has a type for stays comparable, everything else keeps its class in an object
+ * variable of the configured serialization format (which is what keeps dot-notated
+ * expressions working).
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7VariablesTest {
@@ -51,23 +52,44 @@ public class Camunda7VariablesTest {
   }
 
   @Test
-  @DisplayName("Numbers Camunda 7 has no type for become doubles, a character becomes a string")
-  public void numbersWithoutATypeBecomeDoubles() {
+  @DisplayName("A number Camunda 7 has no type for keeps its class in an object variable")
+  public void numbersWithoutATypeKeepTheirClass() {
+
+    final var amount = new BigDecimal("19.99");
+    final var huge = new BigInteger("9007199254740993");
 
     final var variables = Camunda7Variables
         .of(
             Map
                 .of(
-                    "amount", new BigDecimal("19.99"),
-                    "huge", new BigInteger("42"),
-                    "ratio", 1.5f,
-                    "grade", 'A'),
-            "application/xstream");
+                    "amount", amount,
+                    "huge", huge,
+                    "ratio", 1.5f),
+            "application/json");
 
-    // a model comparing a number means arithmetic - as text '19.99' would not compare
-    assertEquals(19.99d, variables.get("amount"));
-    assertEquals(42.0d, variables.get("huge"));
-    assertEquals(1.5d, variables.get("ratio"));
+    // the value the application holds is the value the model reads: widening it to a
+    // double would drop the scale of the decimal and the last digits of the integer,
+    // and a comparison needs neither, because EL coerces to BigDecimal anyway
+    final var amountVariable = assertInstanceOf(ObjectValue.class, variables.get("amount"));
+    assertEquals("application/json", amountVariable.getSerializationDataFormat());
+    assertEquals(amount, amountVariable.getValue());
+
+    final var hugeVariable = assertInstanceOf(ObjectValue.class, variables.get("huge"));
+    assertEquals(huge, hugeVariable.getValue());
+
+    final var ratioVariable = assertInstanceOf(ObjectValue.class, variables.get("ratio"));
+    assertEquals(1.5f, ratioVariable.getValue());
+
+  }
+
+  @Test
+  @DisplayName("A character becomes a string, which is a rule of its own")
+  public void aCharacterBecomesAString() {
+
+    final var variables = Camunda7Variables.of(Map.of("grade", 'A'), "application/json");
+
+    // the only conversion left, and it loses nothing: EL compares a character to 'A' and
+    // to "A" alike, and this buys a readable string variable instead of an object one
     assertEquals("A", variables.get("grade"));
 
   }

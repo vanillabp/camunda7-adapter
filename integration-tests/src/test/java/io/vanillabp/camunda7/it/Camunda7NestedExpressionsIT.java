@@ -1,7 +1,6 @@
 package io.vanillabp.camunda7.it;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 
@@ -47,25 +46,23 @@ public class Camunda7NestedExpressionsIT extends AbstractNestedExpressionsIT {
   @Override
   protected Class<?> theClassOfTheTopLevelBigDecimal() {
 
-    // the top-level value never reaches a serializer today: the adapter widens it to a
-    // double before the engine sees it, so this world answers what the other one answers
-    return Double.class;
+    return BigDecimal.class;
 
   }
 
   @Override
   protected String theTextOfTheTopLevelBigDecimal() {
 
-    return "120.5";
+    // Java serialization writes the value the aggregate holds and reads it back
+    // unchanged, so a model rendering it reads what version 1 rendered
+    return "120.50";
 
   }
 
   @Override
   protected void assertWhatTheTopLevelNumberAnswersToScale() {
 
-    assertTrue(
-        failureOf("${total.scale() > 0}").contains("Method not found: class java.lang.Double.scale()"),
-        failureOf("${total.scale() > 0}"));
+    assertEquals(Boolean.TRUE, valueOf("${total.scale() > 0}"));
 
   }
 

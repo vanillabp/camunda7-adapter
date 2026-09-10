@@ -1,6 +1,9 @@
 package io.vanillabp.camunda7.it;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.math.BigDecimal;
 
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
@@ -53,15 +56,18 @@ public class Camunda7NestedExpressionsJsonIT extends AbstractNestedExpressionsIT
   @Override
   protected Class<?> theClassOfTheTopLevelBigDecimal() {
 
-    // no serializer is involved at the top level today: the adapter widens the value to a
-    // double, so the configured format has nothing to say about it
-    return Double.class;
+    // an object variable records the class it was written with, and Jackson reads the
+    // number back into it - which is why the top level keeps the class here while the
+    // nested value above does not
+    return BigDecimal.class;
 
   }
 
   @Override
   protected String theTextOfTheTopLevelBigDecimal() {
 
+    // the class survives, the scale does not: JSON has one number type, so 120.50 is
+    // written as 120.5 and comes back as that
     return "120.5";
 
   }
@@ -69,9 +75,7 @@ public class Camunda7NestedExpressionsJsonIT extends AbstractNestedExpressionsIT
   @Override
   protected void assertWhatTheTopLevelNumberAnswersToScale() {
 
-    assertTrue(
-        failureOf("${total.scale() > 0}").contains("Method not found: class java.lang.Double.scale()"),
-        failureOf("${total.scale() > 0}"));
+    assertEquals(Boolean.TRUE, valueOf("${total.scale() > 0}"));
 
   }
 
