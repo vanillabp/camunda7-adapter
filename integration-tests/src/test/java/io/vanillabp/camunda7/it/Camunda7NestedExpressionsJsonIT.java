@@ -50,4 +50,29 @@ public class Camunda7NestedExpressionsJsonIT extends AbstractNestedExpressionsIT
 
   }
 
+  @Override
+  protected Class<?> theClassOfTheTopLevelBigDecimal() {
+
+    // no serializer is involved at the top level today: the adapter widens the value to a
+    // double, so the configured format has nothing to say about it
+    return Double.class;
+
+  }
+
+  @Override
+  protected String theTextOfTheTopLevelBigDecimal() {
+
+    return "120.5";
+
+  }
+
+  @Override
+  protected void assertWhatTheTopLevelNumberAnswersToScale() {
+
+    assertTrue(
+        failureOf("${total.scale() > 0}").contains("Method not found: class java.lang.Double.scale()"),
+        failureOf("${total.scale() > 0}"));
+
+  }
+
 }

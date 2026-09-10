@@ -143,6 +143,23 @@ public abstract class AbstractNestedExpressionsIT {
    */
   protected abstract void assertWhatTheNestedNumberAnswersToScale();
 
+  /**
+   * @return What the TOP-LEVEL {@link BigDecimal} of the workflow aggregate comes back as
+   *         in this world
+   */
+  protected abstract Class<?> theClassOfTheTopLevelBigDecimal();
+
+  /**
+   * @return The text {@code ${total.toString()}} answers in this world
+   */
+  protected abstract String theTextOfTheTopLevelBigDecimal();
+
+  /**
+   * Asserts what {@code ${total.scale() > 0}} does in this world, the same question one
+   * level up.
+   */
+  protected abstract void assertWhatTheTopLevelNumberAnswersToScale();
+
   // ------------------------------------------------ what the engine holds after a start
 
   @Test
@@ -274,19 +291,16 @@ public abstract class AbstractNestedExpressionsIT {
     // BEHAVIOUR UNDER EXAMINATION, NOT THE DESIRED ONE. The aggregate carries 120.50 and
     // a version-1 model rendering it read '120.50'; Camunda7Variables turns a top-level
     // BigDecimal into a double, so the same model reads '120.5' now and nothing says so.
-    // The prompt about the top-level BigDecimal losing its scale decides whether that
-    // conversion stays; until it does, this is what the code answers.
-    assertEquals("120.5", valueOf("${total.toString()}"));
-    assertEquals(Double.class, valueOf("${total}").getClass());
+    // Both worlds answer the same today, and each of them says so for itself, so the
+    // change of that conversion shows up per world instead of hiding in one constant.
+    assertEquals(theTextOfTheTopLevelBigDecimal(), valueOf("${total.toString()}"));
+    assertEquals(theClassOfTheTopLevelBigDecimal(), valueOf("${total}").getClass());
 
     // and this is what the same expression answered under version 1, read here through
     // the migration fallback, which reaches the aggregate's own BigDecimal
     assertEquals("120.50", valueOf("${hiddenOrder.total.toString()}"));
 
-    // and a method only BigDecimal has is gone with the class
-    assertTrue(
-        failureOf("${total.scale() > 0}").contains("Method not found: class java.lang.Double.scale()"),
-        failureOf("${total.scale() > 0}"));
+    assertWhatTheTopLevelNumberAnswersToScale();
 
   }
 
