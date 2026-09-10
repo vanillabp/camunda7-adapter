@@ -36,10 +36,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * model into a map of process variables, and what the engine does with the answer at
  * every site a model can put an expression into.
  * <p>
- * <b>This class pins what the code does today, not what it should do.</b> Several of the
- * cases below assert a behaviour which is known to be wrong and is being changed
- * elsewhere; each of those says so where it stands, so that nobody reads the assertion as
- * approval. What the suite is good for is the opposite: a change to the sync model, to
+ * <b>This class pins what the code does today, not what it should do.</b> One case below
+ * still asserts a behaviour which is known to be wrong and is being changed elsewhere,
+ * the conditional start event whose failure lands in the outbox; it says so where it
+ * stands, so that nobody reads the assertion as approval. What the suite is good for is
+ * the opposite: a change to the sync model, to
  * the variables the adapter writes or to the engine version shows up here as a failing
  * case naming the expression, instead of as a workflow which silently takes the wrong
  * branch in somebody's application.
@@ -142,6 +143,23 @@ public abstract class AbstractNestedExpressionsIT {
    * expression whose verdict the serialization format decides.
    */
   protected abstract void assertWhatTheNestedNumberAnswersToScale();
+
+  /**
+   * @return What the TOP-LEVEL {@link BigDecimal} of the workflow aggregate comes back as
+   *         in this world
+   */
+  protected abstract Class<?> theClassOfTheTopLevelBigDecimal();
+
+  /**
+   * @return The text {@code ${total.toString()}} answers in this world
+   */
+  protected abstract String theTextOfTheTopLevelBigDecimal();
+
+  /**
+   * Asserts what {@code ${total.scale() > 0}} does in this world, the same question one
+   * level up.
+   */
+  protected abstract void assertWhatTheTopLevelNumberAnswersToScale();
 
   // ------------------------------------------------ what the engine holds after a start
 
@@ -268,25 +286,21 @@ public abstract class AbstractNestedExpressionsIT {
   // ------------------------------------------------------------- the top-level BigDecimal
 
   @Test
-  @DisplayName("A top-level BigDecimal arrives as a double and loses the scale it was written with")
-  void aTopLevelBigDecimalArrivesAsADoubleAndLosesItsScale() {
+  @DisplayName("A top-level BigDecimal keeps its class, and what it renders as is the format's answer")
+  void aTopLevelBigDecimalKeepsItsClass() {
 
-    // BEHAVIOUR UNDER EXAMINATION, NOT THE DESIRED ONE. The aggregate carries 120.50 and
-    // a version-1 model rendering it read '120.50'; Camunda7Variables turns a top-level
-    // BigDecimal into a double, so the same model reads '120.5' now and nothing says so.
-    // The prompt about the top-level BigDecimal losing its scale decides whether that
-    // conversion stays; until it does, this is what the code answers.
-    assertEquals("120.5", valueOf("${total.toString()}"));
-    assertEquals(Double.class, valueOf("${total}").getClass());
+    // Camunda 7 has no variable type for a BigDecimal, so the value keeps its class in an
+    // object variable and the configured format decides what it renders as. That is the
+    // version-1 answer: the model reads the value the application holds, rather than a
+    // double somebody widened it to on the way in.
+    assertEquals(theTextOfTheTopLevelBigDecimal(), valueOf("${total.toString()}"));
+    assertEquals(theClassOfTheTopLevelBigDecimal(), valueOf("${total}").getClass());
 
     // and this is what the same expression answered under version 1, read here through
     // the migration fallback, which reaches the aggregate's own BigDecimal
     assertEquals("120.50", valueOf("${hiddenOrder.total.toString()}"));
 
-    // and a method only BigDecimal has is gone with the class
-    assertTrue(
-        failureOf("${total.scale() > 0}").contains("Method not found: class java.lang.Double.scale()"),
-        failureOf("${total.scale() > 0}"));
+    assertWhatTheTopLevelNumberAnswersToScale();
 
   }
 
@@ -294,6 +308,10 @@ public abstract class AbstractNestedExpressionsIT {
   @DisplayName("The nested BigDecimal is whatever the serialization format made of it")
   void theNestedBigDecimalIsWhateverTheSerializationFormatMadeOfIt() {
 
+    // this is the answer the startup check reports while the application boots: a nested
+    // value travels inside the map the sync model built, so a format which has one number
+    // type hands back a Double where the aggregate holds a BigDecimal, and no expression
+    // says where that came from. Camunda7LossyFormatCheckIT reads the boot's side of it
     assertEquals(theTextOfTheNestedBigDecimal(), valueOf("${order.total.toString()}"));
     assertWhatTheNestedNumberAnswersToScale();
 

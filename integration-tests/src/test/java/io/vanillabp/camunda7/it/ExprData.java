@@ -78,8 +78,9 @@ public abstract class ExprData {
   }
 
   /**
-   * A top-level {@link BigDecimal}: the adapter converts it to a double, while the same
-   * value inside {@link #getOrder()} reaches the serializer untouched.
+   * A top-level {@link BigDecimal}: an object variable of its own, while the same value
+   * inside {@link #getOrder()} travels as a member of the flattened order. Both reach the
+   * serializer, and what each of them comes back as is what the two worlds measure.
    */
   public BigDecimal getTotal() {
 

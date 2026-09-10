@@ -10,13 +10,14 @@ and for the [Camunda 8 adapter](https://github.com/vanillabp/camunda8-adapter/bl
 
 ## 2.0
 
-### A BPMN expression reading a nested value needs a serialization format
+### A shared value Camunda 7 has no variable type for needs a serialization format
 
 Version 1 answered the expressions of a model from the live workflow aggregate, so
 `${order.customer.name}` navigated a Java object and there was nothing to configure. Version 2
-writes what the aggregate shares as Camunda process variables, and a nested value - an object or a
-collection - becomes an object variable, which the engine stores in whatever serialization format
-it was told to use.
+writes what the aggregate shares as Camunda process variables, and whatever the engine has no
+variable type for becomes an object variable, which it stores in whatever serialization format it
+was told to use. That is a nested value, an object or a collection, and it is a number this engine
+cannot store as itself: a `BigDecimal`, a `BigInteger` or a `Float`.
 
 Name the format, and give the engine the dataformat which provides it:
 
@@ -24,16 +25,17 @@ Name the format, and give the engine the dataformat which provides it:
 vanillabp:
   adapters:
     camunda7:
-      serialization-format: application/xstream
+      serialization-format: application/json
       engine-plugins:
-        xstream:
-          plugin-class: org.camunda.xstream.ProcessEnginePlugin
+        spin:
+          plugin-class: org.camunda.spin.plugin.impl.SpinProcessEnginePlugin
 ```
 
-`application/xstream` comes from [camunda-xstream](https://github.com/RasPelikan/camunda-xstream),
-`application/json` from the SPIN JSON dataformat, and the dependency providing it belongs to the
-application. VanillaBP passes the adapter-level value to the engine's `defaultSerializationFormat`
-as well as to every variable it writes, and a workflow module or a single workflow may deviate
+`application/json` comes from the SPIN JSON dataformat, `application/xstream` from
+[camunda-xstream](https://github.com/RasPelikan/camunda-xstream), and the dependency providing it
+belongs to the application. VanillaBP passes the adapter-level value to the engine's
+`defaultSerializationFormat` as well as to every variable it writes, and a workflow module or a
+single workflow may deviate
 (`vanillabp.workflow-modules.<module>.adapters.<id>.serialization-format`,
 `vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.serialization-format`).
 
@@ -45,12 +47,25 @@ long as the class in the database still matches the class on the classpath. The 
 about it once per JVM when it writes such a value, and the warning names the property to set and
 the dataformat to add.
 
-An application whose aggregates share nothing but scalars meets none of this: a scalar becomes a
-scalar variable, and `${amount > 1000}` compares numbers as it did before.
+A format is not free of loss either, and where it loses something the boot says so. JSON has one
+number type, so a `BigDecimal` of `120.50` comes back as `120.5`, and a nested one comes back as a
+`Double`. While your application starts, the adapter writes a sample of the type through the
+engine's own serializer and warns about every attribute your models read whose value would not
+come back as it went in. The warning names the attribute, the format and what the engine
+answered.
+
+An application whose aggregates share nothing but values this engine stores as themselves meets
+none of this. A short, an integer, a long, a double, a boolean, a string, a date and bytes are
+scalar variables, `${amount > 1000}` compares numbers as it did before, and a `Character` is
+written as a string, which EL compares to `'A'` and to `"A"` alike. A number the engine has no type
+for keeps its class instead of being widened to a double, which is what version 1 read.
+`${total > 100}` compares numbers either way, and `${total}` renders the value your code holds
+rather than one somebody converted on the way in.
 
 The [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#nested-values-and-why-java-serialization-is-not-an-option)
-of the wiki carries the narrated version, and why a nested value travels in the engine's own format
-rather than as a JSON string is decision 9 in the repository's [`DECISIONS.md`](./DECISIONS.md).
+of the wiki carries the narrated version. Why such a value travels in the engine's own format
+rather than as a JSON string is decision 9 in the repository's [`DECISIONS.md`](./DECISIONS.md),
+and why a number keeps its class is decision 16.
 
 ### What the startup check tells you about your expressions, and what it cannot
 

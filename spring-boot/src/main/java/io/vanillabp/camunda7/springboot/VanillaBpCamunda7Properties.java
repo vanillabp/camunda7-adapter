@@ -38,7 +38,8 @@ public class VanillaBpCamunda7Properties {
 
   /**
    * The workflow-module sections of the shared tree - only the Camunda 7 keys resolvable
-   * per scope are modeled here (the serialization format of nested shared values).
+   * per scope are modeled here (the serialization format of the shared values the engine
+   * has no variable type for).
    */
   private Map<String, Camunda7WorkflowModuleProperties> workflowModules = Map.of();
 
@@ -75,7 +76,8 @@ public class VanillaBpCamunda7Properties {
   public static class Camunda7ScopedProperties {
 
     /**
-     * The serialization format of nested shared values for this scope.
+     * The serialization format of the shared values the engine has no variable type for,
+     * for this scope.
      */
     private String serializationFormat;
 

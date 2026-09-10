@@ -35,6 +35,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * The job is failed by an end listener of the task
  * ({@link FailTheJobOnce}), which is the only moment where the handler is done and the
  * engine's transaction is not.
+ * <p>
+ * The record has a second consequence, and it is asserted here for the same reason: a
+ * completion of a task which is gone is routed from that record instead of probing the
+ * BPMS, so the adapter's own phase-one check is what finds out, and what it raises has to
+ * be the type the SPI documents. On the shared datasource no record exists, the platform
+ * probes and answers with that type itself, so this is the only setup which can show it.
  */
 @SpringBootTest(classes = {
     TestApplication.class, Camunda7RepeatedDeliveryIT.NamedDataSourceConfiguration.class
@@ -98,6 +104,17 @@ public class Camunda7RepeatedDeliveryIT {
 
   @Autowired
   private RepeatedDeliveryProbe probe;
+
+  /**
+   * The task-processing fixture, borrowed for the one case which needs a task staying
+   * open: this class's own process ends by itself, and a stale completion needs a task
+   * somebody can complete behind VanillaBP's back.
+   */
+  @Autowired
+  private TaskTestRepository taskRepository;
+
+  @Autowired
+  private TaskTestWorkflowService taskWorkflowService;
 
   @Autowired
   private TransactionTemplate transactionTemplate;
@@ -185,6 +202,74 @@ public class Camunda7RepeatedDeliveryIT {
         0,
         recordedDeliveriesOf("c7"),
         "an engine delivering in the application's transaction records nothing");
+
+  }
+
+  @Test
+  @DisplayName("A task the engine no longer holds raises the documented TaskNotFoundException")
+  public void aStaleCompletionRaisesTheGuidingException() {
+
+    final var aggregateId = transactionTemplate
+        .execute(status -> taskRepository.save(new TaskTestAggregate()).getId());
+
+    // started on the own-datasource engine directly, because the record of ITS delivery
+    // is what makes this case: the caller's completion is then routed from that record
+    // instead of probing the BPMS, so the adapter's own check is what meets the gone task
+    separateDataSourceEngine
+        .getRuntimeService()
+        .createProcessInstanceByKey("AsyncProcess")
+        .processDefinitionTenantId(MODULE_ID)
+        .businessKey(String.valueOf(aggregateId))
+        .execute();
+    AwaitPhaseTwo.until(() -> parkedTaskOf(aggregateId) != null, "the asynchronous task to be delivered");
+    final var taskId = parkedTaskOf(aggregateId);
+
+    // somebody completes it outside VanillaBP, which is what a stale completion means.
+    // The signal only starts the continuation, so the task is waited for rather than
+    // assumed gone - otherwise this test measures the job executor's speed
+    separateDataSourceEngine
+        .getRuntimeService()
+        .signal(taskId);
+    AwaitPhaseTwo.until(() -> !theEngineStillHolds(taskId), "the signalled task to be gone from the engine");
+
+    org.junit.jupiter.api.Assertions
+        .assertThrows(
+            io.vanillabp.spi.process.TaskNotFoundException.class,
+            () -> transactionTemplate
+                .executeWithoutResult(status -> taskWorkflowService
+                    .completeAsyncTask(taskRepository.findById(aggregateId).orElseThrow(), taskId)),
+            "the type is the one the SPI documents for a task no BPMS knows any more");
+
+  }
+
+  /**
+   * @param taskId The parked execution the handler reported
+   * @return Whether the own-datasource engine still holds it
+   */
+  private boolean theEngineStillHolds(
+      final String taskId) {
+
+    return separateDataSourceEngine
+        .getRuntimeService()
+        .createExecutionQuery()
+        .executionId(taskId)
+        .count() > 0;
+
+  }
+
+  /**
+   * @param aggregateId The workflow aggregate's ID
+   * @return The task the asynchronous handler parked and reported, or <code>null</code>
+   *         while it has not run yet
+   */
+  private String parkedTaskOf(
+      final Long aggregateId) {
+
+    return transactionTemplate
+        .execute(status -> taskRepository
+            .findById(aggregateId)
+            .orElseThrow()
+            .getTaskId());
 
   }
 

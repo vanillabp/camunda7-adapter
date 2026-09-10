@@ -1229,6 +1229,13 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * before electing this adapter - asking again inside the caller's transaction
    * catches a task which disappeared in between and aborts the transaction rather
    * than leaving an outbox entry which phase two can only skip.
+   * <p>
+   * What it raises is {@code io.vanillabp.spi.process.TaskNotFoundException}, the type the
+   * SPI documents for a task no BPMS knows any more. Which of the two found out, the
+   * platform's probe or this check, is decided by whether a delivery record exists, and no
+   * application can see that - so it must not decide what an application is able to catch.
+   * The query is exact and answers a count, so there is nothing to classify and nothing to
+   * log about a rejection.
    *
    * @param taskId The task (the parked execution's id)
    * @param operationDescription What was attempted, for the message
@@ -1242,7 +1249,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         .executionId(taskId)
         .count() > 0;
     if (!exists) {
-      throw new IllegalStateException(
+      throw new io.vanillabp.spi.process.TaskNotFoundException(
           """
               The task '%s' is gone (completed or canceled meanwhile) - aborting the transaction %s \
               it! VanillaBP progresses the workflow after the commit, so a task which no longer \
@@ -1254,7 +1261,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * The same check for a USER task, which lives in the task service rather than as a
-   * parked execution.
+   * parked execution, and it raises the same exception for the same reason.
    *
    * @param taskId The user task's id
    * @param operationDescription What was attempted, for the message
@@ -1268,7 +1275,7 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
         .taskId(taskId)
         .count() > 0;
     if (!exists) {
-      throw new IllegalStateException(
+      throw new io.vanillabp.spi.process.TaskNotFoundException(
           """
               The user task '%s' is gone (completed or canceled meanwhile) - aborting the \
               transaction %s it! VanillaBP progresses the workflow after the commit, so a task \

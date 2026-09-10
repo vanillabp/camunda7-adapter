@@ -128,6 +128,14 @@ public class Camunda7AdapterProducer {
                   .getProcessEngine()
                   .getRuntimeService());
           deploymentService.setAcceptUnscopedIdentifiers(acceptUnscopedIdentifiersOf(overlay, adapterId));
+          // Which format a workflow's values travel in, and what this engine's
+          // serializers make of them - the startup check reads both
+          deploymentService.setSerializationFormats(
+              (
+                  workflowModuleId,
+                  bpmnProcessId) -> serializationFormatOf(overlay, adapterId, workflowModuleId, bpmnProcessId));
+          deploymentService.setSerializationRoundTrip(
+              io.vanillabp.camunda7.sync.Camunda7SerializationRoundTrip.of(engine.getProcessEngine()));
           return deploymentService;
         })
         .toList();

@@ -43,4 +43,27 @@ public class Camunda7NestedExpressionsIT extends AbstractNestedExpressionsIT {
 
   }
 
+  @Override
+  protected Class<?> theClassOfTheTopLevelBigDecimal() {
+
+    return BigDecimal.class;
+
+  }
+
+  @Override
+  protected String theTextOfTheTopLevelBigDecimal() {
+
+    // Java serialization writes the value the aggregate holds and reads it back
+    // unchanged, so a model rendering it reads what version 1 rendered
+    return "120.50";
+
+  }
+
+  @Override
+  protected void assertWhatTheTopLevelNumberAnswersToScale() {
+
+    assertEquals(Boolean.TRUE, valueOf("${total.scale() > 0}"));
+
+  }
+
 }

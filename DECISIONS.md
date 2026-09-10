@@ -308,3 +308,36 @@ and the check answers for the rest of the model.
 
 `Camunda7DeclaredIdRuntimeIT` measures the starts and the end against a running engine under
 `use-prefix`, `Camunda7HeldModelReadingTest` the reading which never refuses.
+
+### 16. A number the engine has no variable type for keeps its class
+
+Camunda 7 stores a short, an integer, a long, a double, a boolean, a string, a date and bytes as
+themselves. A `BigDecimal`, a `BigInteger` and a `Float` fit none of those, and this adapter used
+to widen them to a double on the way in. So the value a model read was not the value the
+application held: `120.50` renders as `120.5`, a `BigInteger` above 2^53 loses its last digits, a
+`Float` of `0.1` renders as `0.10000000149011612`. Version 1 read the live workflow aggregate and
+had none of that.
+
+The conversion bought nothing either. EL coerces both operands of a relational operator to
+`BigDecimal` as soon as one of them is one, so `${total > 100}` compares numbers against the
+object itself. Equality is the one it does not rescue: `${total == 120.50}` coerces the same way
+and then calls `equals`, so it is false against the live object and was true against the widened
+double. Version 1 answered false as well, because it held the live object too, and a model
+comparing a decimal for equality was already wrong before the upgrade.
+
+So those three types travel as object variables, like every other value the engine has no type
+for, and in the format decision 9 names. The `Character` conversion stays: EL compares a character
+to `'A'` and to `"A"` alike, so writing it as a string loses nothing and buys a readable variable.
+
+The price is that the format then decides what the value reads as, and this adapter reports that
+instead of working around it. A startup check writes a sample of the type through the engine's own
+serializer for the configured format and warns where what comes back is not what went in, per
+attribute the models read. It measures rather than judging from a list of types, because the
+dataformat belongs to the application and a warning about something which works is worse than a
+missing one. Where the adapter's own configuration names no format it says nothing at all, and it
+says nothing where it cannot measure: no sample of the type, no serializer for the format, or an
+engine which will refuse the first push loudly by itself.
+
+`Camunda7VariablesTest` holds the rule and `AbstractNestedExpressionsIT` with its two subclasses
+holds what each format answers at runtime. The check is held by
+`Camunda7SerializationRoundTripTest` and `Camunda7LossyFormatCheckIT`.

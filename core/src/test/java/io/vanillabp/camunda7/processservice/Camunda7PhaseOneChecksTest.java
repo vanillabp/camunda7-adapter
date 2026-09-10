@@ -141,23 +141,27 @@ public class Camunda7PhaseOneChecksTest {
 
     final var testee = processService(0, 0, 0);
 
+    // the type is the one the SPI documents for a task no BPMS knows any more, so an
+    // application catches the same thing here as when the platform's probe found out
     final var completing = assertThrows(
-        IllegalStateException.class,
+        io.vanillabp.spi.process.TaskNotFoundException.class,
         () -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.COMPLETE_TASK,
             java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "task-1")));
     assertTrue(completing.getMessage().contains("task-1"), completing.getMessage());
     assertTrue(completing.getMessage().contains("completing"), completing.getMessage());
 
+    // cancelling asks the same question about the same task, which is why the cancel
+    // paths are held here rather than by a second run against an engine
     assertThrows(
-        IllegalStateException.class,
+        io.vanillabp.spi.process.TaskNotFoundException.class,
         () -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.CANCEL_TASK,
             java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "task-1")));
     assertThrows(
-        IllegalStateException.class,
+        io.vanillabp.spi.process.TaskNotFoundException.class,
         () -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.COMPLETE_USER_TASK,
             java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "user-task-1")));
     assertThrows(
-        IllegalStateException.class,
+        io.vanillabp.spi.process.TaskNotFoundException.class,
         () -> phaseOne(testee, io.vanillabp.integration.spi.PhaseOperation.CANCEL_USER_TASK,
             java.util.Map.of(io.vanillabp.integration.spi.PhaseTwoCall.ARG_TASK_ID, "user-task-1")));
 
