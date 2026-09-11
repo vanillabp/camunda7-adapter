@@ -2,6 +2,7 @@ package io.vanillabp.camunda7.it;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -36,11 +37,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * model into a map of process variables, and what the engine does with the answer at
  * every site a model can put an expression into.
  * <p>
- * <b>This class pins what the code does today, not what it should do.</b> One case below
- * still asserts a behaviour which is known to be wrong and is being changed elsewhere,
- * the conditional start event whose failure lands in the outbox; it says so where it
- * stands, so that nobody reads the assertion as approval. What the suite is good for is
- * the opposite: a change to the sync model, to
+ * <b>This class pins what the code does today, not what it should do.</b> Several cases
+ * assert a silence nobody wants, because it is the engine's own and no adapter can talk
+ * it out of it. What the suite is good for is that a change to the sync model, to
  * the variables the adapter writes or to the engine version shows up here as a failing
  * case naming the expression, instead of as a workflow which silently takes the wrong
  * branch in somebody's application.
@@ -99,6 +98,13 @@ public abstract class AbstractNestedExpressionsIT {
 
   @Autowired
   protected ExprEventSubQuietWorkflowService eventSubQuietService;
+
+  /**
+   * Read directly, because the case about a start which never reached the engine has to
+   * show that the caller's own data did.
+   */
+  @Autowired
+  protected ExprEventSubRepository eventSubRepository;
 
   /**
    * The engine services the adapter does not publish as beans are taken from the engine
@@ -499,15 +505,13 @@ public abstract class AbstractNestedExpressionsIT {
   // ------------------------------ the conditional start event of an event subprocess
 
   @Test
-  @DisplayName("A conditional start event of an event subprocess which throws loses the workflow entirely")
-  void aConditionalStartEventWhichThrowsLosesTheWorkflowEntirely() {
+  @DisplayName("A conditional start event of an event subprocess which throws blocks the start after one attempt")
+  void aConditionalStartEventWhichThrowsBlocksTheStartAfterOneAttempt() {
 
-    // BEHAVIOUR UNDER EXAMINATION, NOT THE DESIRED ONE. The condition of a conditional
-    // start event is evaluated while the process workflow is created, and creating the
-    // workflow is what phase two does. So the failure lands in the outbox instead of in
-    // the engine: the application's transaction committed, startWorkflow returned, and
-    // there is no workflow, no incident and no history entry to look at. The prompt about
-    // a phase-two start which parks forever is what will change this.
+    // The condition of a conditional start event is evaluated while the process instance
+    // is created, and creating the instance is what phase two does. So the failure lands
+    // in the outbox instead of in the engine, and the application never hears of it:
+    // startWorkflow returned, its transaction committed, and the workflow does not exist.
     final var aggregateId = transactionTemplate.execute(status -> {
       final var aggregate = new ExprEventSubAggregate();
       aggregate.fillWithTheSample();
@@ -516,12 +520,26 @@ public abstract class AbstractNestedExpressionsIT {
           .getId();
     });
 
-    // the dispatch is tried and fails, over and over
-    awaitOutboxAttempts("ExprEventSub", 2);
+    assertNotNull(aggregateId, "startWorkflow returned the aggregate it persisted");
+    final var aggregateIsCommitted = transactionTemplate
+        .execute(status -> eventSubRepository.findById(aggregateId).isPresent());
+    assertTrue(
+        aggregateIsCommitted,
+        "the caller's business data is committed, which is the whole point of starting in two phases");
+
+    // An expression the engine cannot evaluate answers the same way however often it is
+    // asked, and the adapter says so (Camunda7ProcessService#isPhaseTwoFailureRepeatable).
+    // So the entry is put aside where an operator can find it instead of walking up to
+    // 'vanillabp.outbox.block-after-attempts' over the next hours.
+    awaitBlockedOutboxEntry("ExprEventSub");
+    assertEquals(
+        1,
+        outboxAttemptsOf("ExprEventSub"),
+        "one attempt is what a verdict of 'repeating cannot fix this' is worth");
 
     assertNull(
         runningWorkflowOf("ExprEventSub", aggregateId),
-        "the workflow was never created, so there is nothing an operator could look at");
+        "the workflow was never created, so there is nothing an operator could look at in the engine");
     assertNull(
         historyService
             .createHistoricProcessInstanceQuery()
@@ -529,8 +547,8 @@ public abstract class AbstractNestedExpressionsIT {
             .singleResult(),
         "and the history knows nothing about it either");
 
-    // an entry which can never succeed would keep retrying for the rest of this context's
-    // life, so the test which produced it takes it away again
+    // a blocked entry is never attempted again, so leaving it would cost nothing; it goes
+    // anyway, so this case leaves the context the way it found it
     dropOutboxEntriesOf("ExprEventSub");
 
   }
@@ -806,20 +824,33 @@ public abstract class AbstractNestedExpressionsIT {
   }
 
   /**
-   * Waits until the phase-two outbox tried to dispatch a start this often, which is the
-   * positive signal a case about a workflow that never comes into being needs: without it
-   * "no workflow yet" and "no workflow ever" look the same.
+   * Waits until the phase-two outbox put the start aside, which is the positive signal a
+   * case about a workflow that never comes into being needs: without it "no workflow yet"
+   * and "no workflow ever" look the same.
    *
-   * @param bpmnProcessId The process whose start is stuck
-   * @param attempts How many attempts have to have been made
+   * @param bpmnProcessId The process whose start failed
    */
-  protected void awaitOutboxAttempts(
-      final String bpmnProcessId,
-      final int attempts) {
+  protected void awaitBlockedOutboxEntry(
+      final String bpmnProcessId) {
 
     awaitEngine(
-        () -> outboxAttemptsOf(bpmnProcessId) >= attempts,
-        "the start of '%s' has to be attempted %d times".formatted(bpmnProcessId, attempts));
+        () -> outboxEntryOfIsBlocked(bpmnProcessId),
+        "the start of '%s' has to end up blocked".formatted(bpmnProcessId));
+
+  }
+
+  private boolean outboxEntryOfIsBlocked(
+      final String bpmnProcessId) {
+
+    try (var connection = dataSource.getConnection(); var statement = connection
+        .prepareStatement("select blocked from TXNO_OUTBOX where uniqueRequestId like ?")) {
+      statement.setString(1, "%%|%s|%%".formatted(bpmnProcessId));
+      try (var results = statement.executeQuery()) {
+        return results.next() && results.getBoolean(1);
+      }
+    } catch (final Exception cannotRead) {
+      return fail("the outbox table could not be read", cannotRead);
+    }
 
   }
 
