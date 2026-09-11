@@ -491,7 +491,7 @@ and would take the whole dispatch with it.
 
 A phase two which failed is attempted again, because most engine failures pass: a locked
 row, or the optimistic locking this adapter went two-phase for in the first place.
-`Camunda7ProcessService.isPhaseTwoFailureRepeatable` answers `false` for two of them, and
+`Camunda7ProcessService.isPhaseTwoFailureRepeatable` answers `false` for three of them, and
 the core then blocks the outbox entry instead of walking it up to
 `vanillabp.outbox.block-after-attempts`.
 
@@ -499,6 +499,7 @@ the core then blocks the outbox entry instead of walking it up to
 |----------------------------------|----------------------------------------------------------------------------|
 | `BadUserRequestException`        | the engine rejected the request itself, say a task id which does not exist |
 | `ELException` and its subclasses | the model asked the values for something they have not got                 |
+| `Camunda7RefusedStart`           | the start named a process this engine does not hold                        |
 
 The second row is the expression language, and its subclasses are the ones for an unknown
 method and for an unknown property. Camunda ships that language shaded, so the exception
@@ -513,6 +514,22 @@ instance is created loses the instance: nothing in the engine shows it and nobod
 application is waiting for it, so hours of attempts help no one.
 `AbstractNestedExpressionsIT#aConditionalStartEventWhichThrowsBlocksTheStartAfterOneAttempt`
 runs that case, the conditional start event of an event subprocess.
+
+The third row is a start of a process nothing deployed. The engine answers it with a
+`NullValueException`, which is a `ProcessEngineException` like a database which was
+briefly away, so the start of a committed aggregate was attempted until its attempts ran
+out and the workflow never came into being. The exception says nothing about the
+operation, and for an operation on a workflow which exists the same answer is the
+at-least-once residual the outbox is right to repeat. So the start marks its own refusal:
+`startProcessInstance` wraps what the engine threw into a `Camunda7RefusedStart`, and only
+that wrapper is permanent. `Camunda7RefusedStartTest` measures the engine's answer against
+a real engine and holds the verdict.
+
+The same class holds the other half of that measurement, the one there is nothing to do
+about. A model whose only start event is a timer or a message is refused by a Camunda 8
+cluster and simply STARTED by Camunda 7, at that event. An application which moves such a
+workflow between the two therefore meets a running workflow here and a blocked outbox
+entry there.
 
 Everything else is repeatable, which is the way the platform asks an adapter to err.
 

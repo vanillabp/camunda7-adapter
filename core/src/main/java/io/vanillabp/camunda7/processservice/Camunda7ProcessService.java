@@ -743,16 +743,23 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // command may fail for a reason which passes: a locked instance, or a database
     // which was briefly away.
     //
-    // Two failures never pass. A request the engine rejects as wrong looks the same on
+    // Three failures never pass. A request the engine rejects as wrong looks the same on
     // every attempt: a task id which does not exist, or an argument it cannot accept.
-    // A broken expression is the other one. Not every one of them is hopeless, because a
+    // A broken expression is the second one. Not every one of them is hopeless, because a
     // navigation into an attribute which is null today could read a value tomorrow, but
     // an expression which fails while an instance is being created loses the instance:
     // nothing in the engine shows it and nobody in the application is waiting for it, so
     // hours of attempts help no one. Giving up early at least leaves an entry somebody
     // can find.
+    //
+    // The third is a start of a process the engine does not hold. It is a case of its
+    // own because the engine reports it with an exception which is repeatable for every
+    // other operation, so the start marks its own refusal (Camunda7RefusedStart).
     var candidate = failure;
     while (candidate != null) {
+      if (candidate instanceof Camunda7RefusedStart) {
+        return false;
+      }
       if (candidate instanceof org.camunda.bpm.engine.BadUserRequestException) {
         return false;
       }
@@ -874,10 +881,33 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     builder = tenantId != null
         ? builder.processDefinitionTenantId(tenantId)
         : builder.processDefinitionWithoutTenantId();
-    final var processInstance = builder
-        .businessKey(businessKey)
-        .setVariables(sharedValues(aggregate, workflowModuleId, bpmnProcessId))
-        .execute();
+    final ProcessInstance processInstance;
+    try {
+      processInstance = builder
+          .businessKey(businessKey)
+          .setVariables(sharedValues(aggregate, workflowModuleId, bpmnProcessId))
+          .execute();
+    } catch (final org.camunda.bpm.engine.exception.NullValueException e) {
+      // the one thing the engine can be missing here is the process definition: the
+      // command is built from values the core validated, and the engine reports a
+      // definition nothing was deployed under by the same exception it uses for an
+      // argument nobody passed. Which one it is, is the operation rather than the
+      // exception, so the start says it here and the classification reads it back
+      throw new Camunda7RefusedStart(
+          ("Camunda 7 holds no process '%s' of workflow module '%s'%s, so the workflow of aggregate "
+              + "'%s' cannot be started (adapter '%s'). The engine answers the same way on every "
+              + "attempt, so this start is not repeated and its outbox entry is blocked. Either the "
+              + "workflow module of that process is not deployed by this application, or it is "
+              + "deployed under another name-clash-avoidance mode than the one this adapter reads.")
+              .formatted(
+                  scopedProcessId(workflowModuleId, bpmnProcessId),
+                  workflowModuleId,
+                  tenantId == null
+                      ? " without a tenant"
+                      : " in tenant '%s'".formatted(tenantId),
+                  businessKey,
+                  adapterId), e);
+    }
 
     log.info(
         "Camunda7[{}]: started workflow '{}' (tenant '{}', business key '{}') as process instance '{}'",
