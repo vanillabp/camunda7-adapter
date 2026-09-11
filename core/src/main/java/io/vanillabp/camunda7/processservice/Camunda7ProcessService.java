@@ -56,6 +56,13 @@ import lombok.extern.slf4j.Slf4j;
 @SuppressWarnings("LombokSetterMayBeUsed")
 public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
 
+  /**
+   * The tail of the name of the exception at the root of every expression failure. The
+   * ones for an unknown method and for an unknown property extend it, so walking a class
+   * up through its ancestors finds them all.
+   */
+  private static final String EXPRESSION_FAILURE = ".el.ELException";
+
   private final String adapterId;
 
   /**
@@ -733,12 +740,23 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
     // row another transaction touched as OptimisticLockingException, and the next
     // attempt simply wins - which is exactly what Camunda's own job executor does
     // with a failed job. Everything else is repeated as well, because an engine
-    // command may fail for a reason which passes (a locked instance, a database
-    // hiccup) - except a request the engine rejects as wrong: a task id which does
-    // not exist or an argument it cannot accept looks the same on every attempt.
+    // command may fail for a reason which passes: a locked instance, or a database
+    // which was briefly away.
+    //
+    // Two failures never pass. A request the engine rejects as wrong looks the same on
+    // every attempt: a task id which does not exist, or an argument it cannot accept.
+    // A broken expression is the other one. Not every one of them is hopeless, because a
+    // navigation into an attribute which is null today could read a value tomorrow, but
+    // an expression which fails while an instance is being created loses the instance:
+    // nothing in the engine shows it and nobody in the application is waiting for it, so
+    // hours of attempts help no one. Giving up early at least leaves an entry somebody
+    // can find.
     var candidate = failure;
     while (candidate != null) {
       if (candidate instanceof org.camunda.bpm.engine.BadUserRequestException) {
+        return false;
+      }
+      if (isExpressionFailure(candidate)) {
         return false;
       }
       candidate = candidate.getCause() == candidate
@@ -746,6 +764,37 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
           : candidate.getCause();
     }
     return true;
+
+  }
+
+  /**
+   * Camunda 7 wraps what its expression language threw into a
+   * {@link org.camunda.bpm.engine.ProcessEngineException} and keeps it as the cause, so
+   * the type is what tells an unreadable expression from an engine having a bad moment.
+   * The message does not: it is prose which differs per failure and per engine version.
+   * <p>
+   * The type is matched by name rather than imported. Camunda ships its expression
+   * language shaded into a package of its own implementation, which already moved once
+   * when the EL API went from <code>javax</code> to <code>jakarta</code>, and a fork of
+   * the engine shades it somewhere else again. Reading the last two segments of the name
+   * survives that, and it costs nothing here: the adapter recognises the type, it never
+   * catches or constructs one.
+   *
+   * @param candidate One link of the cause chain
+   * @return Whether it is a failure of the expression language, the subclasses for an
+   *         unknown method and for an unknown property included
+   */
+  private static boolean isExpressionFailure(
+      final Throwable candidate) {
+
+    Class<?> type = candidate.getClass();
+    while (type != null) {
+      if (type.getName().endsWith(EXPRESSION_FAILURE)) {
+        return true;
+      }
+      type = type.getSuperclass();
+    }
+    return false;
 
   }
 

@@ -487,6 +487,35 @@ write, because a failing engine command marks the dispatcher's transaction rollb
 and would take the whole dispatch with it.
 `Camunda7TaskProcessingIT#awarenessAndPhaseTwoEdgeCases` walks the repeated dispatches.
 
+### When a failed phase two is repeated, and when it is not
+
+A phase two which failed is attempted again, because most engine failures pass: a locked
+row, or the optimistic locking this adapter went two-phase for in the first place.
+`Camunda7ProcessService.isPhaseTwoFailureRepeatable` answers `false` for two of them, and
+the core then blocks the outbox entry instead of walking it up to
+`vanillabp.outbox.block-after-attempts`.
+
+|   what the cause chain carries   |                        why repeating cannot fix it                         |
+|----------------------------------|----------------------------------------------------------------------------|
+| `BadUserRequestException`        | the engine rejected the request itself, say a task id which does not exist |
+| `ELException` and its subclasses | the model asked the values for something they have not got                 |
+
+The second row is the expression language, and its subclasses are the ones for an unknown
+method and for an unknown property. Camunda ships that language shaded, so the exception
+is recognised by the name of the class rather than by an import: the package it sits in
+belongs to the engine's own implementation, and a fork of the engine shades it somewhere
+else.
+
+Calling every expression failure permanent is a judgement. A method a flattened value has
+not got never turns up, but a navigation into an attribute which is null today could read
+a value tomorrow. Both count as permanent here, because an expression which fails while an
+instance is created loses the instance: nothing in the engine shows it and nobody in the
+application is waiting for it, so hours of attempts help no one.
+`AbstractNestedExpressionsIT#aConditionalStartEventWhichThrowsBlocksTheStartAfterOneAttempt`
+runs that case, the conditional start event of an event subprocess.
+
+Everything else is repeatable, which is the way the platform asks an adapter to err.
+
 ## Decision tables
 
 The `.dmn` files of a workflow module are deployed by the boot, in the SAME Camunda

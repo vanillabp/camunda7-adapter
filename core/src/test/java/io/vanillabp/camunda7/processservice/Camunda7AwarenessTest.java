@@ -11,6 +11,9 @@ import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.TaskService;
 import org.camunda.bpm.engine.runtime.ExecutionQuery;
 import org.camunda.bpm.engine.task.TaskQuery;
+import org.camunda.bpm.impl.juel.jakarta.el.ELException;
+import org.camunda.bpm.impl.juel.jakarta.el.MethodNotFoundException;
+import org.camunda.bpm.impl.juel.jakarta.el.PropertyNotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -116,6 +119,46 @@ public class Camunda7AwarenessTest {
             .isPhaseTwoFailureRepeatable(
                 new org.camunda.bpm.engine.OptimisticLockingException("another transaction was faster")));
     assertTrue(testee.isPhaseTwoFailureRepeatable(new ProcessEngineException("the database hiccupped")));
+
+  }
+
+  @Test
+  @DisplayName("An expression the engine cannot evaluate is not repeated")
+  public void aBrokenExpressionStopsBeingRetried() {
+
+    final var testee = withUnreachableEngine();
+
+    // How the engine reports a model which calls a method the value has not got: the
+    // JUEL exception is the cause of the ProcessEngineException the command throws
+    // (JuelExpression#getValue). A conditional start event of an event subprocess is
+    // evaluated while the instance is created, so this arrives as a failed START and
+    // repeating it produces the same sentence every time.
+    assertFalse(
+        testee
+            .isPhaseTwoFailureRepeatable(
+                new ProcessEngineException(
+                    "Unknown method used in expression: ${order.getTotal() > 100}", new MethodNotFoundException("Method not found: class java.util.LinkedHashMap.getTotal()"))));
+
+    // the second shape of the same thing: the value is there and has no such property
+    assertFalse(
+        testee
+            .isPhaseTwoFailureRepeatable(
+                new ProcessEngineException(
+                    "Unknown property used in expression: ${order.dueDate.year}", new PropertyNotFoundException(
+                        "The class 'java.lang.String' does not have the property 'year'"))));
+
+    // the ancestor both of those carry, which is what the adapter actually looks for
+    assertFalse(
+        testee.isPhaseTwoFailureRepeatable(new ProcessEngineException("evaluation failed", new ELException("no"))));
+
+    // whatever wrapped the engine's exception on the way through the outbox must not
+    // hide the verdict, so the whole cause chain is read and not just the first link
+    assertFalse(
+        testee
+            .isPhaseTwoFailureRepeatable(
+                new IllegalStateException(
+                    "dispatching failed", new ProcessEngineException(
+                        "Unknown method used in expression: ${order.getTotal() > 100}", new MethodNotFoundException("Method not found")))));
 
   }
 
