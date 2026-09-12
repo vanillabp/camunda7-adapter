@@ -45,6 +45,13 @@ import lombok.Setter;
  *       therefore also needs <code>database-schema-update: false</code>, and
  *       {@link Camunda7TablePrefixSchema} says so while the application boots
  *       rather than letting the engine fail on its first query.</li>
+ *   <li><code>sleep-until-something-is-due</code> - OPTIONAL: the job executor waits
+ *       until the next job is due instead of polling every 5 to 60 seconds; default
+ *       <code>false</code>, see {@link Camunda7JobExecutorSleep};</li>
+ *   <li><code>db-metrics-reporting</code> - OPTIONAL: whether the engine's metrics
+ *       reporter writes its counters to the database every 900 seconds. Unset means
+ *       the opposite of the sleep, so an engine which is allowed to sleep is not woken
+ *       by its own metrics.</li>
  * </ul>
  */
 @Getter
@@ -105,6 +112,51 @@ public class Camunda7EngineProperties {
    */
   @Setter
   private boolean acceptUnscopedIdentifiers = false;
+
+  /**
+   * Whether this adapter id's job executor waits until the next job is due instead of
+   * polling. An application which waits for a timer most of its life pays for every poll
+   * on a database billed by active use, and a due date is an exact answer to the question
+   * those polls keep asking. Off by default: replacing the timing of the engine's job
+   * executor is not something to do to an application which did not ask for it.
+   * <p>
+   * This is one switch rather than two, for the sleeping and for the waking, because the
+   * two make no sense apart. An executor which sleeps on a due date and nobody wakes is
+   * worse than either half.
+   */
+  @Setter
+  private boolean sleepUntilSomethingIsDue = false;
+
+  /**
+   * Whether the engine's metrics reporter writes its counters to the database every 900
+   * seconds. Unset (the default) means the opposite of {@link #sleepUntilSomethingIsDue},
+   * so the engine keeps Camunda's behaviour while it polls anyway and stops writing once
+   * it is allowed to sleep. Set it to <code>true</code> to keep the metrics on a sleeping
+   * engine, which costs a wake-up four times an hour. Metrics are still counted in memory
+   * either way, only the writing stops.
+   */
+  @Setter
+  private Boolean dbMetricsReporting;
+
+  /**
+   * @return Whether the job executor of this adapter id waits until the next job is due
+   */
+  public boolean sleepsUntilSomethingIsDue() {
+
+    return sleepUntilSomethingIsDue;
+
+  }
+
+  /**
+   * @return Whether the engine's metrics reporter writes to the database
+   */
+  public boolean reportsMetricsToTheDatabase() {
+
+    return (dbMetricsReporting == null)
+        ? !sleepUntilSomethingIsDue
+        : dbMetricsReporting.booleanValue();
+
+  }
 
   public void setEnginePlugins(
       final java.util.Map<String, Camunda7EnginePluginProperties> enginePlugins) {

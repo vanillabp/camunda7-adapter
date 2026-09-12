@@ -47,7 +47,10 @@ import lombok.extern.slf4j.Slf4j;
  *       {@code startWorkflowProcessing} starts the executor once the first workflow
  *       module starts (reference-counted per module by the shared
  *       {@link Camunda7JobExecutorLifecycle}) - and it stops unconditionally on
- *       {@link #close()}, before the engine closes.</li>
+ *       {@link #close()}, before the engine closes. Where
+ *       <code>sleep-until-something-is-due</code> is configured it is a
+ *       {@link Camunda7SleepingSpringJobExecutor} instead, whose acquisition waits for the
+ *       next due date rather than polling.</li>
  * </ul>
  */
 @Slf4j
@@ -247,7 +250,11 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     this.taskExecutor.setMaxPoolSize(10);
     this.taskExecutor.setQueueCapacity(10);
     this.taskExecutor.initialize();
-    this.jobExecutor = new SpringJobExecutor();
+    // an adapter id which may let its engine sleep needs the acquisition loop which asks
+    // for the next due date, and that loop is installed by the executor itself
+    this.jobExecutor = properties.sleepsUntilSomethingIsDue()
+        ? new Camunda7SleepingSpringJobExecutor(adapterId)
+        : new SpringJobExecutor();
     this.jobExecutor.setTaskExecutor(this.taskExecutor);
 
     final var configuration = new SpringProcessEngineConfiguration();
@@ -322,6 +329,11 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
               .map(plugin -> plugin.getClass().getName())
               .toList());
     }
+
+    // What an idle engine is allowed to stop doing: waiting for the next due date instead
+    // of polling, waking on a commit, and leaving the metrics reporter's timer alone.
+    // Applied for every adapter id, because the metrics reporter is a setting of its own
+    io.vanillabp.camunda7.engine.Camunda7JobExecutorSleep.applyTo(adapterId, configuration, properties);
 
     // what an extension contributes to THIS engine: parse listeners before or after
     // VanillaBP's own, and a history event handler installed next to the engine's

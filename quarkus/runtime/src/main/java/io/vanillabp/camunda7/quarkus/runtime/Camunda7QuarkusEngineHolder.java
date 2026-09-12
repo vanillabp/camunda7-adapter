@@ -34,7 +34,10 @@ import jakarta.transaction.TransactionManager;
  *   <li>job-executor activation is DEFERRED to the deployment pipeline's
  *       {@code startWorkflowProcessing} (the shared reference-counted
  *       {@link Camunda7JobExecutorLifecycle} - the same semantics as on Spring
- *       Boot).</li>
+ *       Boot);</li>
+ *   <li>where <code>sleep-until-something-is-due</code> is configured the engine gets the
+ *       core's {@code Camunda7SleepingJobExecutor}, whose acquisition waits for the next due
+ *       date rather than polling.</li>
  * </ul>
  */
 // see decision 4 in the repository's DECISIONS.md
@@ -175,6 +178,16 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     configuration.setDatabaseSchemaUpdate(properties.getDatabaseSchemaUpdate());
     // activation is deferred to startWorkflowProcessing (26e semantics)
     configuration.setJobExecutorActivate(false);
+    // an adapter id which may let its engine sleep needs the acquisition loop which asks
+    // for the next due date, and that loop is installed by the executor itself. Without
+    // the sleep the engine builds its own executor, exactly as before
+    if (properties.sleepsUntilSomethingIsDue()) {
+      configuration.setJobExecutor(new io.vanillabp.camunda7.engine.Camunda7SleepingJobExecutor(adapterId));
+    }
+    // What an idle engine is allowed to stop doing: waiting for the next due date instead
+    // of polling, waking on a commit, and leaving the metrics reporter's timer alone.
+    // Applied for every adapter id, because the metrics reporter is a setting of its own
+    io.vanillabp.camunda7.engine.Camunda7JobExecutorSleep.applyTo(adapterId, configuration, properties);
     // job-executor threads must load delegate classes via the Quarkus runtime
     // classloader (proven pitfall: ClassNotFoundException otherwise)
     configuration.setClassLoader(Thread.currentThread().getContextClassLoader());
