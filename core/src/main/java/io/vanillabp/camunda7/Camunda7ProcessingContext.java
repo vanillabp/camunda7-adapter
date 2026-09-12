@@ -100,6 +100,53 @@ public class Camunda7ProcessingContext {
   }
 
   /**
+   * The PLAIN identifiers the module's models declare which the workflow module scopes -
+   * message names, signal names, error codes, escalation codes and the ids of the decisions
+   * it brings. Collected while the files are read, which is where the adapter holds them
+   * anyway, and handed to the core once the module is deployed so that two modules ending
+   * up under one name are named.
+   */
+  private final java.util.Set<io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier> declaredIdentifiers = new java.util.LinkedHashSet<>();
+
+  /**
+   * Records what one model of this workflow module declares.
+   *
+   * @param identifiers What was read out of it, plain
+   */
+  public void recordDeclaredIdentifiers(
+      final java.util.Collection<io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier> identifiers) {
+
+    declaredIdentifiers.addAll(identifiers);
+
+  }
+
+  /**
+   * The PLAIN decision ids of the module's decision tables, in the order the files were
+   * read - what the engine is asked about, and part of what the models declare.
+   */
+  private final java.util.Set<String> decisionIds = new java.util.LinkedHashSet<>();
+
+  /**
+   * Records the decisions one DMN file of this workflow module declares. A decision id is one
+   * of the identifiers the workflow module scopes, so it joins what the models declare as
+   * well.
+   *
+   * @param plainDecisionIds The decision ids as the application knows them
+   */
+  public void recordDecisionIds(
+      final java.util.Collection<String> plainDecisionIds) {
+
+    decisionIds.addAll(plainDecisionIds);
+    plainDecisionIds
+        .forEach(
+            decisionId -> declaredIdentifiers
+                .add(
+                    new io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier(
+                        io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ScopedIdentifierKind.DMN_DECISION_ID, decisionId, null)));
+
+  }
+
+  /**
    * @return Whether no BPMN models were accumulated (e.g. a workflow module without any
    *         executable BPMN process).
    */

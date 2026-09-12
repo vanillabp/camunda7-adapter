@@ -11,6 +11,7 @@ import org.camunda.bpm.model.bpmn.instance.Signal;
 
 import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
+import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ScopedIdentifierKind;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -172,6 +173,71 @@ public final class Camunda7Scoping {
               scoped);
           process.setId(scoped);
         });
+
+  }
+
+  /**
+   * The identifiers of one model which the WORKFLOW MODULE scopes: message names, signal
+   * names, error codes and escalation codes, as the application knows them.
+   *
+   * <h2>Why it costs nothing</h2>
+   *
+   * {@link #apply} rewrites exactly these four while it scopes a model, so the adapter
+   * holds all of them at that moment, and a model the engine still holds is being read
+   * anyway when somebody asks what an old version declares. Nothing is queried for it and
+   * nothing is kept.
+   *
+   * <h2>Why no task definition is among them</h2>
+   *
+   * A task definition is process-local on this engine, which is the row this class' own
+   * table explains: the expression is evaluated inside the process by VanillaBP's EL
+   * resolver and nothing subscribes to it engine-wide. So this adapter does not scope one
+   * and there is no clash to report.
+   *
+   * @param model The model of one BPMN file
+   * @param plainForm How an identifier the model carries becomes the plain one - the
+   *          identity where the model was not scoped yet, and the way back out of a prefix
+   *          where the engine handed the model back
+   * @return The identifiers it declares, without duplicates
+   */
+  public static java.util.Collection<NameClashAvoidanceSupport.ModelIdentifier> identifiersDeclaredBy(
+      final BpmnModelInstance model,
+      final java.util.function.UnaryOperator<String> plainForm) {
+
+    final var declared = new java.util.LinkedHashSet<NameClashAvoidanceSupport.ModelIdentifier>();
+    addWhatTheseDeclare(declared, model, Message.class, Message::getName, plainForm, ScopedIdentifierKind.MESSAGE_NAME);
+    addWhatTheseDeclare(declared, model, Signal.class, Signal::getName, plainForm, ScopedIdentifierKind.SIGNAL_NAME);
+    addWhatTheseDeclare(declared, model, Error.class, Error::getErrorCode, plainForm, ScopedIdentifierKind.ERROR_CODE);
+    addWhatTheseDeclare(
+        declared,
+        model,
+        Escalation.class,
+        Escalation::getEscalationCode,
+        plainForm,
+        ScopedIdentifierKind.ESCALATION_CODE);
+    return declared;
+
+  }
+
+  /**
+   * Adds what the elements of one type declare, skipping an element which declares no name
+   * at all - a message without one is legal BPMN and names nothing the engine could resolve.
+   */
+  private static <T extends org.camunda.bpm.model.xml.instance.ModelElementInstance> void addWhatTheseDeclare(
+      final java.util.Collection<NameClashAvoidanceSupport.ModelIdentifier> declared,
+      final BpmnModelInstance model,
+      final Class<T> type,
+      final java.util.function.Function<T, String> identifierOf,
+      final java.util.function.UnaryOperator<String> plainForm,
+      final ScopedIdentifierKind kind) {
+
+    model
+        .getModelElementsByType(type)
+        .stream()
+        .map(identifierOf)
+        .filter(identifier -> (identifier != null) && !identifier.isBlank())
+        .map(plainForm)
+        .forEach(identifier -> declared.add(new NameClashAvoidanceSupport.ModelIdentifier(kind, identifier, null)));
 
   }
 
