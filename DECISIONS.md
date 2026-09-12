@@ -393,3 +393,84 @@ of all this is cached and no runtime path reads it.
 `Camunda7DeclaredIdentifiersTest` what a model declares and what a held version still
 declares, and `Camunda7StartupQuestionCostTest` that a boot asks once per workflow module plus
 once per decision.
+
+### 18. An idle engine is told when to wake up instead of asking whether it is time yet
+
+The Camunda 7 job executor does not wait, it polls: every 5 seconds, widening to 60 while nothing
+happens, and every one of those cycles is a database command. An application which spends most of
+its life waiting for a timer pays for that on a database billed by active use. The answer is not a
+longer interval, because a longer interval makes a timer late without making the polling stop. The
+answer is a question with an exact answer: when is the next job due.
+
+So a cycle which found nothing asks the engine for the one job with the earliest due date later
+than the moment that cycle began, and waits until then. Found nothing has to mean all four of
+these at once, or the wait would be about load rather than about a due date: every engine handed
+out fewer jobs than were asked for, nothing was lost to another node's lock, the acquisition did
+not fail, and the threads executing jobs were not full. Anything else keeps the engine's own
+backoff, untouched.
+
+Two details of that question are decisions rather than taste. It asks for ONE row, because the
+answer needed is a moment and every further row is read by the database and looked at by nobody;
+version 1 listed every future job and used the first. And it uses the clock of the cycle which
+just ran, not a fresh one. Reading the clock again opens a gap of a few milliseconds in which a
+job falls due, appears in neither answer and is never woken for; the acquisition loop subtracts the
+same moment from the wait it gets back, so a job which came due meanwhile starts the next cycle at
+once. Version 1 also let the ordinary backoff reach its 60 second ceiling before the due-date logic
+engaged at all, which spent about two minutes of polling on every quiet period to save one query
+per cycle. The query is one indexed row and it replaces the cycle it would otherwise have paid for,
+so the staging is gone.
+
+There is no cap on how long this may wait. The due-date query answers the question exactly, and a
+job this node writes itself wakes it. The platform's outbox answers the same question with a cap,
+because there a second node's write cannot be seen at all; here the cap would only paper over the
+case named below, and a reader who thinks it is about timing sets it to seconds and gives the whole
+saving back.
+
+The waking hangs off the TRANSACTION, not off a list of methods. Every engine command asks its own
+commit to wake the acquisition, and a job can only be written by an engine command, so a workflow
+which is started, a message which is correlated, a task which is completed, a signal, a
+continuation the engine wrote for itself, a retry it rescheduled and a request to Cockpit or to the
+REST API are all covered without any of them being named in the code. Version 1 published an event
+from four places in one class, which left a plain save of a workflow aggregate, a signal and an
+engine-internal continuation waking nothing.
+
+That hook is the engine's command chain rather than a post-commit hook per platform, and the reason
+is that neither platform has one. Spring's and Quarkus' post-commit mechanisms have to be called
+from inside the transaction by somebody, and the only place this adapter is inside every
+transaction which could have written a job is the engine's own command. Underneath, the engine's
+transaction context uses exactly those two mechanisms: on Spring Boot a synchronization registered
+with `TransactionSynchronizationManager` acting on `afterCommit`, on Quarkus a JTA synchronization
+acting on a completion which committed. What the adapter adds is the one place which registers it.
+
+What the engine already does by itself is worth saying, because it is what makes the due-date wait
+the feature and the waking a detail. `JobManager` hints its own executor after a commit which
+inserted a job due now, and for a timer it hints only where the due date falls inside the
+executor's wait time. A job due LATER is the gap, and without the due-date wait, covering that gap
+shortens nothing at all.
+
+What this does not cover is a second application writing jobs into the same engine. That
+application's commit runs in its own process and reaches no listener here, so a node waiting on a
+due date computed before that write learns about the job when its own question next runs. Two
+applications against one engine is not a setup this adapter supports, and this is one of the
+reasons.
+
+The engine's metrics reporter is switched off where the feature is on. It owns a timer of its own
+and writes its counters through a database command every 900 seconds, which would wake an engine
+four times an hour that was meant to stay quiet, and a feature which waits for an hour and is woken
+by its own metrics has saved nothing. Only the writing stops; the counters are still kept in
+memory. An application which needs the written metrics says so with `db-metrics-reporting`, and the
+startup message tells it what that costs.
+
+Jobs are acquired by due date where the feature is on, because waking for the earliest due job and
+then acquiring in an unrelated order picks the wrong job as soon as more are due than one cycle
+takes. That order wants a database index, which is the operator's work and which the startup
+message asks for by name. `jobExecutorPreferTimerJobs` is left as the engine has it: a preference
+between kinds of job is a different question, and version 1's README claimed both flags while its
+code set neither.
+
+`Camunda7DueDateSleepTest` holds the waiting rule against a real engine, including the count of
+connections an idle engine takes, a job due later, a commit which shortens a running wait and an
+engine holding no job at all. `Camunda7JobExecutorSleepTest` holds what the two keys decide and
+what the startup message says, `Camunda7StartupQuestionCostTest` that the question asks for one
+row, and `Camunda7SleepingEngineIT` with its Quarkus twin that a booted application on either
+platform takes no connection while nothing is due.

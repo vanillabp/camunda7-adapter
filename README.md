@@ -105,6 +105,14 @@ vanillabp:
       # ONE datasource. Camunda does not create prefixed tables, so they have to exist
       # and database-schema-update has to be false - see below.
       table-prefix: NEW_
+      # OPTIONAL: the job executor waits until the next job is due instead of polling
+      # every 5 to 60 seconds, and a transaction which writes a job wakes it.
+      # Default: false - see 'An idle engine lets go of its database' below.
+      sleep-until-something-is-due: true
+      # OPTIONAL: whether the engine's metrics reporter writes its counters to the
+      # database every 900 seconds. Unset means the opposite of the key above, so an
+      # engine which is allowed to wait is not woken by its own metrics.
+      db-metrics-reporting: false
 ```
 
 On Spring Boot, declare the additional datasource bean with
@@ -139,12 +147,14 @@ deployed to the embedded engine of every prioritized adapter.
   using this adapter therefore needs a phase-two outbox, which the VanillaBP platform
   integration provides for JPA/JDBC and MongoDB setups.
 - **Asynchronous continuations (job executor).** Each engine runs an idiomatic
-  `SpringJobExecutor` on a managed thread pool (thread names contain the adapter id).
-  Activation is deferred: the executor starts when the deployment pipeline starts
-  workflow processing (after the application is ready) and stops on graceful shutdown
-  once the last workflow module stopped - before the engine closes. (An immediate
-  wake-up after commits creating jobs - Version 1's `WakeupJobExecutor` - is a planned
-  follow-up; until then new jobs are picked up by the executor's regular acquisition.)
+  `SpringJobExecutor` on a managed thread pool (thread names contain the adapter id); on
+  Quarkus the engine brings its own pool. Activation is deferred: the executor starts when
+  the deployment pipeline starts workflow processing (after the application is ready) and
+  stops on graceful shutdown once the last workflow module stopped - before the engine
+  closes. A job which is due now is picked up right after the commit which wrote it,
+  because the engine hints its own executor for those. A job due LATER waits for the next
+  acquisition cycle unless the adapter id asks to wait for the due date instead, see
+  [An idle engine lets go of its database](#an-idle-engine-lets-go-of-its-database).
 - **Adapter ids with an OWN (named) datasource.** An engine on a named datasource
   cannot join the caller's transaction at all - its commands commit on an
   adapter-internal transaction manager bound to that datasource. Outbound nothing
@@ -166,6 +176,65 @@ difference the datasource makes
 (`repeatedDeliveryOnAnOwnDataSourceIsAnsweredFromTheRecord` against
 `repeatedDeliveryOnTheSharedDataSourceRunsTheHandlerAgain`). What the startup says about a
 missing delivery log in each mode is `Camunda7MissingDeliveryLogIT`.
+
+### An idle engine lets go of its database
+
+The Camunda 7 job executor does not wait, it polls. Every 5 seconds, widening to 60 while
+nothing happens, and every one of those cycles is a database command. An application which
+spends most of its life waiting for a timer pays for that, and on a database billed by
+active use it is a bill for doing nothing.
+
+One key per adapter id changes it:
+
+```yaml
+vanillabp:
+  adapters:
+    c7:
+      sleep-until-something-is-due: true
+```
+
+A cycle which found nothing then asks the engine for the one job with the earliest due date
+still ahead, and waits until exactly that moment. No job at all means it waits until somebody
+wakes it, and every engine command asks its own commit to do that waking. So starting a
+workflow, correlating a message, completing a task, sending a signal and a continuation the
+engine wrote for itself all shorten the wait, and none of them is named anywhere in the
+adapter.
+
+Careful with what this is. It is not the immediate wake-up version 1 sold as the feature,
+because the engine has always hinted its own executor after a commit which wrote a job due
+now. And it is not a longer polling interval, which would make a timer late without making
+the polling stop.
+
+One thing is left for the operator. Where the key is on, the adapter asks the engine to
+acquire jobs by due date, since waking for the earliest due job and then acquiring in an
+unrelated order picks the wrong job as soon as more are due than one cycle takes. That order
+wants a database index on the due date of `ACT_RU_JOB`, which Camunda
+[documents](https://docs.camunda.org/manual/7.24/user-guide/process-engine/the-job-executor/)
+and which only the operator can create in their database. The startup message asks for it.
+The engine's `jobExecutorPreferTimerJobs` is left as it is, because a preference between
+kinds of job is a different question from when to wake up.
+
+The engine's metrics reporter goes quiet as well. It owns a timer of its own and writes its
+counters through a database command every 900 seconds, which would wake this engine four
+times an hour. Where the key is on, that writing stops and the counters are still kept in
+memory. An application which needs them written sets `db-metrics-reporting: true`, and the
+startup message says what that costs.
+
+VanillaBP's own machinery keeps polling, though: the phase-two outbox asks its store every
+`vanillabp.outbox.poll-interval`, 10 seconds by default, and the retention cleanup of the
+task delivery log runs once an hour. Anybody who switches this on and watches their database
+sees those two, so the startup message names them rather than leaving somebody to look for
+them in the engine.
+
+A second application writing jobs into the same engine is not covered. Its commit runs in
+another process and reaches nothing here, so a node waiting on a due date computed before
+that write learns about the job when its own question next runs. Two applications against one
+engine is not a setup this adapter supports.
+
+The reasoning is [decision 18](./DECISIONS.md#18-an-idle-engine-is-told-when-to-wake-up-instead-of-asking-whether-it-is-time-yet).
+`Camunda7DueDateSleepTest` holds the waiting rule against a real engine and counts the
+connections an idle one takes, and `Camunda7SleepingEngineIT` with its Quarkus twin holds
+that a booted application on either platform takes none while nothing is due.
 
 ### Embedded-engine wiring
 
@@ -1062,13 +1131,6 @@ Deploying such a task is refused with a guiding message. Meeting one in a versio
 ALREADY holds is a warning naming the version instead: that model is only being read, on
 behalf of the startup check about older versions, and nobody can change it any more - see
 [decision 15](./DECISIONS.md#15-a-check-reads-the-engines-models-without-asking-who-deployed-them).
-
-### New jobs wait for the next acquisition cycle
-
-Version 1 woke the job executor up when a transaction creating a job committed
-(`WakeupJobExecutor`), so an asynchronous continuation started right away. This adapter
-does not, so such a job waits for the executor's regular acquisition cycle. Planned as a
-follow-up of the engine-idiomatics story, no date yet.
 
 ## Known issues
 
