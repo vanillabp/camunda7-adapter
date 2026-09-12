@@ -27,6 +27,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * Decision 10 in the repository's DECISIONS.md is what this holds: an engine query while
  * booting is counted, and the count belongs to the versions, never to the workflows.
+ * <p>
+ * The same counting applies to the one question the job acquisition asks while it is idle.
+ * Version 1 listed every job with a due date in the future and used the first row, which is
+ * a list whose length is the application's backlog; the answer needed is one row.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7StartupQuestionCostTest {
@@ -291,6 +295,71 @@ public class Camunda7StartupQuestionCostTest {
         queries.getOrDefault("createProcessInstanceQuery", 0),
         () -> "nothing here asks about a running workflow, but was "
             + queries);
+
+  }
+
+  @Test
+  @DisplayName("An idle acquisition cycle asks for one job row per engine, and for no list")
+  public void theDueDateQuestionAsksForOneRow() {
+
+    final var jobQuery = Mockito.mock(org.camunda.bpm.engine.runtime.JobQuery.class, Mockito.RETURNS_SELF);
+    Mockito
+        .lenient()
+        .when(jobQuery.listPage(Mockito.anyInt(), Mockito.anyInt()))
+        .thenAnswer(invocation -> {
+          queries.merge("jobQuery.listPage", 1, Integer::sum);
+          return java.util.List.of();
+        });
+    Mockito
+        .lenient()
+        .when(jobQuery.list())
+        .thenAnswer(invocation -> {
+          queries.merge("jobQuery.list", 1, Integer::sum);
+          return java.util.List.of();
+        });
+
+    final var managementService = Mockito.mock(org.camunda.bpm.engine.ManagementService.class);
+    Mockito.lenient().when(managementService.createJobQuery()).thenReturn(jobQuery);
+    final var engine = Mockito.mock(org.camunda.bpm.engine.impl.ProcessEngineImpl.class);
+    Mockito.lenient().when(engine.getManagementService()).thenReturn(managementService);
+
+    final var jobExecutor = Mockito.mock(org.camunda.bpm.engine.impl.jobexecutor.JobExecutor.class);
+    Mockito
+        .lenient()
+        .when(jobExecutor.engineIterator())
+        .thenAnswer(invocation -> java.util.List.of(engine).iterator());
+    Mockito.lenient().when(jobExecutor.hasRegisteredEngine(engine)).thenReturn(Boolean.TRUE);
+
+    final var context = Mockito.mock(org.camunda.bpm.engine.impl.jobexecutor.JobAcquisitionContext.class);
+    Mockito.lenient().when(context.areAllEnginesIdle()).thenReturn(Boolean.TRUE);
+    // an idle cycle asked for three jobs and got none, which is not the same thing as not
+    // having asked: an empty map reads to the engine as an executor whose threads are full
+    Mockito
+        .lenient()
+        .when(context.getAcquiredJobsByEngine())
+        .thenReturn(
+            java.util.Map
+                .of("c7", new org.camunda.bpm.engine.impl.jobexecutor.AcquiredJobs(3)));
+    Mockito.lenient().when(context.getRejectedJobsByEngine()).thenReturn(java.util.Map.of());
+    Mockito.lenient().when(context.getAdditionalJobsByEngine()).thenReturn(java.util.Map.of());
+
+    new io.vanillabp.camunda7.engine.Camunda7SleepUntilSomethingIsDue("c7", jobExecutor)
+        .reconfigure(context);
+
+    assertEquals(
+        1,
+        queries.getOrDefault("jobQuery.listPage", 0),
+        () -> "when to wake up is one question per engine, but was "
+            + queries);
+    assertEquals(
+        0,
+        queries.getOrDefault("jobQuery.list", 0),
+        () -> "the list of every future job is read by the database and looked at by nobody, "
+            + "so it is never asked for, but was "
+            + queries);
+    Mockito
+        .verify(jobQuery)
+        .listPage(0, 1);
 
   }
 

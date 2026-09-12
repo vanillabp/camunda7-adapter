@@ -181,6 +181,21 @@ public interface VanillaBpCamunda7Properties {
      */
     Optional<Boolean> acceptUnscopedIdentifiers();
 
+    /**
+     * OPTIONAL: the job executor waits until the next job is due instead of polling every
+     * 5 to 60 seconds, and a transaction which writes a job wakes it. Default
+     * <code>false</code> - see {@code Camunda7JobExecutorSleep}.
+     */
+    Optional<Boolean> sleepUntilSomethingIsDue();
+
+    /**
+     * OPTIONAL: whether the engine's metrics reporter writes its counters to the database
+     * every 900 seconds. Unset means the opposite of
+     * {@link #sleepUntilSomethingIsDue()}, so an engine which is allowed to sleep is not
+     * woken by its own metrics.
+     */
+    Optional<Boolean> dbMetricsReporting();
+
   }
 
 }

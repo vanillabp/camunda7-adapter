@@ -58,6 +58,13 @@ public class C7E2eIntrospectionController {
   @Inject
   UserTransaction userTransaction;
 
+  /**
+   * The count of connections taken from the application's pool - the one number which says
+   * whether a sleeping engine really left the database alone.
+   */
+  @Inject
+  C7ConnectionsTaken connectionsTaken;
+
   // --- the application's own state ---
 
   @GET
@@ -122,6 +129,44 @@ public class C7E2eIntrospectionController {
         .stream()
         .map(aggregate -> "%s|%s|%s".formatted(aggregate.getId(), aggregate.getProcessedBy(), aggregate.getEndedAs()))
         .toList();
+
+  }
+
+  /**
+   * Which job executor the engine of the adapter id runs, by class name. It is how a test
+   * sees whether the property asking for the due-date sleep reached the engine.
+   *
+   * @return The simple class name of the engine's job executor
+   */
+  @GET
+  @Path("/engine/job-executor")
+  @Produces(MediaType.TEXT_PLAIN)
+  public String jobExecutor() {
+
+    return ((org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl) engineRegistry
+        .engineFor(ADAPTER_ID)
+        .getProcessEngine()
+        .getProcessEngineConfiguration())
+        .getJobExecutor()
+        .getClass()
+        .getSimpleName();
+
+  }
+
+  /**
+   * How many connections were taken from the application's datasource since it was created.
+   * A connection is what anything in the application needs before it can say a word to the
+   * database, so a count which does not move is a database nobody spoke to - which is what
+   * the due-date sleep is worth measuring.
+   *
+   * @return How many connections were taken since the application started
+   */
+  @GET
+  @Path("/datasource/connections-taken")
+  @Produces(MediaType.TEXT_PLAIN)
+  public String connectionsTaken() {
+
+    return Long.toString(connectionsTaken.count());
 
   }
 

@@ -120,6 +120,8 @@ public class Camunda7EngineProducer {
     keys.historyTimeToLive().ifPresent(properties::setHistoryTimeToLive);
     keys.tablePrefix().ifPresent(properties::setTablePrefix);
     keys.serializationFormat().ifPresent(properties::setSerializationFormat);
+    keys.sleepUntilSomethingIsDue().ifPresent(properties::setSleepUntilSomethingIsDue);
+    keys.dbMetricsReporting().ifPresent(properties::setDbMetricsReporting);
     // the named plugin sections travel onto the platform-neutral model, so the core builds
     // and configures them the same way on both platforms
     properties

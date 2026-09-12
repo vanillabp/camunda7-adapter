@@ -131,3 +131,48 @@ holds under the old id, and you are told about a `@WorkflowStartedByBpms` method
 a start event for. A `@WorkflowEnded` method kept for the old id is
 checked in the same place. Both are warnings and neither stops a start: they read models nobody
 can change any more.
+
+### The wakeup job executor has a new key and is no longer experimental
+
+Version 1 had an experimental job executor behind `camunda.bpm.job-execution.wakeup`. The key is
+gone, because it belonged to Camunda's Spring Boot starter rather than to the adapter, and a
+migration setup runs two Camunda 7 adapter ids which may want different answers. The same feature
+is configured per adapter id and is supported:
+
+```yaml
+vanillabp:
+  adapters:
+    c7:
+      sleep-until-something-is-due: true
+```
+
+It is still off by default, so an application which does nothing keeps the engine's own timing. An
+application which had the version 1 key set does have to act: without the new key its engine polls
+every 5 to 60 seconds again.
+
+What it does has changed in three ways, and all three are worth reading before switching it on.
+
+The waiting is the feature, and the waking is not. Version 1's README sold an immediate wake-up
+after a commit which created a job; the engine has always done that by itself for a job due now.
+What this adds is the case the engine does not cover, a job due LATER, which is only worth
+something once the executor stops polling.
+
+Everything which commits wakes the executor now, not four methods of one class. Version 1 published
+a Spring event from `Camunda7ProcessService`, so a plain save of a workflow aggregate, a signal and
+a continuation the engine wrote for itself woke nothing. The servlet filter version 1 put on the
+Camunda webapp and on `/engine-rest` is gone with it: those are engine commands like any other and
+are covered without a filter. Nothing has to be configured for the waking, and the Spring
+`TaskScheduler` bean version 1 demanded is no longer needed.
+
+Two engine settings follow the key. Jobs are acquired by due date, which version 1's README claimed
+while its code set neither flag, and that order wants a database index on the due date of
+`ACT_RU_JOB` which only the operator can create. And the engine's metrics reporter stops writing,
+because it would otherwise wake a waiting engine four times an hour; set `db-metrics-reporting:
+true` to keep it.
+
+There is also no Quarkus caveat any more. Version 1 had no Quarkus artifact at all, so the feature
+was Spring-only by accident; it works on both platforms now.
+
+The [README section](https://github.com/vanillabp/camunda7-adapter/blob/main/README.md#an-idle-engine-lets-go-of-its-database)
+and the [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#letting-an-idle-engine-go-quiet)
+of the wiki carry the details.
