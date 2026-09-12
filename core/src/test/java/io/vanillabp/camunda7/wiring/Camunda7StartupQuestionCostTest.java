@@ -49,6 +49,26 @@ public class Camunda7StartupQuestionCostTest {
    */
   private static final int MODEL_READING_QUESTIONS = 3;
 
+  /**
+   * How many BPMN processes the workflow module brings - a process definition key takes a
+   * batch filter, so the question about what the engine already holds is asked once for all
+   * of them.
+   */
+  private static final int PROCESSES = 2;
+
+  /**
+   * How many decision tables the workflow module brings. A decision definition key has no
+   * batch filter, so this is the one number the count grows with, and it is a property of the
+   * application rather than of its history.
+   */
+  private static final int DECISIONS = 3;
+
+  /**
+   * The deployment every definition of these tests belongs to - this adapter's own, so
+   * nothing here needs a second deployment query to attribute a finding.
+   */
+  private static final String OUR_DEPLOYMENT = "deployment-1";
+
   private RepositoryService repositoryService;
 
   private RuntimeService runtimeService;
@@ -72,6 +92,10 @@ public class Camunda7StartupQuestionCostTest {
         .lenient()
         .when(definition.getVersion())
         .thenReturn(version);
+    Mockito
+        .lenient()
+        .when(definition.getDeploymentId())
+        .thenReturn(OUR_DEPLOYMENT);
     return definition;
 
   }
@@ -109,6 +133,16 @@ public class Camunda7StartupQuestionCostTest {
 
     final var instanceQuery = Mockito.mock(ProcessInstanceQuery.class, Mockito.RETURNS_SELF);
 
+    final var decisionQuery = Mockito
+        .mock(org.camunda.bpm.engine.repository.DecisionDefinitionQuery.class, Mockito.RETURNS_SELF);
+    Mockito.lenient().when(decisionQuery.list()).thenReturn(java.util.List.of());
+
+    final var ourDeployment = Mockito.mock(org.camunda.bpm.engine.repository.Deployment.class);
+    Mockito.lenient().when(ourDeployment.getId()).thenReturn(OUR_DEPLOYMENT);
+    final var deploymentQuery = Mockito
+        .mock(org.camunda.bpm.engine.repository.DeploymentQuery.class, Mockito.RETURNS_SELF);
+    Mockito.lenient().when(deploymentQuery.list()).thenReturn(java.util.List.of(ourDeployment));
+
     repositoryService = Mockito.mock(RepositoryService.class);
     Mockito
         .lenient()
@@ -116,6 +150,20 @@ public class Camunda7StartupQuestionCostTest {
         .thenAnswer(invocation -> {
           queries.merge("createProcessDefinitionQuery", 1, Integer::sum);
           return definitionQuery;
+        });
+    Mockito
+        .lenient()
+        .when(repositoryService.createDecisionDefinitionQuery())
+        .thenAnswer(invocation -> {
+          queries.merge("createDecisionDefinitionQuery", 1, Integer::sum);
+          return decisionQuery;
+        });
+    Mockito
+        .lenient()
+        .when(repositoryService.createDeploymentQuery())
+        .thenAnswer(invocation -> {
+          queries.merge("createDeploymentQuery", 1, Integer::sum);
+          return deploymentQuery;
         });
     Mockito
         .lenient()
@@ -184,6 +232,64 @@ public class Camunda7StartupQuestionCostTest {
         queries.getOrDefault("getBpmnModelInstance", 0),
         () -> "one model read per question about an older version, which the engine answers "
             + "from the definition it parsed for the first of them, but was "
+            + queries);
+
+  }
+
+  /**
+   * The identifiers of a workflow module, keyed by what the engine knows them as - the shape
+   * the check about what the engine already holds is asked in.
+   */
+  private static java.util.Map<String, String> identifiers(
+      final String prefix,
+      final int howMany) {
+
+    return java.util.stream.IntStream
+        .rangeClosed(1, howMany)
+        .boxed()
+        .collect(
+            java.util.stream.Collectors
+                .toMap(number -> prefix + number, number -> prefix + number));
+
+  }
+
+  @Test
+  @DisplayName("What the engine already holds is one query per workflow module, plus one per decision")
+  public void whatTheEngineAlreadyHoldsIsAskedPerWorkflowModule() {
+
+    io.vanillabp.camunda7.deployment.Camunda7IdentifiersTheEngineHolds
+        .reportWhatTheEngineAlreadyHolds(
+            "c7",
+            MODULE,
+            identifiers("Process", PROCESSES),
+            identifiers("decision", DECISIONS),
+            null,
+            repositoryService,
+            new io.vanillabp.camunda7.RecordingScoping(
+                io.vanillabp.integration.adapter.spi.NameClashAvoidance.NONE));
+
+    assertEquals(
+        1,
+        queries.getOrDefault("createProcessDefinitionQuery", 0),
+        () -> "every process of the module is asked about in one statement, and the engine holding "
+            + VERSIONS
+            + " versions of each changes nothing about that, but was "
+            + queries);
+    assertEquals(
+        DECISIONS,
+        queries.getOrDefault("createDecisionDefinitionQuery", 0),
+        () -> "a decision definition key has no batch filter, so one statement each, but was "
+            + queries);
+    assertEquals(
+        1,
+        queries.getOrDefault("createDeploymentQuery", 0),
+        () -> "which deployments this adapter made is one question per workflow module, and a "
+            + "definition belonging to one of them needs none of its own, but was "
+            + queries);
+    assertEquals(
+        0,
+        queries.getOrDefault("createProcessInstanceQuery", 0),
+        () -> "nothing here asks about a running workflow, but was "
             + queries);
 
   }

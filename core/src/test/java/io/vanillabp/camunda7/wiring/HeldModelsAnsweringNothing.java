@@ -41,6 +41,17 @@ public class HeldModelsAnsweringNothing implements Camunda7ProcessVersions.HeldM
   }
 
   @Override
+  public Collection<io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier> identifiersOf(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version,
+      final BpmnModelInstance model) {
+
+    return List.of();
+
+  }
+
+  @Override
   public Collection<BpmsInitiatedStartSpec> startEventsOf(
       final String workflowModuleId,
       final String bpmnProcessId,

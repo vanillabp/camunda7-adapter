@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
-import java.util.Collection;
 import java.util.List;
 
 import org.camunda.bpm.model.bpmn.Bpmn;
@@ -23,8 +22,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import io.vanillabp.camunda7.RecordingScoping;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
-import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
@@ -107,7 +106,7 @@ public class Camunda7ScopingTest {
 
     final var model = model();
 
-    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new ScopingDouble(NameClashAvoidance.USE_PREFIX));
+    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new RecordingScoping(NameClashAvoidance.USE_PREFIX));
 
     assertEquals(
         List.of("loan-approval__DocumentCollection", "loan-approval__RiskAssessment"),
@@ -136,7 +135,7 @@ public class Camunda7ScopingTest {
 
     final var model = model();
 
-    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new ScopingDouble(NameClashAvoidance.USE_PREFIX));
+    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new RecordingScoping(NameClashAvoidance.USE_PREFIX));
 
     assertEquals(
         "${riskAssessment.scoreApplicant(execution)}",
@@ -155,7 +154,7 @@ public class Camunda7ScopingTest {
 
       final var model = model();
 
-      Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new ScopingDouble(mode));
+      Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new RecordingScoping(mode));
 
       assertEquals(List.of("DocumentCollection", "RiskAssessment"), processIds(model), "mode "
           + mode);
@@ -164,7 +163,7 @@ public class Camunda7ScopingTest {
           first(model, Message.class).getName(),
           "mode "
               + mode);
-      assertFalse(Camunda7Scoping.prefixes(MODULE, ADAPTER_ID, new ScopingDouble(mode)));
+      assertFalse(Camunda7Scoping.prefixes(MODULE, ADAPTER_ID, new RecordingScoping(mode)));
 
     }
 
@@ -188,7 +187,7 @@ public class Camunda7ScopingTest {
   public void aBusinessRuleTaskFindsItsRenamedDecision() {
 
     final var model = model();
-    final var scoping = new ScopingDouble(NameClashAvoidance.USE_PREFIX);
+    final var scoping = new RecordingScoping(NameClashAvoidance.USE_PREFIX);
 
     Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, scoping);
 
@@ -216,7 +215,7 @@ public class Camunda7ScopingTest {
     first(model, org.camunda.bpm.model.bpmn.instance.BusinessRuleTask.class)
         .setCamundaDecisionRef("${whichDecision}");
 
-    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new ScopingDouble(NameClashAvoidance.USE_PREFIX));
+    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new RecordingScoping(NameClashAvoidance.USE_PREFIX));
 
     assertEquals(
         "${whichDecision}",
@@ -231,149 +230,14 @@ public class Camunda7ScopingTest {
     final var model = model();
     first(model, CallActivity.class).setCalledElement("${nextProcess}");
 
-    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new ScopingDouble(NameClashAvoidance.USE_PREFIX));
+    Camunda7Scoping.apply(model, MODULE, ADAPTER_ID, new RecordingScoping(NameClashAvoidance.USE_PREFIX));
 
     // JUEL evaluates composite expressions (literal text + '${...}'), so the engine
     // resolves the prefixed process id of whatever the expression yields
     assertEquals(
         "loan-approval__${nextProcess}",
         first(model, CallActivity.class).getCalledElement());
-    assertTrue(Camunda7Scoping.prefixes(MODULE, ADAPTER_ID, new ScopingDouble(NameClashAvoidance.USE_PREFIX)));
-
-  }
-
-  /**
-   * A hand-written {@link NameClashAvoidanceSupport}: the Camunda 7 core depends on the
-   * adapter SPI only, so the core's implementation is not available here. It composes
-   * exactly like {@code NameClashAvoidanceService} does.
-   */
-  private static class ScopingDouble implements NameClashAvoidanceSupport {
-
-    private final NameClashAvoidance mode;
-
-    ScopingDouble(
-        final NameClashAvoidance mode) {
-
-      this.mode = mode;
-
-    }
-
-    @Override
-    public NameClashAvoidance modeFor(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final String adapterId) {
-
-      return mode;
-
-    }
-
-    private String scoped(
-        final String identifier,
-        final String... prefixes) {
-
-      if ((mode != NameClashAvoidance.USE_PREFIX) || (identifier == null)) {
-        return identifier;
-      }
-      return String.join(SEPARATOR, prefixes) + SEPARATOR + identifier;
-
-    }
-
-    @Override
-    public String scopedProcessId(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final String adapterId) {
-
-      return scoped(bpmnProcessId, workflowModuleId);
-
-    }
-
-    @Override
-    public String scopedIdentifier(
-        final String workflowModuleId,
-        final String identifier,
-        final String adapterId) {
-
-      return scoped(identifier, workflowModuleId);
-
-    }
-
-    @Override
-    public String scopedTaskDefinition(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final String taskDefinition,
-        final String adapterId) {
-
-      return scoped(taskDefinition, workflowModuleId, bpmnProcessId);
-
-    }
-
-    @Override
-    public String plainProcessId(
-        final String workflowModuleId,
-        final String scopedBpmnProcessId,
-        final String adapterId) {
-
-      return strip(scopedBpmnProcessId, workflowModuleId);
-
-    }
-
-    @Override
-    public String plainIdentifier(
-        final String workflowModuleId,
-        final String scopedIdentifier,
-        final String adapterId) {
-
-      return strip(scopedIdentifier, workflowModuleId);
-
-    }
-
-    @Override
-    public String plainTaskDefinition(
-        final String workflowModuleId,
-        final String bpmnProcessId,
-        final String scopedTaskDefinition,
-        final String adapterId) {
-
-      return strip(scopedTaskDefinition, workflowModuleId, bpmnProcessId);
-
-    }
-
-    private String strip(
-        final String identifier,
-        final String... prefixes) {
-
-      if ((mode != NameClashAvoidance.USE_PREFIX) || (identifier == null)) {
-        return identifier;
-      }
-      final var prefix = String.join(SEPARATOR, prefixes) + SEPARATOR;
-      return identifier.startsWith(prefix) ? identifier.substring(prefix.length()) : identifier;
-
-    }
-
-    @Override
-    public void validateNoneNameClashStrategy(
-        final String adapterId,
-        final String byAdapterOnlyPropertyKey) {
-
-    }
-
-    @Override
-    public void validateNativeIsolationSupported(
-        final String adapterId,
-        final String workflowModuleId,
-        final String bpmsDescription) {
-
-    }
-
-    @Override
-    public void validateNoCollidingProcessIds(
-        final String adapterId,
-        final Collection<DeployedProcess> deployedProcesses) {
-
-    }
+    assertTrue(Camunda7Scoping.prefixes(MODULE, ADAPTER_ID, new RecordingScoping(NameClashAvoidance.USE_PREFIX)));
 
   }
 

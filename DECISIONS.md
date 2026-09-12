@@ -341,3 +341,55 @@ engine which will refuse the first push loudly by itself.
 `Camunda7VariablesTest` holds the rule and `AbstractNestedExpressionsIT` with its two subclasses
 holds what each format answers at runtime. The check is held by
 `Camunda7SerializationRoundTripTest` and `Camunda7LossyFormatCheckIT`.
+
+### 17. The engine answers for a process id and a decision id, and the deployment stamp is only a hint
+
+The platform's decision 38 carries the rule: a check which cannot see everything that could
+carry its answer stays silent, and where the BPMS can be asked, a finding about a model
+somebody else deployed is a warning and never the end of a boot. Its decision 40 divides the
+work for a name clash, the adapter asking and the core wording the message. What follows for
+Camunda 7 is what this engine can be asked and how far its answer carries.
+
+Two identifier kinds are keys of the repository, so both are queryable. Every BPMN process of a
+workflow module is asked about in one statement (`processDefinitionKeyIn`), and a decision is
+asked about one by one because its query has no batch filter. Neither query names a version:
+our own deployment creates the newest version of a key another deployment may have held for
+years, so asking for the latest version would find nobody but ourselves. Neither names a
+suspension state either, for the reason decision 12 gives. The tenant belongs in both filters,
+because a second tenant on one engine is a legitimate arrangement rather than a clash.
+
+A message name, a signal name, an error code and an escalation code are in no index. They live
+in the models, and reading one model per version the engine holds is the growth decision 10
+forbids a start to have. Where the models are read anyway the question is free, and that is
+where it is asked: from what was read out of the models of this deployment, and from the model
+of a held version the check of older versions already reads. A task definition is not a
+question here at all, because Camunda 7 keeps one process-local: the expression is evaluated
+inside the process by VanillaBP's EL resolver and nothing subscribes to it engine-wide, which
+is why this adapter does not rewrite one either.
+
+The hard part is not the query, it is telling a foreign holder from this application's own
+history. The Camunda deployment is what can be asked about, and the part of its stamp which
+carries is the NAME: every VanillaBP generation deploys a workflow module under the module's
+own id, version 1 included, which wrote the application name into the source where this adapter
+writes the adapter type and the adapter id. So the deployments named after the module being
+deployed are one query, and a definition belonging to one of them says nothing. Reading the
+source instead would report every definition of an application upgrading from version 1, on
+its first start and on every one after it.
+
+A definition under another deployment name is reported, and the source then says how sure the
+adapter can be. A source naming a Camunda 7 adapter of VanillaBP is reported without certainty,
+because another adapter id is what a migration between two engines looks like and another
+workflow module of this application writes its own name as well. Any other source was written
+by something else, a modelling tool or an application which deploys its models itself, and that
+one is reported as certainly foreign.
+
+What this cannot see is a second application which deploys a workflow module of the same id. It
+writes the same deployment name, and no column of the engine's deployment table names an
+application. Reading that name as ours is what keeps the check from warning about this
+application's own history on every boot, which is the price, and it is paid on purpose. Nothing
+of all this is cached and no runtime path reads it.
+
+`Camunda7IdentifiersTheEngineHoldsTest` holds the queries and the stamp against a real engine,
+`Camunda7DeclaredIdentifiersTest` what a model declares and what a held version still
+declares, and `Camunda7StartupQuestionCostTest` that a boot asks once per workflow module plus
+once per decision.

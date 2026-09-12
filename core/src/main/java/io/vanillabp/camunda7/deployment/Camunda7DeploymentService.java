@@ -527,6 +527,13 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       // still the ones the application knows
       io.vanillabp.camunda7.wiring.Camunda7CallActivities
           .propagateBusinessKey(model, workflowModuleId, workflowTaskWiring);
+      // the names the engine resolves across process definitions, read while they are
+      // still the ones the application modelled: scoping rewrites exactly these, so the
+      // answer to "which of them does this module declare" is free right here
+      context
+          .recordDeclaredIdentifiers(
+              io.vanillabp.camunda7.wiring.Camunda7Scoping
+                  .identifiersDeclaredBy(model, java.util.function.UnaryOperator.identity()));
       io.vanillabp.camunda7.wiring.Camunda7Scoping.apply(model, workflowModuleId, adapterId, scoping);
     }
     context.addResource(filename, model);
@@ -560,6 +567,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
           io.vanillabp.integration.adapter.spi.DmnDecisionIds.of(toDeploy));
     }
     existingContext.addDecision(filename, toDeploy);
+    // the ids as the application knows them, which is what the engine is asked about and
+    // what another workflow module may declare as well
+    existingContext
+        .recordDecisionIds(io.vanillabp.integration.adapter.spi.DmnDecisionIds.of(file));
     return existingContext;
 
   }
@@ -800,6 +811,39 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       return concurrentTokenElementsOfHeldModel(workflowModuleId, bpmnProcessId, model);
 
     }
+
+    @Override
+    public java.util.Collection<io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier> identifiersOf(
+        final String workflowModuleId,
+        final String bpmnProcessId,
+        final String version,
+        final BpmnModelInstance model) {
+
+      return identifiersOfHeldModel(workflowModuleId, model);
+
+    }
+
+  }
+
+  /**
+   * The identifiers a model the engine still holds declares which the workflow module scopes
+   * - the same walk the deployment runs over a model it brings, over a version an earlier
+   * generation of this application deployed.
+   * <p>
+   * The names come back as the application knows them: the engine holds the model as it was
+   * deployed, so a prefix is stripped here, because the core composes the scoped forms
+   * itself.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param model The model of that version
+   * @return What it declares, plain
+   */
+  private java.util.Collection<io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier> identifiersOfHeldModel(
+      final String workflowModuleId,
+      final BpmnModelInstance model) {
+
+    return io.vanillabp.camunda7.wiring.Camunda7Scoping
+        .identifiersDeclaredBy(model, identifier -> plainIdentifier(workflowModuleId, identifier));
 
   }
 
@@ -1788,6 +1832,58 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     // The deployment is done, so the version tags the application's
     // annotations name can be resolved against what the engine has now
+
+    reportAboutTheNamesThisModuleDeploys(workflowModuleId, bpmsProcessingContext, tenantId);
+
+  }
+
+  /**
+   * Says which of this workflow module's identifiers the engine held before this deployment,
+   * and which of them a second workflow module of this application declares as well.
+   * <p>
+   * Both are diagnostics of the start: nothing is kept, no runtime path reads any of it, and
+   * a finding is a warning the core words, because the deployment on the other side may
+   * belong to an application which is running correctly (see decision 17 in the repository's
+   * DECISIONS.md). It runs after the deploy command returned, where the process definition
+   * keys of this module are settled and the tenant checks run as well.
+   *
+   * @param workflowModuleId The workflow module which was just deployed
+   * @param bpmsProcessingContext What the deployment pipeline collected for it
+   * @param tenantId The tenant deployed into, <code>null</code> for none
+   */
+  private void reportAboutTheNamesThisModuleDeploys(
+      final String workflowModuleId,
+      final Camunda7ProcessingContext bpmsProcessingContext,
+      final String tenantId) {
+
+    if (scoping == null) {
+      return;
+    }
+    scoping
+        .reportIdentifiersTheModelsDeclare(
+            adapterId, workflowModuleId, bpmsProcessingContext.getDeclaredIdentifiers());
+
+    final var processIdsByKey = new java.util.LinkedHashMap<String, String>();
+    bpmsProcessingContext
+        .getDeployedProcessIds()
+        .forEach(
+            bpmnProcessId -> processIdsByKey
+                .put(scopedProcessId(workflowModuleId, bpmnProcessId), bpmnProcessId));
+    final var decisionIdsByKey = new java.util.LinkedHashMap<String, String>();
+    bpmsProcessingContext
+        .getDecisionIds()
+        .forEach(
+            decisionId -> decisionIdsByKey
+                .put(scoping.scopedIdentifier(workflowModuleId, decisionId, adapterId), decisionId));
+    Camunda7IdentifiersTheEngineHolds
+        .reportWhatTheEngineAlreadyHolds(
+            adapterId,
+            workflowModuleId,
+            processIdsByKey,
+            decisionIdsByKey,
+            tenantId,
+            repositoryService,
+            scoping);
 
   }
 

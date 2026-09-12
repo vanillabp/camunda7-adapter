@@ -158,6 +158,15 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
         String version,
         BpmnModelInstance model);
 
+    /**
+     * The identifiers that model declares which the workflow module scopes, plain.
+     */
+    java.util.Collection<io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier> identifiersOf(
+        String workflowModuleId,
+        String bpmnProcessId,
+        String version,
+        BpmnModelInstance model);
+
   }
 
   private final HeldModelReading heldModelReading;
@@ -260,6 +269,25 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
       return java.util.List.of();
     }
     return heldModelReading.concurrentTokenElementsOf(workflowModuleId, bpmnProcessId, version, model);
+
+  }
+
+  @Override
+  public java.util.Collection<io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier> identifiersOfVersion(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    if (heldModelReading == null) {
+      return null;
+    }
+    final var model = modelOfVersion(workflowModuleId, bpmnProcessId, version);
+    if (model == null) {
+      // the engine does not hold that version any more, so it declares nothing anybody
+      // could still collide with - the same answer its tasks and its start events give
+      return java.util.List.of();
+    }
+    return heldModelReading.identifiersOf(workflowModuleId, bpmnProcessId, version, model);
 
   }
 
