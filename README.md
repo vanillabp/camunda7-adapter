@@ -594,6 +594,43 @@ to. The adapter resolves it from the process definition key it registered while 
 which keeps everything working that depends on it, including the live evaluation of
 workflow-aggregate attributes in BPMN expressions.
 
+### What the boot asks about the names
+
+Scoping keeps the workflow modules of THIS application apart. It says nothing about a name
+another application deployed into the same engine years ago, and the engine then decides on its
+own which side a start or a message reaches. So the boot asks, once per workflow module and
+right after the deployment returned, and the core words what comes back as a WARN.
+
+Three questions, and each of them answers for what it can:
+
+- What the engine already holds. A process definition key takes a batch filter, so every BPMN
+  process of the module is asked about in one statement; a decision id is asked about one by one,
+  because its query has no such filter. A suspended definition counts, and the tenant is part of
+  the question wherever the mode deploys into one.
+- What the models of this deployment declare. The message names, signal names, error codes and
+  escalation codes are read while the module is scoped anyway, plus the ids of the decisions it
+  brings, so two workflow modules of one application ending up under one name are named. This
+  costs no query at all.
+- What a version the engine still holds declares. The check about older versions reads those
+  models anyway, so the same names are read out of them, and a name a module deployed years ago
+  is held against what another module deploys today.
+
+Telling a foreign holder from this application's own earlier deployment is what the Camunda
+deployment NAME is for: every VanillaBP generation deploys a workflow module under the module's
+own id, version 1 included, so a deployment carrying that name is our own history and says
+nothing. A definition deployed under another name is reported, and the deployment source then
+says how sure the adapter is: a source of `camunda7:<adapter id>` means another adapter id or
+another workflow module, which may be this very application, and the warning says so; any other
+source was written by something else and the finding is certainly foreign. A second application
+which deploys a workflow module of the same id stays invisible, because no column of the
+engine's deployment table names an application.
+
+Message names, signal names, error codes and escalation codes are in no index the engine could
+be asked, so nothing is said about what it holds of them. Task definitions are not a question
+here at all, for the reason above: they are process-local. A finding never fails a deployment,
+every query is swallowed if the engine does not answer, and no property switches any of this on
+or off (see decision 17 in the repository's DECISIONS.md).
+
 ## Sharing the workflow aggregate
 
 This adapter shares like every other BPMS: the values of the workflow
