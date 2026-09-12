@@ -474,3 +474,42 @@ engine holding no job at all. `Camunda7JobExecutorSleepTest` holds what the two 
 what the startup message says, `Camunda7StartupQuestionCostTest` that the question asks for one
 row, and `Camunda7SleepingEngineIT` with its Quarkus twin that a booted application on either
 platform takes no connection while nothing is due.
+
+### 19. The tenant answers for two workflow modules, and it is resolvable per module
+
+The core asks this adapter whether its own isolation keeps two workflow modules apart, because it
+cannot see the scopes of a BPMS; why the answer ends a boot rather than warning is written in the
+platform's own decision log, and this entry says what Camunda 7 answers. On that engine it is one
+question: would the two modules be deployed into two different tenants. So
+the answer resolves the tenant of each module through the very method the deployment resolves the
+one it deploys under, and compares the two names. Reading a property instead would answer about the
+configuration rather than about the engine, and those are not the same thing: the mode may drop the
+name, and the name may come from a level the reader did not look at.
+
+No tenant counts as a scope here. A workflow module under `use-prefix` or `none` reaches the engine
+without one, which means two such modules share every process definition key they both declare,
+while one of them against a tenanted module shares none. Answering "separated" for a tenant-free
+module would hide a clash the prefix no longer covers, which is what a mixed configuration
+produces.
+
+The tenant name became resolvable per workflow module with this, not only per adapter. Three
+reasons, and the first is the decisive one: the refusal the core writes tells the developer to give
+one of the two modules a scope of its own, and the key it names is the module's. A fix the message
+recommends has to work. The second is that the adapter would otherwise answer a question it has no
+way of being right about - one name for every module is the only thing an application could say,
+and the answer would always be "separated by nothing". The third is that the name belongs to the
+level the deployment belongs to: VanillaBP resolves an adapter's properties over the levels
+anyway, and a tenant which every module shares is the special case rather than the rule.
+
+There is no tenant per workflow. The mode has one, a tenant cannot: a tenant id is an attribute of
+the deployment and this adapter makes one deployment per workflow module, so two workflows of one
+module cannot reach the engine in two tenants. A key which looks honored and is ignored is worse
+than a key nobody may write, so only the workflow module and the adapter carry one. For the same
+reason the check which refuses a tenant the mode would ignore now runs per property key rather than
+once per adapter: the developer has to be sent to the line they wrote.
+
+`Camunda7WorkflowModuleIsolationTest` holds the answer per configuration, including the tenant-free
+cases and the name set for one module only, `Camunda7CollidingProcessIdsTest` holds the boot which
+ends on the second of two modules under one process id with the core's own support in between and
+both deployment orders driven, `TenantResolutionTest` the resolution over the levels, and
+`Camunda7StartupQuestionCostTest` that answering asks the engine nothing.

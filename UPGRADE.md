@@ -176,3 +176,42 @@ was Spring-only by accident; it works on both platforms now.
 The [README section](https://github.com/vanillabp/camunda7-adapter/blob/main/README.md#an-idle-engine-lets-go-of-its-database)
 and the [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#letting-an-idle-engine-go-quiet)
 of the wiki carry the details.
+
+### One tenant for every workflow module refuses two modules sharing a BPMN process id
+
+Version 1 deployed each workflow module into a tenant named after it, and `tenant-id` was the way
+to name the tenant yourself. An application which names one tenant for the whole adapter puts every
+workflow module into it, and two modules which declare the same BPMN process id then arrive at the
+engine under one process definition key. Camunda 7 keeps one definition under that key and loses
+the other, so one of the two modules runs on a model nobody deployed. Version 1 deployed it and
+said nothing.
+
+That application boots today and will not boot after this. The deployment of the SECOND of the two
+modules ends the boot, with the first one already in the engine, and the message names both
+workflow modules, both process ids, the key they share and the way out. Only this one configuration
+is affected: one `tenant-id` for the whole adapter, the mode `by-adapter`, and the same BPMN process
+id in two workflow modules.
+
+Three ways out, and the first one keeps every other module where it is:
+
+```yaml
+vanillabp:
+  adapters:
+    c7:
+      tenant-id: shared-tenant
+  workflow-modules:
+    loan-approval:
+      adapters:
+        c7:
+          tenant-id: loan-approval   # a scope of its own, per workflow module
+```
+
+The name per workflow module is new; it was only settable for the whole adapter before. The other
+two ways are `name-clash-avoidance: use-prefix`, which drops the tenant and prefixes the
+identifiers with the workflow module id instead, and renaming one of the two BPMN processes. Which
+of the three fits depends on what the running workflows of the engine are deployed under, so read
+[what the mode changes](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#keeping-workflow-modules-apart)
+before changing a booting application.
+
+An application which configures no `tenant-id` at all meets none of this: every workflow module has
+a tenant of its own, which is what lets two of them use one process id in the first place.

@@ -622,10 +622,10 @@ the decision with the module, or keep the tenant isolation of `by-adapter`.
 
 The [name-clash-avoidance mode](https://github.com/vanillabp/adapter-platform-integration/wiki/Workflow-modules#how-name-clashes-are-avoided)
 decides how a workflow module's identifiers are scoped. `by-adapter` deploys into a
-Camunda tenant named after the workflow module (`tenant-id` overrides the name), which is
-the Version-1 behaviour; `use-prefix` deploys without a tenant and the adapter rewrites
-process ids, `camunda:calledElement` references, message and signal names, escalation and
-error codes; `none` scopes nothing.
+Camunda tenant named after the workflow module (`tenant-id` overrides the name, for the whole
+adapter or for one workflow module), which is the Version-1 behaviour; `use-prefix` deploys
+without a tenant and the adapter rewrites process ids, `camunda:calledElement` references,
+message and signal names, escalation and error codes; `none` scopes nothing.
 
 Two decisions worth recording:
 
@@ -648,6 +648,31 @@ Two decisions worth recording:
 `callActivityByExpressionStaysEvaluable`), `Camunda7DeploymentServiceTest#defaultsToByAdapter`
 and `#unscopedIdentifiersAreReported` the default and the WARN, and
 `Camunda7NameClashAvoidanceIT` a workflow running end to end with prefixed identifiers.
+
+### Whether the tenant separates two workflow modules
+
+Two workflow modules of one application using the same BPMN process id is the one name clash
+which loses a model, and the core refuses it. Under `by-adapter` nothing is prefixed, so the
+core holds two equal process ids and cannot tell whether they collide: what keeps the modules
+apart there is the engine, and the mechanism is the adapter's. So it asks
+(`ownIsolationSeparatesWorkflowModules`), and this adapter answers by resolving the tenant of
+each of the two modules exactly as the deployment resolves the one it deploys under, then
+comparing the names.
+
+Two things follow from answering about the engine rather than about a property. A tenant name
+for the whole adapter (`vanillabp.adapters.<id>.tenant-id`) puts every module into ONE tenant,
+so two modules sharing a process id really do collide and the boot of the second one ends,
+which no check could do while the core had to judge two plain ids on its own. And no tenant is
+a scope like any other: a module under `use-prefix` or `none` reaches the engine without one, two such modules
+are not separated by the engine, and one of them against a tenanted module is. The name is
+resolvable per workflow module for this reason and for the message's sake, see decision 19 in
+the repository's DECISIONS.md.
+
+The name is resolved per workflow module, the module's own section first
+(`vanillabp.workflow-modules.<module>.adapters.<id>.tenant-id`) and the adapter's after it. There
+is no name per workflow, because a tenant id is an attribute of the deployment and this adapter
+makes one deployment per workflow module. A name the mode would ignore still ends the boot, and
+the message quotes the key which set it rather than the adapter's in every case.
 
 A tenant id is an ATTRIBUTE of the deployment and of the process definitions, instances
 and tasks below it: any name is accepted, no tenant has to exist and none is created.
