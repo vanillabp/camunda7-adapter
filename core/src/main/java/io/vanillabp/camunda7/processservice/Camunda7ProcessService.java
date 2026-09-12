@@ -173,10 +173,11 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The tenant name configured for this adapter id or <code>null</code> (then the
-   * workflow module id names the tenant).
+   * What a workflow module's tenant is CONFIGURED as, resolved by the platform modules over
+   * the levels the name may be set at, or <code>null</code> for a module nothing names a
+   * tenant for - then the workflow module id names it.
    */
-  private String configuredTenantId;
+  private java.util.function.Function<String, io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant> configuredTenants;
 
   /**
    * Narrows a runtime query down to the scope an awareness probe was asked about.
@@ -255,15 +256,15 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Sets the configured tenant name - this adapter's own configuration, unlike the
-   * name-clash-avoidance support, which arrives with the collaborators.
+   * Sets the tenant names the application configured - this adapter's own configuration,
+   * unlike the name-clash-avoidance support, which arrives with the collaborators.
    *
-   * @param configuredTenantId The configured tenant name or <code>null</code>
+   * @param configuredTenants What a workflow module's tenant is configured as
    */
-  public void setConfiguredTenantId(
-      final String configuredTenantId) {
+  public void setConfiguredTenants(
+      final java.util.function.Function<String, io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant> configuredTenants) {
 
-    this.configuredTenantId = configuredTenantId;
+    this.configuredTenants = configuredTenants;
 
   }
 
@@ -347,8 +348,17 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private String tenantIdOf(
       final String workflowModuleId) {
 
+    final var configured = configuredTenants != null
+        ? configuredTenants.apply(workflowModuleId)
+        : null;
     return io.vanillabp.camunda7.wiring.Camunda7Scoping
-        .tenantIdFor(scoping, workflowModuleId, adapterId, configuredTenantId);
+        .tenantIdFor(
+            scoping,
+            workflowModuleId,
+            adapterId,
+            configured != null
+                ? configured.tenantId()
+                : null);
 
   }
 
