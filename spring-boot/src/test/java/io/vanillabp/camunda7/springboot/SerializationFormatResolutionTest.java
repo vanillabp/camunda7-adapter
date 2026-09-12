@@ -34,7 +34,7 @@ public class SerializationFormatResolutionTest {
 
     final var module = new VanillaBpCamunda7Properties.Camunda7WorkflowModuleProperties();
     if (moduleFormat != null) {
-      final var scoped = new VanillaBpCamunda7Properties.Camunda7ScopedProperties();
+      final var scoped = new VanillaBpCamunda7Properties.Camunda7ModuleScopedProperties();
       scoped.setSerializationFormat(moduleFormat);
       module.setAdapters(Map.of(ADAPTER, scoped));
     }

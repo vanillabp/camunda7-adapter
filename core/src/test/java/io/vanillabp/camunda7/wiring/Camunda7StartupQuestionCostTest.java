@@ -1,6 +1,7 @@
 package io.vanillabp.camunda7.wiring;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.engine.RuntimeService;
@@ -360,6 +361,32 @@ public class Camunda7StartupQuestionCostTest {
     Mockito
         .verify(jobQuery)
         .listPage(0, 1);
+
+  }
+
+  @Test
+  @DisplayName("Whether this adapter's isolation separates two workflow modules costs no query")
+  public void theIsolationQuestionIsAnsweredFromConfiguration() {
+
+    final var service = new io.vanillabp.camunda7.deployment.Camunda7DeploymentService(
+        "c7", repositoryService, null, io.vanillabp.camunda7.TestCollaborators.complete(), null);
+    service.setConfiguredTenants(workflowModuleId -> null);
+
+    assertTrue(
+        service.ownIsolationSeparatesWorkflowModules(MODULE, "another-module"),
+        "a tenant named after each workflow module separates the two");
+
+    assertEquals(
+        0,
+        queries
+            .values()
+            .stream()
+            .mapToInt(Integer::intValue)
+            .sum(),
+        () -> "which tenant a workflow module is deployed into is configuration, and the core asks "
+            + "the question once per PAIR of modules, so an engine on a bad day must not be part "
+            + "of the answer, but was "
+            + queries);
 
   }
 

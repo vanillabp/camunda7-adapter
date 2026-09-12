@@ -9,8 +9,9 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 
 /**
  * The core's name-clash-avoidance support as a test sees it: it scopes the way the core
- * does, and it keeps what the adapter reports to it. The Camunda 7 core depends on the
- * adapter SPI alone, so the core's own implementation is not available here.
+ * does, and it keeps what the adapter reports to it. A test which needs the core's verdict
+ * rather than the adapter's report uses the real implementation instead, which
+ * {@link io.vanillabp.camunda7.deployment.Camunda7CollidingProcessIdsTest} does.
  * <p>
  * The adapter hands its findings about names over the SPI and writes no message of its own,
  * so this is where a test about them asserts: what the adapter found, which identifier it
@@ -20,6 +21,13 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 public class RecordingScoping implements NameClashAvoidanceSupport {
 
   private final NameClashAvoidance mode;
+
+  /**
+   * The mode of a workflow module which does not run in the one every other module of the
+   * test runs in - a mixed configuration, which the modes being resolvable per workflow
+   * module makes possible.
+   */
+  private final java.util.Map<String, NameClashAvoidance> modePerWorkflowModule = new java.util.HashMap<>();
 
   private final List<IdentifierHeldElsewhere> heldElsewhere = new LinkedList<>();
 
@@ -34,6 +42,22 @@ public class RecordingScoping implements NameClashAvoidanceSupport {
       final NameClashAvoidance mode) {
 
     this.mode = mode;
+
+  }
+
+  /**
+   * Lets one workflow module run in a mode of its own.
+   *
+   * @param workflowModuleId The workflow module
+   * @param workflowModuleMode The mode it runs in
+   * @return This support, for chaining
+   */
+  public RecordingScoping withWorkflowModuleIn(
+      final String workflowModuleId,
+      final NameClashAvoidance workflowModuleMode) {
+
+    modePerWorkflowModule.put(workflowModuleId, workflowModuleMode);
+    return this;
 
   }
 
@@ -101,7 +125,7 @@ public class RecordingScoping implements NameClashAvoidanceSupport {
       final String bpmnProcessId,
       final String adapterId) {
 
-    return mode;
+    return modePerWorkflowModule.getOrDefault(workflowModuleId, mode);
 
   }
 
@@ -121,7 +145,7 @@ public class RecordingScoping implements NameClashAvoidanceSupport {
       final String identifier,
       final String adapterId) {
 
-    if ((identifier == null) || (mode != NameClashAvoidance.USE_PREFIX)) {
+    if ((identifier == null) || (modeFor(workflowModuleId, null, adapterId) != NameClashAvoidance.USE_PREFIX)) {
       return identifier;
     }
     return workflowModuleId + SEPARATOR + identifier;
@@ -135,7 +159,7 @@ public class RecordingScoping implements NameClashAvoidanceSupport {
       final String taskDefinition,
       final String adapterId) {
 
-    if ((taskDefinition == null) || (mode != NameClashAvoidance.USE_PREFIX)) {
+    if ((taskDefinition == null) || (modeFor(workflowModuleId, null, adapterId) != NameClashAvoidance.USE_PREFIX)) {
       return taskDefinition;
     }
     return scopedIdentifier(
@@ -161,7 +185,7 @@ public class RecordingScoping implements NameClashAvoidanceSupport {
       final String scopedIdentifier,
       final String adapterId) {
 
-    if ((scopedIdentifier == null) || (mode != NameClashAvoidance.USE_PREFIX)) {
+    if ((scopedIdentifier == null) || (modeFor(workflowModuleId, null, adapterId) != NameClashAvoidance.USE_PREFIX)) {
       return scopedIdentifier;
     }
     final var prefix = workflowModuleId + SEPARATOR;
@@ -179,7 +203,7 @@ public class RecordingScoping implements NameClashAvoidanceSupport {
       final String adapterId) {
 
     final var withoutTheModule = plainIdentifier(workflowModuleId, scopedTaskDefinition, adapterId);
-    if ((withoutTheModule == null) || (mode != NameClashAvoidance.USE_PREFIX)) {
+    if ((withoutTheModule == null) || (modeFor(workflowModuleId, null, adapterId) != NameClashAvoidance.USE_PREFIX)) {
       return withoutTheModule;
     }
     final var prefix = bpmnProcessId + SEPARATOR;
