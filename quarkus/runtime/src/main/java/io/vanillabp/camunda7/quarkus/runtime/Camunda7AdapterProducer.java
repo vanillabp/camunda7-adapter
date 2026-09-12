@@ -76,7 +76,7 @@ public class Camunda7AdapterProducer {
           // an engine on a datasource of its own commits separately from the
           // application, which makes its deliveries repeatable
           processService.setEngineRunsOnItsOwnDataSource(engine.usesSeparateDataSource());
-          processService.setConfiguredTenantId(configuredTenantIdOf(overlay, adapterId));
+          processService.setConfiguredTenants(configuredTenantsOf(overlay, adapterId));
           // Which serialization format nested shared values are stored in,
           // resolved per workflow with a fallback to the module and the adapter
           final io.vanillabp.camunda7.sync.Camunda7SerializationFormats formats = (
@@ -117,7 +117,7 @@ public class Camunda7AdapterProducer {
                   adapterId, workflowTaskRegistry, scoping, aggregateSync, preCommitRegistrar, workflowEndedInvoker,
                   bpmsInitiatedStartInvoker), engine.getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
           deploymentService.setEngineDeliversWorkflowEnded(engine.deliversWorkflowEnded());
-          deploymentService.setConfiguredTenantId(configuredTenantIdOf(overlay, adapterId));
+          deploymentService.setConfiguredTenants(configuredTenantsOf(overlay, adapterId));
           deploymentService.setIdentityService(
               engine
                   .getProcessEngine()
@@ -233,7 +233,7 @@ public class Camunda7AdapterProducer {
    * The format of one scope's adapter section, or <code>null</code>.
    */
   private static String scopedFormat(
-      final java.util.Map<String, VanillaBpCamunda7Properties.Camunda7ScopedKeys> adapters,
+      final java.util.Map<String, ? extends VanillaBpCamunda7Properties.Camunda7ScopedKeys> adapters,
       final String adapterId) {
 
     final var scoped = adapters != null
@@ -266,19 +266,45 @@ public class Camunda7AdapterProducer {
   }
 
   /**
-   * The tenant name configured for an adapter id or <code>null</code> - the workflow
-   * module id names the tenant then.
+   * What a workflow module's tenant is configured as, per workflow module
+   * (<code>vanillabp.workflow-modules.&lt;module&gt;.adapters.&lt;id&gt;.tenant-id</code>)
+   * with a fallback to the adapter (<code>vanillabp.adapters.&lt;id&gt;.tenant-id</code>) -
+   * <code>null</code> for a module neither names one for, which the workflow module id then
+   * names.
    */
-  private static String configuredTenantIdOf(
+  private static java.util.function.Function<String, io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant> configuredTenantsOf(
       final VanillaBpCamunda7Properties overlay,
       final String adapterId) {
 
-    final var adapter = overlay
-        .adapters()
-        .get(adapterId);
-    return adapter != null
-        ? adapter.tenantId().orElse(null)
-        : null;
+    return workflowModuleId -> {
+      final var module = workflowModuleId != null
+          ? overlay
+              .workflowModules()
+              .get(workflowModuleId)
+          : null;
+      final var perWorkflowModule = module != null
+          ? module
+              .adapters()
+              .get(adapterId)
+          : null;
+      final var adapter = overlay
+          .adapters()
+          .get(adapterId);
+      return io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant
+          .firstConfigured(
+              adapterId,
+              workflowModuleId,
+              perWorkflowModule != null
+                  ? perWorkflowModule
+                      .tenantId()
+                      .orElse(null)
+                  : null,
+              adapter != null
+                  ? adapter
+                      .tenantId()
+                      .orElse(null)
+                  : null);
+    };
 
   }
 

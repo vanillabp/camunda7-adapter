@@ -104,8 +104,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 // application, which makes its deliveries repeatable
                 processService.setEngineRunsOnItsOwnDataSource(engine.usesSeparateDataSource());
                 processService
-                    .setConfiguredTenantId(
-                        configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
+                    .setConfiguredTenants(
+                        configuredTenantsOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
                 // Which serialization format nested shared values are stored
                 // in, resolved per workflow with a fallback to the module and the adapter
                 final var overlay = supplierContext.bean(VanillaBpCamunda7Properties.class);
@@ -134,8 +134,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                         .collaborators(supplierContext, adapterId), engine.getTaskRegistry(), id -> instanceIdentityOf(
                             environment, id));
                 deploymentService.setEngineDeliversWorkflowEnded(engine.deliversWorkflowEnded());
-                deploymentService.setConfiguredTenantId(
-                    configuredTenantIdOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
+                deploymentService.setConfiguredTenants(
+                    configuredTenantsOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
                 deploymentService.setIdentityService(
                     engine
                         .getProcessEngine()
@@ -312,20 +312,17 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
 
 
   /**
-   * The tenant name configured for an adapter id
-   * (<code>vanillabp.adapters.&lt;id&gt;.tenant-id</code>) or <code>null</code> - the
-   * workflow module id names the tenant then.
+   * What a workflow module's tenant is configured as, per workflow module
+   * (<code>vanillabp.workflow-modules.&lt;module&gt;.adapters.&lt;id&gt;.tenant-id</code>)
+   * with a fallback to the adapter (<code>vanillabp.adapters.&lt;id&gt;.tenant-id</code>) -
+   * <code>null</code> for a module neither names one for, which the workflow module id then
+   * names.
    */
-  private static String configuredTenantIdOf(
+  private static java.util.function.Function<String, io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant> configuredTenantsOf(
       final VanillaBpCamunda7Properties overlay,
       final String adapterId) {
 
-    final var adapter = overlay
-        .getAdapters()
-        .get(adapterId);
-    return adapter != null
-        ? adapter.getTenantId()
-        : null;
+    return workflowModuleId -> overlay.configuredTenantFor(adapterId, workflowModuleId);
 
   }
 

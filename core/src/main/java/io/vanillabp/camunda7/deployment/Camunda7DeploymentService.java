@@ -144,10 +144,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   private org.camunda.bpm.engine.IdentityService identityService;
 
   /**
-   * Whether the configured tenant was already checked against the mode (once per
-   * adapter instance, the check is adapter-wide).
+   * The property keys whose tenant was already checked against the mode. A key rather
+   * than a flag: the name may come from the adapter's section or from a workflow
+   * module's, and the message has to quote the one which is set.
    */
-  private boolean tenantConfigurationValidated;
+  private final java.util.Set<String> tenantKeysCheckedAgainstTheMode = new java.util.HashSet<>();
 
   /**
    * Whether the application accepted unscoped identifiers deliberately
@@ -170,22 +171,36 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * The tenant name configured for this adapter id
-   * (<code>vanillabp.adapters.&lt;id&gt;.tenant-id</code>) or <code>null</code> - then
-   * the workflow module ID names the tenant (VanillaBP 1's behavior).
+   * What a workflow module's tenant is CONFIGURED as, resolved by the platform modules over
+   * the levels the name may be set at (the workflow module, then the adapter), or
+   * <code>null</code> for a module nothing names a tenant for - then the workflow module ID
+   * names it (VanillaBP 1's behavior). May be <code>null</code> itself (tests).
    */
-  private String configuredTenantId;
+  private java.util.function.Function<String, io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant> configuredTenants;
 
   /**
-   * Sets the configured tenant name (the platform modules read it from the adapter's
-   * configuration).
+   * Sets the tenant names the application configured (the platform modules read them from
+   * the configuration, per workflow module).
    *
-   * @param configuredTenantId The tenant name or <code>null</code>
+   * @param configuredTenants What a workflow module's tenant is configured as
    */
-  public void setConfiguredTenantId(
-      final String configuredTenantId) {
+  public void setConfiguredTenants(
+      final java.util.function.Function<String, io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant> configuredTenants) {
 
-    this.configuredTenantId = configuredTenantId;
+    this.configuredTenants = configuredTenants;
+
+  }
+
+  /**
+   * What the application configured as the tenant of one workflow module, with the key it
+   * wrote it under, or <code>null</code>.
+   */
+  private io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant configuredTenantOf(
+      final String workflowModuleId) {
+
+    return configuredTenants != null
+        ? configuredTenants.apply(workflowModuleId)
+        : null;
 
   }
 
@@ -245,36 +260,75 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * Fails the boot if a tenant is configured for this adapter id although no workflow
-   * module is deployed into one, i.e. the mode says {@code none} or {@code use-prefix}
-   * everywhere. Whether a tenant is what only {@code by-adapter} can use is this
-   * adapter's knowledge; the core answers which modes apply. Checked once per adapter
-   * instance while deploying, before anything reaches the engine.
+   * Fails the boot if a tenant is configured although no workflow module is deployed into
+   * one, i.e. the mode says {@code none} or {@code use-prefix} everywhere. Whether a tenant
+   * is what only {@code by-adapter} can use is this adapter's knowledge; the core answers
+   * which modes apply. Checked while deploying, before anything reaches the engine, once per
+   * property key which set a name - the adapter's section and a workflow module's are two
+   * different lines for the developer to go to.
+   *
+   * @param workflowModuleId The workflow module being deployed
    */
-  private void validateTenantConfiguration() {
+  private void validateTenantConfiguration(
+      final String workflowModuleId) {
 
-    if (tenantConfigurationValidated || (scoping == null)) {
+    if (scoping == null) {
       return;
     }
-    tenantConfigurationValidated = true;
-    if ((configuredTenantId == null) || configuredTenantId.isBlank()) {
+    final var configured = configuredTenantOf(workflowModuleId);
+    if ((configured == null) || !tenantKeysCheckedAgainstTheMode.add(configured.propertyKey())) {
       return;
     }
-    scoping.validateNoneNameClashStrategy(
-        adapterId,
-        "vanillabp.adapters.%s.tenant-id".formatted(adapterId));
+    scoping.validateNoneNameClashStrategy(adapterId, configured.propertyKey());
 
   }
 
   /**
-   * The Camunda tenant a workflow module is deployed to - the module id under
-   * {@code by-adapter}, none under {@code use-prefix}/{@code none}.
+   * The Camunda tenant a workflow module is deployed to - the configured name under
+   * {@code by-adapter}, the module id where nothing configured one, none under
+   * {@code use-prefix}/{@code none}.
    */
   private String tenantIdOf(
       final String workflowModuleId) {
 
+    final var configured = configuredTenantOf(workflowModuleId);
     return io.vanillabp.camunda7.wiring.Camunda7Scoping
-        .tenantIdFor(scoping, workflowModuleId, adapterId, configuredTenantId);
+        .tenantIdFor(
+            scoping,
+            workflowModuleId,
+            adapterId,
+            configured != null
+                ? configured.tenantId()
+                : null);
+
+  }
+
+  /**
+   * Whether Camunda 7's own isolation would keep the two given workflow modules apart, which
+   * on this engine means one question: would they be deployed into two different TENANTS. The
+   * core asks while it checks whether two BPMN processes of this application reach the engine
+   * under one process definition key, in the mode which leaves the keys plain and leans on the
+   * BPMS instead.
+   * <p>
+   * The tenant of each module is resolved the way {@link #deployResources} resolves the one it
+   * deploys under, so the answer is about the scope this adapter would REALLY use and not
+   * about a property read on its own: the name may come from the module's own section or from
+   * the adapter's, and the mode may drop it altogether. An adapter-wide name is what makes the
+   * two sides equal, which is the configuration the check exists for.
+   * <p>
+   * A workflow module whose mode uses no tenant reaches the engine WITHOUT one, and no tenant
+   * is a scope like any other here: two such modules share every process definition key they
+   * both declare, while one of them against a tenanted module shares none.
+   */
+  @Override
+  public boolean ownIsolationSeparatesWorkflowModules(
+      final String oneWorkflowModuleId,
+      final String anotherWorkflowModuleId) {
+
+    return !java.util.Objects
+        .equals(
+            tenantIdOf(oneWorkflowModuleId),
+            tenantIdOf(anotherWorkflowModuleId));
 
   }
 
@@ -1706,10 +1760,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // one deployment per workflow module; tenant id = workflow module id isolates BPMN
     // process ids between modules; duplicate filtering avoids redeploying unchanged models
     // Whether the module is isolated by a tenant is the mode's decision
-    validateTenantConfiguration();
+    validateTenantConfiguration(workflowModuleId);
     final var tenantId = tenantIdOf(workflowModuleId);
     if (tenantId != null) {
-      Camunda7TenantCheck.warnAboutUnregisteredTenant(adapterId, tenantId, identityService);
+      Camunda7TenantCheck.warnAboutUnregisteredTenant(adapterId, workflowModuleId, tenantId, identityService);
     }
     if (scoping != null) {
       scoping.validateNoCollidingProcessIds(

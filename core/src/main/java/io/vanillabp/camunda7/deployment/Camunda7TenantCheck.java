@@ -39,11 +39,14 @@ public final class Camunda7TenantCheck {
    * may not answer tenant queries): a diagnostic must never fail a deployment.
    *
    * @param adapterId The adapter ID
+   * @param workflowModuleId The workflow module about to be deployed, which the message names
+   *          the key of so the developer can change the name for that module alone
    * @param tenantId The tenant about to be deployed into
    * @param identityService The engine's identity service, or <code>null</code> to skip
    */
   public static void warnAboutUnregisteredTenant(
       final String adapterId,
+      final String workflowModuleId,
       final String tenantId,
       final IdentityService identityService) {
 
@@ -67,12 +70,15 @@ public final class Camunda7TenantCheck {
               tenant id as an attribute of the deployment and creates nothing - but tenant \
               memberships and the authorizations built on them do not cover this tenant. Register it \
               (IdentityService#newTenant) or point the adapter at a registered one \
-              ('vanillabp.adapters.{}.tenant-id'). Without that property the tenant is named after \
-              the workflow module.""",
+              ('vanillabp.adapters.{}.tenant-id', or 'vanillabp.workflow-modules.{}.adapters.{}.tenant-id' \
+              for this workflow module alone). Without either the tenant is named after the workflow \
+              module.""",
           adapterId,
           tenantId,
           registered.size(),
           registered,
+          adapterId,
+          workflowModuleId,
           adapterId);
     } catch (final RuntimeException e) {
       log.debug(

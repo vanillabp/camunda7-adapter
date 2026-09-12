@@ -39,7 +39,7 @@ public class VanillaBpCamunda7Properties {
   /**
    * The workflow-module sections of the shared tree - only the Camunda 7 keys resolvable
    * per scope are modeled here (the serialization format of the shared values the engine
-   * has no variable type for).
+   * has no variable type for, and the tenant the module is deployed into).
    */
   private Map<String, Camunda7WorkflowModuleProperties> workflowModules = Map.of();
 
@@ -51,7 +51,7 @@ public class VanillaBpCamunda7Properties {
   @Setter
   public static class Camunda7WorkflowModuleProperties {
 
-    private Map<String, Camunda7ScopedProperties> adapters = Map.of();
+    private Map<String, Camunda7ModuleScopedProperties> adapters = Map.of();
 
     private Map<String, Camunda7WorkflowProperties> workflows = Map.of();
 
@@ -80,6 +80,23 @@ public class VanillaBpCamunda7Properties {
      * for this scope.
      */
     private String serializationFormat;
+
+  }
+
+  /**
+   * The Camunda 7 keys of one workflow module's adapter section: the scoped keys every
+   * level has, plus the tenant, which only a workflow module may override because a tenant
+   * id is an attribute of the deployment this adapter makes per workflow module.
+   */
+  @Getter
+  @Setter
+  public static class Camunda7ModuleScopedProperties extends Camunda7ScopedProperties {
+
+    /**
+     * The Camunda tenant this workflow module is deployed into, overriding the name the
+     * adapter section gives every module of this application.
+     */
+    private String tenantId;
 
   }
 
@@ -118,7 +135,7 @@ public class VanillaBpCamunda7Properties {
   }
 
   private static String scopedFormat(
-      final Map<String, Camunda7ScopedProperties> adapters,
+      final Map<String, ? extends Camunda7ScopedProperties> adapters,
       final String adapterId) {
 
     final var scoped = adapters != null
@@ -127,6 +144,39 @@ public class VanillaBpCamunda7Properties {
     return scoped != null
         ? scoped.getSerializationFormat()
         : null;
+
+  }
+
+  /**
+   * The Camunda tenant configured for one workflow module of one adapter id: the module's
+   * own name where it has one, the adapter's otherwise. What the mode then makes of it is
+   * the adapter's business.
+   *
+   * @param adapterId The adapter id
+   * @param workflowModuleId The workflow module ID
+   * @return The name and the key it was read from, or <code>null</code> where nothing
+   *         configured one
+   */
+  public io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant configuredTenantFor(
+      final String adapterId,
+      final String workflowModuleId) {
+
+    final var module = workflowModuleId != null
+        ? workflowModules.get(workflowModuleId)
+        : null;
+    final var perWorkflowModule = module != null
+        ? module
+            .getAdapters()
+            .get(adapterId)
+        : null;
+    return io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant
+        .firstConfigured(
+            adapterId,
+            workflowModuleId,
+            perWorkflowModule != null
+                ? perWorkflowModule.getTenantId()
+                : null,
+            enginePropertiesFor(adapterId).getTenantId());
 
   }
 

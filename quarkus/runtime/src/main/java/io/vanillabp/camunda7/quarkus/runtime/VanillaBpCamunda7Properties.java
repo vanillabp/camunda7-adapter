@@ -39,7 +39,8 @@ public interface VanillaBpCamunda7Properties {
 
   /**
    * The workflow-module sections of the shared tree - only the Camunda 7 keys which are
-   * resolvable per scope are modeled here (the serialization format).
+   * resolvable per scope are modeled here (the serialization format, and the tenant the
+   * module is deployed into).
    */
   Map<String, Camunda7WorkflowModuleKeys> workflowModules();
 
@@ -52,7 +53,7 @@ public interface VanillaBpCamunda7Properties {
     /**
      * The per-adapter-id overrides of this workflow module.
      */
-    Map<String, Camunda7ScopedKeys> adapters();
+    Map<String, Camunda7ModuleScopedKeys> adapters();
 
     /**
      * The workflows of this workflow module, keyed by BPMN process ID.
@@ -101,6 +102,21 @@ public interface VanillaBpCamunda7Properties {
      */
     Optional<String> serializationFormat();
 
+
+  }
+
+  /**
+   * The Camunda 7 keys of one workflow module's adapter section: the scoped keys every level
+   * has, plus the tenant, which only a workflow module may override because a tenant id is an
+   * attribute of the deployment this adapter makes per workflow module.
+   */
+  interface Camunda7ModuleScopedKeys extends Camunda7ScopedKeys {
+
+    /**
+     * The Camunda tenant this workflow module is deployed into, overriding the name the
+     * adapter section gives every module of this application.
+     */
+    Optional<String> tenantId();
 
   }
 

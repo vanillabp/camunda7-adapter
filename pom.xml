@@ -97,6 +97,11 @@
         <version>${adapter-platform.version}</version>
       </dependency>
       <dependency>
+        <groupId>io.vanillabp.adapter</groupId>
+        <artifactId>migration-adapter</artifactId>
+        <version>${adapter-platform.version}</version>
+      </dependency>
+      <dependency>
         <groupId>io.vanillabp</groupId>
         <artifactId>vanillabp-spring-boot-integration</artifactId>
         <version>${adapter-platform.version}</version>

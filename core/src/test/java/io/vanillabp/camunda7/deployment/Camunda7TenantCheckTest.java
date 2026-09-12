@@ -85,6 +85,7 @@ public class Camunda7TenantCheckTest {
         () -> Camunda7TenantCheck.warnAboutUnregisteredTenant(
             "myengine",
             "loan-approval",
+            "loan-approval",
             identityServiceKnowing("banking", "insurance")));
 
     assertEquals(1, warnings.size(), warnings::toString);
@@ -106,6 +107,7 @@ public class Camunda7TenantCheckTest {
             () -> Camunda7TenantCheck.warnAboutUnregisteredTenant(
                 "myengine",
                 "loan-approval",
+                "loan-approval",
                 identityServiceKnowing())));
 
     // ... as does a registered tenant
@@ -114,6 +116,7 @@ public class Camunda7TenantCheckTest {
         warningsOf(
             () -> Camunda7TenantCheck.warnAboutUnregisteredTenant(
                 "myengine",
+                "loan-approval",
                 "loan-approval",
                 identityServiceKnowing("loan-approval", "banking"))));
 
@@ -130,15 +133,18 @@ public class Camunda7TenantCheckTest {
 
     assertEquals(
         List.of(),
-        warningsOf(() -> Camunda7TenantCheck.warnAboutUnregisteredTenant("myengine", "loan-approval", refusing)));
+        warningsOf(() -> Camunda7TenantCheck.warnAboutUnregisteredTenant("myengine", "loan-approval", "loan-approval",
+            refusing)));
     // no identity service at all, and no tenant: nothing to check
     assertEquals(
         List.of(),
-        warningsOf(() -> Camunda7TenantCheck.warnAboutUnregisteredTenant("myengine", "loan-approval", null)));
+        warningsOf(
+            () -> Camunda7TenantCheck.warnAboutUnregisteredTenant("myengine", "loan-approval", "loan-approval", null)));
     assertEquals(
         List.of(),
         warningsOf(
-            () -> Camunda7TenantCheck.warnAboutUnregisteredTenant("myengine", null, identityServiceKnowing("x"))));
+            () -> Camunda7TenantCheck.warnAboutUnregisteredTenant("myengine", "loan-approval", null,
+                identityServiceKnowing("x"))));
 
   }
 
