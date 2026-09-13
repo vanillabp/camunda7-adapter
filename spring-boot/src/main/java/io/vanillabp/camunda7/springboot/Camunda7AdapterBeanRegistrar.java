@@ -33,7 +33,9 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
  * {@link Camunda7DeploymentService} <i>element</i> bean and named per-id
  * {@link ProcessEngine}/{@link RuntimeService}/{@link RepositoryService} convenience
  * beans - never beans of type {@code List<...>}: the platform collects element beans
- * via {@code ObjectProvider.stream()}.
+ * via {@code ObjectProvider.stream()}. One
+ * {@link io.vanillabp.camunda7.api.Camunda7EngineFacts} bean per id joins them, which is
+ * what an extension of this adapter asks about the engine it runs in.
  * <p>
  * The id set comes from the runtime configuration, so the beans are registered
  * programmatically ({@link BeanRegistrar} +
@@ -178,6 +180,20 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                     log::warn);
                 return deploymentService;
               }));
+
+          // what this adapter knows about THIS engine, for an extension running inside it:
+          // one Camunda7EngineFacts per adapter id, built from what the engine wiring
+          // computed anyway rather than from a second reading of the configuration
+          registry.registerBean(
+              "Camunda7_EngineFacts_%s".formatted(adapterId),
+              io.vanillabp.camunda7.api.Camunda7EngineFacts.class,
+              spec -> spec.supplier(supplierContext -> new io.vanillabp.camunda7.api.Camunda7EngineFacts(
+                  adapterId, AdapterBeanRegistrarSupport
+                      .collaborators(supplierContext, adapterId)
+                      .scoping(), configuredTenantsOf(
+                          supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId), engineHolder(
+                              supplierContext, adapterId)
+                              .getTaskRegistry())));
 
           // named convenience beans, e.g. for tests and applications integrating
           // with the engine directly (unique by type in single-adapter setups)

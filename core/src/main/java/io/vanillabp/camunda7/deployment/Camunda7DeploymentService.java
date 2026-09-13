@@ -1223,7 +1223,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         .stream()
         .filter(task -> scopedBpmnProcessId.equals(owningProcessId(task)))
         .forEach(task -> {
-          final var formKey = task.getAttributeValueNs(CAMUNDA_NS, "formKey");
+          // what a user task is called, read the way this adapter's published rule reads
+          // it: the form key AS WRITTEN, an expression included - see
+          // io.vanillabp.camunda7.api.Camunda7TaskDefinitions
+          final var formKey = io.vanillabp.camunda7.api.Camunda7TaskDefinitions.formKeyOf(task);
           specs.add(BpmnTaskSpec.userTask(task.getId(), formKey));
           if (connectables != null) {
             connectables.add(new Camunda7TaskConnectable(

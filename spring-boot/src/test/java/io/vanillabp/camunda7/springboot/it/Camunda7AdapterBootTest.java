@@ -165,6 +165,70 @@ public class Camunda7AdapterBootTest {
   }
 
   @Test
+  public void engineFactsAreRegisteredPerAdapterIdAndAnswerTheAdaptersOwnAnswer() {
+
+    // what an extension of this adapter asks about the engine it runs in: one
+    // Camunda7EngineFacts bean per configured adapter id, and the id with a data source of
+    // its own is the one reported as NOT joining the application's transaction
+    this.contextRunner
+        .withBean(
+            "c7FactsDataSource",
+            javax.sql.DataSource.class,
+            () -> new org.springframework.jdbc.datasource.SimpleDriverDataSource(
+                new org.h2.Driver(), "jdbc:h2:mem:camunda7-facts-own;DB_CLOSE_DELAY=-1"),
+            beanDefinition -> ((org.springframework.beans.factory.support.AbstractBeanDefinition) beanDefinition)
+                .setDefaultCandidate(false))
+        .withPropertyValues(
+            "spring.config.location=classpath:application.yaml",
+            "spring.datasource.url=jdbc:h2:mem:camunda7-facts-test;DB_CLOSE_DELAY=-1",
+            "vanillabp.prioritized-adapters=c7,c7-own",
+            "vanillabp.adapters.c7-own.type=camunda7",
+            "vanillabp.adapters.c7-own.data-source-name=c7FactsDataSource",
+            "vanillabp.workflow-modules.c7-smoke-test.adapters.c7-own.resources-location=classpath*:c7-smoke-test/processes-two")
+        .withInitializer(new ConfigDataApplicationContextInitializer())
+        .withConfiguration(
+            AutoConfigurations.of(
+                org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
+                org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration.class,
+                Camunda7AdapterConfiguration.class,
+                Camunda7ProcessServiceConfiguration.class,
+                WorkflowModuleAutoConfiguration.class,
+                SpringBootMigrationAdapterAutoConfiguration.class))
+        .run(context -> {
+
+          Assertions.assertNull(context.getStartupFailure(), "context should start");
+
+          final var facts = context.getBeansOfType(io.vanillabp.camunda7.api.Camunda7EngineFacts.class);
+          Assertions.assertEquals(
+              java.util.Set.of("Camunda7_EngineFacts_c7", "Camunda7_EngineFacts_c7-own"),
+              facts.keySet(),
+              "one Camunda7EngineFacts bean per configured adapter id");
+
+          final var shared = facts.get("Camunda7_EngineFacts_c7");
+          Assertions.assertEquals("c7", shared.adapterId());
+          Assertions.assertTrue(
+              shared.joinsTheApplicationTransaction(),
+              "an engine on the application's data source commits with it");
+          Assertions.assertEquals(
+              "c7-smoke-test",
+              shared.tenantIdOf("c7-smoke-test"),
+              "without a configured name the tenant is the workflow module");
+          Assertions.assertSame(
+              context.getBean("Camunda7_Engine_c7", Camunda7EngineHolder.class).getTaskRegistry(),
+              shared.taskRegistry(),
+              "the registry handed out is the engine's own");
+
+          final var own = facts.get("Camunda7_EngineFacts_c7-own");
+          Assertions.assertEquals("c7-own", own.adapterId());
+          Assertions.assertFalse(
+              own.joinsTheApplicationTransaction(),
+              "an engine on a data source of its own writes to a resource the application does not join");
+
+        });
+
+  }
+
+  @Test
   public void twoAdapterIdsSharingTheSameDataSourceFailWithGuidingMessage() {
 
     // two embedded engines on one schema are the same engine state - configuring
