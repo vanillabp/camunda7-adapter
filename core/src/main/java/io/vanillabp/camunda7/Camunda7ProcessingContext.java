@@ -147,6 +147,48 @@ public class Camunda7ProcessingContext {
   }
 
   /**
+   * The listeners of this module's models which somebody modelled, collected while the
+   * models are read - the list the startup report names one by one, see
+   * {@link io.vanillabp.camunda7.wiring.Camunda7Listeners}.
+   */
+  @Getter
+  private final java.util.List<io.vanillabp.camunda7.wiring.Camunda7Listeners.ModelledListener> modelledListeners = new java.util.LinkedList<>();
+
+  /**
+   * Per BPMN process of this module which serves its modelled listeners, the property key
+   * which said so. Kept per process because the key resolves per workflow as well as per
+   * module, and the report has to name the line a reader can find in their own configuration.
+   */
+  @Getter
+  private final Map<String, String> listenersAllowedBy = new LinkedHashMap<>();
+
+  /**
+   * Remembers that the listeners somebody modelled are served for one BPMN process.
+   *
+   * @param bpmnProcessId The PLAIN BPMN process id
+   * @param propertyKey The key which decided it, or <code>null</code>
+   */
+  public void recordListenersAllowed(
+      final String bpmnProcessId,
+      final String propertyKey) {
+
+    listenersAllowedBy.put(bpmnProcessId, propertyKey);
+
+  }
+
+  /**
+   * Remembers one listener of this module which an application method serves.
+   *
+   * @param listener The listener
+   */
+  public void recordModelledListener(
+      final io.vanillabp.camunda7.wiring.Camunda7Listeners.ModelledListener listener) {
+
+    modelledListeners.add(listener);
+
+  }
+
+  /**
    * @return Whether no BPMN models were accumulated (e.g. a workflow module without any
    *         executable BPMN process).
    */

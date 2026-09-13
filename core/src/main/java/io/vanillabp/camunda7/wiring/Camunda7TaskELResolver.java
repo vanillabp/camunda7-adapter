@@ -147,6 +147,9 @@ public class Camunda7TaskELResolver extends ELResolver {
         // by EL names - a formKey colliding with an aggregate attribute must not
         // shadow the attribute
         .filter(candidate -> candidate.type() != Camunda7TaskConnectable.Type.USER_TASK)
+        // a modelled listener is resolved here like a task is: the engine evaluates the
+        // listener's own expression, so the NAME route is the normal one for it
+
         // a connectable matched by ELEMENT catches EVERY name evaluated while an
         // execution sits at its activity, including the condition of a conditional event
         // or a gateway. Only a name which IS a task definition of this process may run a
@@ -163,6 +166,17 @@ public class Camunda7TaskELResolver extends ELResolver {
       if (connectable.get().type() == Camunda7TaskConnectable.Type.DELEGATE_EXPRESSION) {
         // the engine treats the resolved object as the task's activity behavior
         return behavior;
+      }
+      if (connectable.get().type() == Camunda7TaskConnectable.Type.EXECUTION_LISTENER_DELEGATE_EXPRESSION) {
+        // a delegate expression of a LISTENER has to yield a listener object: the engine is
+        // inside a transition, and an activity behavior would try to leave the element
+        return new Camunda7ListenerNotification(behavior, connectable.get());
+      }
+      if (connectable.get().type() == Camunda7TaskConnectable.Type.EXECUTION_LISTENER_EXPRESSION) {
+        // camunda:expression of a listener - the handler runs while the expression
+        // evaluates, and the listener is done when it returns
+        Camunda7ListenerNotification.invoke(behavior, connectable.get(), execution);
+        return null;
       }
       // camunda:expression - the handler runs while the expression evaluates;
       // the task completes when the evaluation returns

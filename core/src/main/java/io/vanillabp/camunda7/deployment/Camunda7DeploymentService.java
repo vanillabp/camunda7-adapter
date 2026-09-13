@@ -83,6 +83,13 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   private final WorkflowTaskWiring workflowTaskWiring;
 
   /**
+   * The core's registry of <code>&#64;WorkflowTask</code> methods, asked one question here:
+   * whether a method names the task definition a modelled listener carries. That is what
+   * decides whether the listener is this application's business at all.
+   */
+  private final io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker workflowTaskInvoker;
+
+  /**
    * Everything the platform hands over. An adapter which is registered incompletely does
    * not come into existence (see {@link AdapterCollaborators}).
    */
@@ -380,6 +387,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     this.workflowProcessingLifecycle = workflowProcessingLifecycle;
     this.collaborators = collaborators;
     this.workflowTaskWiring = collaborators.workflowTaskWiring();
+    this.workflowTaskInvoker = collaborators.workflowTaskInvoker();
     this.bpmsInitiatedStartInvoker = collaborators.bpmsInitiatedStartInvoker().orElse(null);
     this.workflowEndedInvoker = collaborators.workflowEndedInvoker().orElse(null);
     this.scoping = collaborators.scoping();
@@ -654,7 +662,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         scopedBpmnProcessId,
         "file '%s'".formatted(filename),
         specs,
-        connectables);
+        connectables,
+        context);
 
     // both directions with guiding messages; throwing here honors the
     // deployment-failure policy for non-first-priority adapter ids
@@ -689,6 +698,27 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                   connectable.taskDefinition(),
                   bpmnProcessId,
                   workflowModuleId));
+        });
+
+    // a listener is notified and done: the engine is inside a transition of its own while the
+    // listener runs, so a method declaring @TaskId would wait for a completion nobody can send.
+    // Version 1 accepted such a method and the workflow went on without it
+    connectables
+        .stream()
+        .filter(Camunda7TaskConnectable::isExecutionListener)
+        .filter(connectable -> workflowTaskWiring.workflowTaskCompletesAsynchronously(
+            workflowModuleId,
+            bpmnProcessId,
+            connectable.taskDefinition()))
+        .findFirst()
+        .ifPresent(connectable -> {
+          throw new IllegalStateException(
+              """
+                  The @WorkflowTask method serving the listener '%s' of BPMN process '%s' (workflow \
+                  module '%s') declares a @TaskId parameter! A listener is notified and done, so such \
+                  a task can never stay open and the id would complete nothing. Drop the parameter, or \
+                  model the work as a task of the process where it has to stay open."""
+                  .formatted(connectable.taskDefinition(), bpmnProcessId, workflowModuleId));
         });
 
     connectables.forEach(taskRegistry::register);
@@ -743,6 +773,41 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         bpmnProcessId,
         filename,
         workflowModuleId);
+
+  }
+
+  /**
+   * What the configuration says about the listeners somebody modelled. <code>null</code> until
+   * a platform module hands one over, which is the default: no listener is served.
+   */
+  private io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver allowListenersResolver;
+
+  /**
+   * Hands over how <code>allow-listeners</code> resolves for this adapter instance.
+   *
+   * @param allowListenersResolver The resolver, or <code>null</code> for the default
+   */
+  public void setAllowListenersResolver(
+      final io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver allowListenersResolver) {
+
+    this.allowListenersResolver = allowListenersResolver;
+
+  }
+
+  /**
+   * Whether the listeners somebody modelled are served for one BPMN process, and which key said
+   * so.
+   *
+   * @param workflowModuleId The workflow module
+   * @param bpmnProcessId The PLAIN BPMN process id
+   * @return The setting, never <code>null</code>
+   */
+  private io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting listenersAllowedFor(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    return io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver
+        .resolve(allowListenersResolver, workflowModuleId, bpmnProcessId);
 
   }
 
@@ -951,6 +1016,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         scopedProcessId(workflowModuleId, bpmnProcessId),
         "version %s".formatted(version),
         specs,
+        null,
         null);
     return specs;
 
@@ -1000,7 +1066,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
           scopedBpmnProcessId,
           "version %s".formatted(version),
           specs,
-          connectables);
+          connectables,
+          null);
     } catch (final RuntimeException e) {
       log.warn(
           """
@@ -1046,6 +1113,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    *          which is only being READ on behalf of a check: such a model is never
    *          refused - one this boot deploys may be, one the engine already holds is
    *          reported by a warning instead, because nobody can change it any more
+   * @param context What the module's startup report is assembled in, or <code>null</code>
+   *          for a model which is only being READ
    */
   private void collectTasks(
       final BpmnModelInstance model,
@@ -1054,7 +1123,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
       final String scopedBpmnProcessId,
       final String describedSource,
       final List<BpmnTaskSpec> specs,
-      final List<Camunda7TaskConnectable> connectables) {
+      final List<Camunda7TaskConnectable> connectables,
+      final Camunda7ProcessingContext context) {
     serviceLikeTasksOf(model, scopedBpmnProcessId)
         .forEach(task -> {
           final var delegateExpression = task.getAttributeValueNs(CAMUNDA_NS, "delegateExpression");
@@ -1162,6 +1232,309 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
           }
         });
 
+    // the listeners somebody modelled, which are tasks like any other one from here on
+    // where the application asked for them
+    collectModelledListeners(
+        model,
+        workflowModuleId,
+        bpmnProcessId,
+        scopedBpmnProcessId,
+        describedSource,
+        specs,
+        connectables,
+        context);
+
+  }
+
+  /**
+   * Reads the execution listeners somebody modelled out of one process and turns the ones the
+   * application asked for into tasks like any other.
+   * <p>
+   * Routed through the core's task specs on purpose: a listener nothing serves ends the boot
+   * because {@code validateTaskWiring} asks for a method, and a method serving no listener of
+   * any wired process is caught by {@code validateNoUnwiredWorkflowTaskMethods}. Version 1 wired
+   * its listeners privately and had neither direction.
+   *
+   * @param model The BPMN model, carrying the identifiers the ENGINE knows
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID, which is what a property key names
+   * @param scopedBpmnProcessId The BPMN process ID as the engine knows it
+   * @param describedSource What to name in a message about the model
+   * @param specs Collects the task specs
+   * @param connectables Collects the connectables, or <code>null</code> for a model which is
+   *          only being READ: such a model is never refused
+   * @param context What the module's startup report is assembled in, or <code>null</code>
+   */
+  private void collectModelledListeners(
+      final BpmnModelInstance model,
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String scopedBpmnProcessId,
+      final String describedSource,
+      final List<BpmnTaskSpec> specs,
+      final List<Camunda7TaskConnectable> connectables,
+      final Camunda7ProcessingContext context) {
+
+    final var setting = listenersAllowedFor(workflowModuleId, bpmnProcessId);
+    if (setting.allowed() && (context != null)) {
+      // remembered even where the process carries no listener at all, so the report can say
+      // that the key is on and nothing of this module uses it
+      context.recordListenersAllowed(bpmnProcessId, setting.propertyKey());
+    }
+    final var served = io.vanillabp.camunda7.wiring.Camunda7Listeners
+        .listenersOf(model, scopedBpmnProcessId, expression -> readTaskDefinitionOf(expression))
+        .stream()
+        .filter(listener -> listener.implementation().servable())
+        .filter(listener -> listener.taskDefinition() != null)
+        // and here is the line which decides: a listener is this application's business where
+        // a @WorkflowTask method names its task definition, and nobody else's. Everything else
+        // a delegate expression can name - a Spring bean, a CDI bean, a class, a script - is
+        // resolved by the engine itself, which is an ordinary Camunda 7 model this adapter has
+        // no business taking away. Only the task-definition route counts:
+        // @WorkflowTask(id = ...) names the ELEMENT, and an element may carry a task and a
+        // listener at once
+        .filter(listener -> workflowTaskInvoker
+            .workflowTaskHandlerExists(workflowModuleId, bpmnProcessId, listener.taskDefinition()))
+        .toList();
+    if (served.isEmpty()) {
+      return;
+    }
+    if (!setting.allowed()) {
+      refuseOrSayItIsTooLate(
+          connectables != null,
+          refuseTheListenersNobodyAllowed(workflowModuleId, bpmnProcessId, describedSource, served));
+      return;
+    }
+    final var sharing = io.vanillabp.camunda7.wiring.Camunda7Listeners
+        .listenersSharingATaskDefinition(served);
+    if (!sharing.isEmpty()) {
+      refuseOrSayItIsTooLate(
+          connectables != null,
+          refuseListenersSharingATaskDefinition(workflowModuleId, bpmnProcessId, describedSource, sharing));
+      return;
+    }
+    served
+        .forEach(listener -> {
+          specs.add(new BpmnTaskSpec(listener.elementId(), listener.taskDefinition()));
+          if (context != null) {
+            context.recordModelledListener(listener);
+          }
+          if (connectables != null) {
+            connectables.add(new Camunda7TaskConnectable(
+                workflowModuleId, bpmnProcessId, scopedBpmnProcessId, listener.elementId(), listener
+                    .taskDefinition(), listener
+                        .implementation() == io.vanillabp.camunda7.wiring.Camunda7Listeners.Implementation.DELEGATE_EXPRESSION
+                            ? Camunda7TaskConnectable.Type.EXECUTION_LISTENER_DELEGATE_EXPRESSION
+                            : Camunda7TaskConnectable.Type.EXECUTION_LISTENER_EXPRESSION));
+          }
+        });
+
+  }
+
+  /**
+   * Ends the boot over a model this application is about to deploy, and says the same words about
+   * one the engine already holds.
+   * <p>
+   * Both findings about a listener are of that shape: a modeller can act on the model of this boot
+   * and on no other, and a version the engine holds is read on behalf of a check which may not
+   * refuse what nobody can change any more.
+   *
+   * @param modelIsBeingDeployed Whether this boot brings the model
+   * @param finding What is wrong, in words which work as a refusal and as a warning
+   */
+  private void refuseOrSayItIsTooLate(
+      final boolean modelIsBeingDeployed,
+      final String finding) {
+
+    if (modelIsBeingDeployed) {
+      throw new IllegalStateException(finding);
+    }
+    log.warn("Camunda7[{}]: {}", adapterId, finding);
+
+  }
+
+  /**
+   * The task definition an expression of the model names, or <code>null</code> where VanillaBP
+   * cannot read the expression. The tolerant twin of {@link #unwrapExpression}, because a
+   * listener's expression is judged by the caller, which knows whether the model can still be
+   * changed.
+   *
+   * @param rawExpression The expression as it stands in the model
+   * @return The unwrapped text, or <code>null</code>
+   */
+  private static String readTaskDefinitionOf(
+      final String rawExpression) {
+
+    final var matcher = EL_PATTERN.matcher(rawExpression.trim());
+    return matcher.matches()
+        ? matcher.group(1).trim()
+        : null;
+
+  }
+
+  /**
+   * The message which ends a boot over a model whose listeners nobody allowed.
+   * <p>
+   * The adapter refuses here rather than leaving it to the core's wiring validation, which is
+   * what the Camunda 8 adapter's guidance about connectors does: a connector is an element
+   * VanillaBP is asked to LEAVE ALONE, so the validation finds a task nothing serves and ends
+   * the boot by itself. A listener is the other way round - the key asks VanillaBP to serve
+   * something, and without it there is no task spec and nothing for the validation to miss. The
+   * engine would then evaluate the listener's expression itself and fail at the first workflow
+   * reaching the element, which is a message nobody reads at boot.
+   *
+   * @param workflowModuleId The workflow module
+   * @param bpmnProcessId The PLAIN BPMN process id
+   * @param describedSource What the model is
+   * @param listeners The listeners a method could serve
+   * @return The message
+   */
+  private String refuseTheListenersNobodyAllowed(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String describedSource,
+      final List<io.vanillabp.camunda7.wiring.Camunda7Listeners.ModelledListener> listeners) {
+
+    return """
+        BPMN process '%s' of workflow module '%s' (%s) carries %d execution listener(s) somebody \
+        modelled whose expression names a @WorkflowTask method of this application: %s. VanillaBP 1 \
+        served such a listener and said nothing about it. This version does not serve it until you \
+        ask for it, because the engine would evaluate the expression itself and run that method at a \
+        moment nobody wired it for. Ask for it at one of three levels, the most specific configured \
+        one winning:
+        %s
+        What it costs: %s
+        %s
+        Only a listener a @WorkflowTask method names is this message about. A listener whose \
+        expression names something else - a Spring bean, a CDI bean, a class, a script - is resolved \
+        by the engine and VanillaBP says nothing about it; and a listener VanillaBP or one of its \
+        extensions attaches is never written into the BPMN at all."""
+        .formatted(
+            bpmnProcessId,
+            workflowModuleId,
+            describedSource,
+            listeners.size(),
+            listeners
+                .stream()
+                .map(io.vanillabp.camunda7.wiring.Camunda7Listeners.ModelledListener::describe)
+                .collect(java.util.stream.Collectors.joining("; ")),
+            io.vanillabp.camunda7.wiring.Camunda7Listeners
+                .levelsOf(adapterId, workflowModuleId, bpmnProcessId),
+            io.vanillabp.camunda7.wiring.Camunda7Listeners.WHAT_IT_COSTS,
+            io.vanillabp.camunda7.wiring.Camunda7Listeners.WHICH_METHOD_SERVES_WHICH);
+
+  }
+
+  /**
+   * The message which ends a boot where one element carries two served listeners under one task
+   * definition.
+   * <p>
+   * This is the defect version 1 left open: there two delegate listeners of one element became
+   * two entries with the same identity and which of them ran was decided by a {@code findFirst}.
+   * Here they would become one task served by one method, called for two events, and nothing it
+   * could ask would say which event it is in - {@code TaskEvent.Event} has no value for a
+   * listener's event. An expression per event is the fix, and naming the case is better than
+   * picking one of them.
+   *
+   * @param workflowModuleId The workflow module
+   * @param bpmnProcessId The PLAIN BPMN process id
+   * @param describedSource What the model is
+   * @param sharing Per element and task definition the listeners sharing it
+   * @return The message
+   */
+  private String refuseListenersSharingATaskDefinition(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String describedSource,
+      final List<List<io.vanillabp.camunda7.wiring.Camunda7Listeners.ModelledListener>> sharing) {
+
+    return """
+        BPMN process '%s' of workflow module '%s' (%s) has one element carrying several execution \
+        listeners under ONE expression: %s. One @WorkflowTask method would serve all of them and \
+        nothing would tell it which event it is being called for, because the event is part of a \
+        listener's identity and TaskEvent.Event has no value for it. Give every listener of an element \
+        an expression of its own and write a method per expression."""
+        .formatted(
+            bpmnProcessId,
+            workflowModuleId,
+            describedSource,
+            sharing
+                .stream()
+                .map(listeners -> listeners
+                    .stream()
+                    .map(io.vanillabp.camunda7.wiring.Camunda7Listeners.ModelledListener::describe)
+                    .collect(java.util.stream.Collectors.joining(" and ")))
+                .collect(java.util.stream.Collectors.joining("; ")));
+
+  }
+
+  /**
+   * The report a workflow module whose modelled listeners are served writes on EVERY boot, once,
+   * after its deployment went through.
+   * <p>
+   * Framed, and nothing else this adapter logs is: a WARN level alone does not survive a boot log
+   * where every other line is one line high, and a second framed message would cost this one its
+   * effect. There is no key which silences it - what it says stays true for as long as the
+   * listener is in the model, so a key turning it off would only make the loss invisible. See
+   * decision 20 in the repository's DECISIONS.md.
+   *
+   * @param workflowModuleId The workflow module
+   * @param context The module's accumulated pipeline state
+   */
+  void reportWhatListenersCost(
+      final String workflowModuleId,
+      final Camunda7ProcessingContext context) {
+
+    final var allowedBy = context.getListenersAllowedBy();
+    if (allowedBy.isEmpty()) {
+      return;
+    }
+    final var switchedOnBy = allowedBy
+        .values()
+        .stream()
+        .filter(java.util.Objects::nonNull)
+        .distinct()
+        .collect(java.util.stream.Collectors.joining(", "));
+    if (context.getModelledListeners().isEmpty()) {
+      log.warn(
+          "Camunda7[{}]: the listeners of workflow module '{}' are served ({}), and no model of it "
+              + "carries one. Set '{}: false' where you do not need the switch.",
+          adapterId,
+          workflowModuleId,
+          switchedOnBy,
+          io.vanillabp.camunda7.wiring.Camunda7Listeners.propertyKeyOf(adapterId));
+      return;
+    }
+    log.warn(
+        """
+
+            {}
+            MODELLED LISTENERS ARE SERVED: WORKFLOW MODULE '{}', CAMUNDA 7 ADAPTER '{}'
+            {}
+            Switched on by: {}
+            VanillaBP serves the following listener(s) with a @WorkflowTask method, one method per \
+            listener:
+            {}
+            {}
+            {}
+            The way back: move what the listener does into a task of the model with a @WorkflowTask \
+            method behind it, or set '{}: false'.
+            {}""",
+        io.vanillabp.camunda7.wiring.Camunda7Listeners.FRAME_LINE,
+        workflowModuleId,
+        adapterId,
+        io.vanillabp.camunda7.wiring.Camunda7Listeners.FRAME_LINE,
+        switchedOnBy,
+        context
+            .getModelledListeners()
+            .stream()
+            .map(listener -> "  "
+                + listener.describe())
+            .collect(java.util.stream.Collectors.joining("\n")),
+        io.vanillabp.camunda7.wiring.Camunda7Listeners.WHAT_IT_COSTS,
+        io.vanillabp.camunda7.wiring.Camunda7Listeners.WHICH_METHOD_SERVES_WHICH,
+        io.vanillabp.camunda7.wiring.Camunda7Listeners.propertyKeyOf(adapterId),
+        io.vanillabp.camunda7.wiring.Camunda7Listeners.FRAME_LINE);
 
   }
 
@@ -1888,6 +2261,9 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // annotations name can be resolved against what the engine has now
 
     reportAboutTheNamesThisModuleDeploys(workflowModuleId, bpmsProcessingContext, tenantId);
+
+    // and what the listeners somebody modelled cost this workflow module
+    reportWhatListenersCost(workflowModuleId, bpmsProcessingContext);
 
   }
 

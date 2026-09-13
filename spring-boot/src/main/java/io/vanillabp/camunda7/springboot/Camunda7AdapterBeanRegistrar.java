@@ -52,6 +52,9 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
  */
 public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
 
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
+      .getLogger(Camunda7AdapterBeanRegistrar.class);
+
   @Override
   public void register(
       final BeanRegistry registry,
@@ -160,6 +163,19 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                             .serializationFormatFor(adapterId, workflowModuleId, bpmnProcessId));
                 deploymentService.setSerializationRoundTrip(
                     io.vanillabp.camunda7.sync.Camunda7SerializationRoundTrip.of(engine.getProcessEngine()));
+                // Whether the listeners somebody modelled are served by this application,
+                // resolvable down to the workflow
+                deploymentService.setAllowListenersResolver(
+                    (
+                        workflowModuleId,
+                        bpmnProcessId) -> deploymentOverlay
+                            .allowListenersFor(adapterId, workflowModuleId, bpmnProcessId));
+                // a key at a level which does not resolve it changes nothing and would be
+                // silent, which is worse than a line saying where the key is read
+                io.vanillabp.camunda7.wiring.Camunda7Listeners.reportKeysSetAtTaskLevel(
+                    adapterId,
+                    deploymentOverlay.allowListenersKeysAtTaskLevel(adapterId),
+                    log::warn);
                 return deploymentService;
               }));
 

@@ -31,6 +31,9 @@ import jakarta.inject.Singleton;
 @ApplicationScoped
 public class Camunda7AdapterProducer {
 
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
+      .getLogger(Camunda7AdapterProducer.class);
+
   /**
    * What the platform hands the adapter, built the same way for both services of an
    * adapter id.
@@ -136,6 +139,18 @@ public class Camunda7AdapterProducer {
                   bpmnProcessId) -> serializationFormatOf(overlay, adapterId, workflowModuleId, bpmnProcessId));
           deploymentService.setSerializationRoundTrip(
               io.vanillabp.camunda7.sync.Camunda7SerializationRoundTrip.of(engine.getProcessEngine()));
+          // Whether the listeners somebody modelled are served by this application, resolvable
+          // down to the workflow
+          deploymentService.setAllowListenersResolver(
+              (
+                  workflowModuleId,
+                  bpmnProcessId) -> overlay.allowListenersFor(adapterId, workflowModuleId, bpmnProcessId));
+          // a key at a level which does not resolve it changes nothing and would be silent,
+          // which is worse than a line saying where the key is read
+          io.vanillabp.camunda7.wiring.Camunda7Listeners.reportKeysSetAtTaskLevel(
+              adapterId,
+              overlay.allowListenersKeysAtTaskLevel(adapterId),
+              log::warn);
           return deploymentService;
         })
         .toList();
