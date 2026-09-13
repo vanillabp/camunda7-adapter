@@ -215,3 +215,79 @@ before changing a booting application.
 
 An application which configures no `tenant-id` at all meets none of this: every workflow module has
 a tenant of its own, which is what lets two of them use one process id in the first place.
+
+### A listener served by a `@WorkflowTask` method has to be allowed now
+
+Version 1 served a `camunda:executionListener` with a `@WorkflowTask` method and documented it
+nowhere. It did so in one place only: an END EVENT and an INTERMEDIATE THROW EVENT, with the listener
+written as `camunda:expression` or `camunda:delegateExpression`. Anything else on those two elements
+ended the boot with `Unsupported listeners at ...`, and a listener anywhere else in the model was the
+engine's business alone. The task definition was the unwrapped expression text, so `${archiveOrder}`
+was served by `@WorkflowTask(taskDefinition = "archiveOrder")`, while an expression like
+`${bean.doIt()}` became the literal task definition `bean.doIt()` and left only
+`@WorkflowTask(id = "<element id>")` usable.
+
+If your models carry such a listener and a `@WorkflowTask` method of yours names its expression, this is
+the entry to act on. Version 2 does not serve it unless you say so, and a model carrying one ends the
+boot with a message naming the elements, the key and what it costs. Say so per adapter, per workflow module or per workflow, and the most specific
+configured value wins in both directions:
+
+```yaml
+vanillabp:
+  adapters:
+    c7:
+      allow-listeners: true
+  workflow-modules:
+    loan-approval:
+      adapters:
+        c7:
+          allow-listeners: false   # this module does not, whatever the adapter says
+```
+
+The boot failure is the good case, and it is deliberate. Without the key there is no task and no
+worker for the listener, so the engine evaluates the expression itself: a workflow reaching the
+element either fails on a name nothing resolves or runs a method the application never meant for that
+element, both of them at runtime and in production rather than at a boot somebody is watching. The
+Camunda 8 adapter has the same key for the same reason, where a workflow would stall at the listener's
+job with nothing in the log.
+
+Read what the key costs before you set it. A listener is where a BPMS lets an application in at a
+moment the BPMS owns, and every BPMS draws that moment differently, so the model stops being portable:
+another BPMS has no listener at this element and a migration of the model stops at the method serving
+it. Every boot of a workflow module whose listeners are served writes a framed WARN saying it, naming
+each listener and the way back, and no key silences it. Where you can, move what the listener does into
+a task of the model with a `@WorkflowTask` method behind it, which is the way back the report names.
+
+Four things change beyond the key itself.
+
+Any element may carry a served listener now, not only an end event and an intermediate throw event.
+That is a wider door than version 1 had, and the key is what keeps it shut by default.
+
+`@TaskEvent` tells the method nothing any more. On version 1 it received `CREATED` for every listener
+event, which said nothing about whether the listener fired on `start`, on `end` or on `take`. Now the
+event is part of the wiring: one method serves one event of one element, the parameter still receives
+`CREATED` because a method without it subscribes to `CREATED` alone, and `TaskEvent.Event` has no value
+for a listener's event at all. Drop the parameter where it only carried noise.
+
+A `@TaskId` parameter is refused while the process is wired. A listener is notified and done, so such a
+task can never stay open and the id would complete nothing. Version 1 accepted the method and the
+workflow went on without it.
+
+Two listeners of one element under ONE expression end the boot naming both. Version 1 ran one of them
+and a `findFirst` decided which, so the model said something it could not deliver. Give every listener
+of an element an expression of its own and write a method per expression.
+
+Two things got easier. A `camunda:class` or `camunda:script` listener no longer ends the boot on an end
+event or an intermediate throw event: the engine runs it itself, there is no expression naming a task
+definition, and this version says nothing about it at all.
+
+And a listener whose expression names something other than a `@WorkflowTask` method is left exactly
+where it is. With Spring or CDI a delegate expression is resolved against your application context, so
+`${auditTheOrder}` naming a bean of your own which implements Camunda's `ExecutionListener` is an
+ordinary Camunda 7 model: VanillaBP does not read it, does not refuse it and does not mention it. Only a
+listener whose expression names a method you wrote is what the key above is about, which is exactly the
+version 1 shape.
+
+The [README section](https://github.com/vanillabp/camunda7-adapter/blob/main/README.md#listeners-somebody-modelled)
+and the [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#listeners-somebody-modelled)
+of the wiki carry the details.

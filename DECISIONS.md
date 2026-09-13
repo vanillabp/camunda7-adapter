@@ -513,3 +513,77 @@ cases and the name set for one module only, `Camunda7CollidingProcessIdsTest` ho
 ends on the second of two modules under one process id with the core's own support in between and
 both deployment orders driven, `TenantResolutionTest` the resolution over the levels, and
 `Camunda7StartupQuestionCostTest` that answering asks the engine nothing.
+
+### 20. A listener somebody modelled is a task, and only where the application asked for it
+
+Version 1 let a `camunda:executionListener` be served by a `@WorkflowTask` method and announced it
+nowhere, because a model with application logic in a listener cannot be moved to another BPMS.
+Version 2 deleted the reading side, which made such a listener silently unserved: the engine
+evaluated the expression itself, so a workflow reaching the element either failed on a name nothing
+resolves or ran a method the application never meant for that element. What was decided is that the
+listener is served again, behind a key which is off by default, and that a boot which uses it says
+what it costs.
+
+A served listener is a `camunda:executionListener` written as `camunda:expression` or
+`camunda:delegateExpression` **whose expression names a `@WorkflowTask` method of this
+application**: `delegateExpression="${archiveOrder}"` is served where
+`@WorkflowTask(taskDefinition = "archiveOrder")` exists, and only then. That last half is what keeps
+the feature from taking something away. On Camunda 7 with Spring or CDI a delegate expression is
+resolved against the application context, so `${failTheJobOnce}` naming a bean which implements the
+engine's own `ExecutionListener` is an ordinary Camunda 7 model, older than VanillaBP and none of its
+business. The same holds for a `camunda:class` and a `camunda:script` listener, which carry no
+expression at all. None of those is read, refused or reported: whatever resolves them keeps resolving
+them, and the key is not about them.
+
+Only the task-definition route counts. `@WorkflowTask(id = ...)` names the ELEMENT, and one element
+may carry a task and a listener at once, so the element id cannot say which of them a method means.
+
+A `camunda:taskListener` is not read at all either. VanillaBP notifies the `@WorkflowTask` method of
+a user task itself, on creation and on cancellation, and a second route into the same moment would be
+two mechanisms for one thing.
+
+`vanillabp.adapters.<id>.allow-listeners` is the key, a boolean, `false` unless somebody writes it.
+It resolves at adapter, workflow-module and workflow level, the most specific configured value
+winning in both directions, so a module which serves its listeners can have one workflow which does
+not. There is no task level: that level is keyed by a task definition, and whether a listener becomes
+a task at all is what this key decides, so at the moment the key is read there is no task definition
+to key a level by. A value written there anyway earns one guiding warning naming the three levels
+which work, and the boot goes on. The Camunda 8 adapter reads the very same key at the very same
+three levels, because two keys about what a model may contain, reaching different levels on different
+adapters, would be the worse answer.
+
+Where the key is off and a model carries a served listener, the boot ends here in the adapter, and
+that is not how `allow-connectors` works. A connector asks VanillaBP to LEAVE an element alone, so
+the core's wiring validation finds a task nothing serves and ends the boot by itself. A listener asks
+VanillaBP to SERVE something, so without the key there is no task spec and nothing for the validation
+to miss. The message therefore comes from the adapter, and it names the elements, the three levels
+and the cost.
+
+Where the key is on, a listener is a task like any other one from there on. `validateTaskWiring` asks
+for a `@WorkflowTask` method and ends the boot where none exists, and
+`validateNoUnwiredWorkflowTaskMethods` reports a method which matches no listener of any wired
+process. Version 1 wired its listeners privately and had neither direction.
+
+The event is part of a listener's identity, because one method serves one event of one element.
+`@TaskEvent` tells such a method nothing: `TaskEvent.Event` has `CREATED`, `CANCELED` and `ALL`, and
+a listener's own event is none of those. What the parameter receives is therefore `CREATED` for every
+listener, which is the only value that works at all, since a method without the parameter subscribes
+to `CREATED` alone. Two served listeners of one element under ONE expression end the boot naming
+both: one method would serve two events and nothing it could ask would say which one it is in, and
+that is the case version 1 decided with a `findFirst`. Two listeners of one element under different
+expressions are fine, and a method then has to name the task definition, because
+`@WorkflowTask(id = ...)` names the element and cannot tell them apart. A method declaring `@TaskId`
+ends the boot as well, since a listener is notified and done and the task can never stay open, and a
+method throwing `TaskException` is answered with the reason rather than with an incident: a listener
+has no token to route.
+
+The default is off because of what serving a listener costs. A listener is where a BPMS lets an
+application in at a moment the BPMS owns, and every BPMS draws that moment differently, so the model
+stops being portable: another BPMS has no listener at this element and a migration of the model stops
+at the method serving it. The Process-Engine-API has no listener concept at all, which is gap 16 and
+gap 17 of that adapter's `GAPS.md`. So every boot of a workflow module whose listeners are served
+writes one framed WARN naming each served listener, the key which switched it on, what it costs and
+the way back, and no key silences it: what it says stays true for as long as the listener is in the
+model, and a key turning it off would only make the loss invisible.
+
+See [Listeners somebody modelled](./README.md#listeners-somebody-modelled).
