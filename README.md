@@ -555,9 +555,10 @@ Where the switch is on, the listener is a task like any other one:
   activity behavior would try to leave the element; a `camunda:expression` invokes the handler while
   the expression evaluates and answers `null`, and the listener is done when the handler returns;
 - what the workflow aggregate shares is written onto the execution inside the engine's own
-  transaction, exactly as for a task. Camunda 8 loses such a change, because that cluster discards
-  what a listener sends back, so a module which runs on both engines behaves differently at this one
-  point.
+  transaction, exactly as for a task, whatever the listener and whatever its event. On Camunda 8
+  that holds for an execution listener on `end` alone: a `start` execution listener and a task
+  listener write nothing into the process instance there, so a module which runs on both engines
+  behaves differently at those two placements.
 
 The event is part of a listener's identity: one method serves one event of one element. `@TaskEvent`
 receives `CREATED` for every listener, which is the only value that works at all, because a method
