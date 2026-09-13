@@ -157,6 +157,38 @@ public class Camunda7AdapterProducer {
 
   }
 
+  /**
+   * What this adapter knows about its engines, for an extension running inside one: ONE
+   * {@link io.vanillabp.camunda7.api.Camunda7EngineFacts} per configured adapter id, built
+   * from what the engine wiring computed anyway rather than from a second reading of the
+   * configuration. The list shape is the per-adapter-id shape of this platform (see the
+   * class comment); an extension picks the entry whose
+   * {@code Camunda7EngineFacts#adapterId()} is the one it is dealing with.
+   *
+   * @param properties The core's adapter configuration
+   * @param engineRegistry The engines of this application
+   * @param overlay This adapter's overlay of the shared <code>vanillabp</code> tree
+   * @param scoping The core's name-clash avoidance
+   * @return One entry per configured <code>camunda7</code> adapter id
+   */
+  @Produces
+  @Singleton
+  public List<io.vanillabp.camunda7.api.Camunda7EngineFacts> camunda7EngineFacts(
+      final MigrationAdapterProperties properties,
+      final Camunda7QuarkusEngineRegistry engineRegistry,
+      final VanillaBpCamunda7Properties overlay,
+      final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping) {
+
+    return camunda7AdapterIds(properties)
+        .stream()
+        .map(adapterId -> new io.vanillabp.camunda7.api.Camunda7EngineFacts(
+            adapterId, scoping, configuredTenantsOf(overlay, adapterId), engineRegistry
+                .engineFor(adapterId)
+                .getTaskRegistry()))
+        .toList();
+
+  }
+
   private static List<String> camunda7AdapterIds(
       final MigrationAdapterProperties properties) {
 

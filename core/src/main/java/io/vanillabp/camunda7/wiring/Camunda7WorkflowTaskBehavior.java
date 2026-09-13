@@ -1,18 +1,11 @@
 package io.vanillabp.camunda7.wiring;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.camunda.bpm.engine.delegate.BpmnError;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.impl.bpmn.behavior.AbstractBpmnActivityBehavior;
-import org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity;
 import org.camunda.bpm.engine.impl.pvm.delegate.ActivityExecution;
-import org.camunda.bpm.model.bpmn.instance.Activity;
-import org.camunda.bpm.model.bpmn.instance.BaseElement;
-import org.camunda.bpm.model.bpmn.instance.MultiInstanceLoopCharacteristics;
-import org.camunda.bpm.model.xml.ModelInstance;
-import org.camunda.bpm.model.xml.instance.ModelElementInstance;
 
 import io.vanillabp.integration.adapter.spi.workflowtask.MultiInstanceValue;
 import io.vanillabp.integration.adapter.spi.workflowtask.TaskInvocationContext;
@@ -374,79 +367,11 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
     public Map<String, MultiInstanceValue> getMultiInstances() {
 
       if (multiInstances == null) {
-        multiInstances = determineMultiInstances(execution);
+        multiInstances = io.vanillabp.camunda7.api.Camunda7MultiInstances.of(execution);
       }
       return multiInstances;
 
     }
-
-  }
-
-  /**
-   * Collects the multi-instance context(s) the task executes in by walking the
-   * execution hierarchy from the current element up to the process root
-   * (Version-1 algorithm): for every multi-instance activity found, Camunda's
-   * <code>loopCounter</code>/<code>nrOfInstances</code> variables and the
-   * configured element variable are read from the corresponding execution.
-   */
-  static Map<String, MultiInstanceValue> determineMultiInstances(
-      final DelegateExecution execution) {
-
-    final var result = new LinkedHashMap<String, MultiInstanceValue>();
-
-    final var model = execution.getBpmnModelElementInstance().getModelInstance();
-
-    DelegateExecution miExecution = execution;
-    while (miExecution != null) {
-
-      final var bpmnElement = getCurrentElement(model, miExecution);
-      if (bpmnElement instanceof Activity activity && (activity
-          .getLoopCharacteristics() instanceof MultiInstanceLoopCharacteristics loopCharacteristics)) {
-        final var itemNo = (Integer) miExecution.getVariable("loopCounter");
-        final var totalCount = (Integer) miExecution.getVariable("nrOfInstances");
-        final var elementVariable = loopCharacteristics.getCamundaElementVariable();
-        final var currentItem = elementVariable == null
-            ? null
-            : miExecution.getVariable(elementVariable);
-        if ((itemNo != null) && (totalCount != null)) {
-          result.put(
-              ((BaseElement) bpmnElement).getId(),
-              new MultiInstanceValue(currentItem, itemNo, totalCount));
-        }
-      }
-
-      miExecution = miExecution.getParentId() != null
-          ? ((ExecutionEntity) miExecution).getParent()
-          : miExecution.getSuperExecution();
-
-    }
-
-    // the walk collects innermost first - the SPI contract is outermost first
-    final var outermostFirst = new LinkedHashMap<String, MultiInstanceValue>();
-    outermostFirst.putAll(result.reversed());
-    return outermostFirst;
-
-  }
-
-  private static ModelElementInstance getCurrentElement(
-      final ModelInstance model,
-      final DelegateExecution execution) {
-
-    if (execution.getBpmnModelElementInstance() != null) {
-      return execution.getBpmnModelElementInstance();
-    }
-
-    // executions of activities (e.g. embedded subprocesses) encode the element in
-    // the activity-instance ID: "[element-id]:[instance-id]"
-    final var activityInstanceId = execution.getActivityInstanceId();
-    if (activityInstanceId == null) {
-      return null;
-    }
-    final var elementMarker = activityInstanceId.indexOf(':');
-    if (elementMarker == -1) {
-      return null;
-    }
-    return model.getModelElementById(activityInstanceId.substring(0, elementMarker));
 
   }
 

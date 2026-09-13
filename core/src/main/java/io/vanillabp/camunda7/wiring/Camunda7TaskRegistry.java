@@ -147,6 +147,24 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * The deployed version behind a process definition id, answered from the same cache
+   * {@link #versionOfDefinition(String)} reads, so a caller pays the engine for that
+   * definition once.
+   *
+   * @param processDefinitionId The engine's process definition id
+   * @return The version and its tag, or <code>null</code> where the engine does not know
+   *         that definition (any more) or no deployment service was handed over (tests)
+   */
+  public io.vanillabp.integration.adapter.spi.version.DeployedProcessVersion definitionOf(
+      final String processDefinitionId) {
+
+    return processVersions == null
+        ? null
+        : processVersions.definitionOf(processDefinitionId);
+
+  }
+
+  /**
    * Which workflow module a process definition key belongs to - the way back when
    * there is no tenant to ask (prefixed identifiers, see decision 3 in the
    * repository's DECISIONS.md).
@@ -331,6 +349,68 @@ public class Camunda7TaskRegistry {
         .map(Camunda7TaskConnectable::bpmnProcessId)
         .findFirst()
         .orElse(processDefinitionKey);
+
+  }
+
+  /**
+   * One BPMN process of one workflow module, named the way the application wrote it.
+   *
+   * @param workflowModuleId The workflow module
+   * @param bpmnProcessId The PLAIN BPMN process id
+   */
+  public record WorkflowProcess(
+                                String workflowModuleId,
+                                String bpmnProcessId) {
+  }
+
+  /**
+   * The way back from what the engine reports to what the application wrote: a tenant and a
+   * process definition key become the workflow module and the plain BPMN process id.
+   *
+   * <h2>When the answer is complete</h2>
+   *
+   * A process enters this registry while the deployment pipeline wires it, in
+   * <code>wireBpmn</code>, which is before the engine parses that workflow module's files
+   * and long before any workflow of it runs. A process the engine only still HOLDS under a
+   * declared id enters it while <code>startWorkflowProcessing</code> runs, which is the last
+   * step of the pipeline. So the answer is complete for a workflow module once
+   * <code>wireBpmn</code> ran for it, and complete for the application once the pipeline
+   * finished. Asking earlier is asking a registry which is still being filled, and that is
+   * what a second registry filled at another stage of the pipeline gets wrong: the two see a
+   * process at different moments and the process is reported under the wrong module.
+   *
+   * <h2>What an empty answer means</h2>
+   *
+   * That this application deployed no such process. An embedded engine may hold the
+   * definitions of another application on the same database, and a definition of a release
+   * this application no longer carries stays in the engine as well. Neither is an error and
+   * neither is guessed at: nothing is parsed out of the key, because a prefix somebody cuts
+   * off a string is a prefix which drifts apart from the one the adapter wrote (see decision
+   * 3 in the repository's DECISIONS.md).
+   *
+   * @param tenantId The tenant the engine stored, <code>null</code> where it stored none
+   * @param processDefinitionKey The process definition key the engine stored
+   * @return The workflow module and the plain BPMN process id, or empty
+   */
+  public Optional<WorkflowProcess> resolve(
+      final String tenantId,
+      final String processDefinitionKey) {
+
+    if (processDefinitionKey == null) {
+      return Optional.empty();
+    }
+    final var workflowModuleId = resolveWorkflowModuleId(tenantId, processDefinitionKey);
+    if (workflowModuleId == null) {
+      return Optional.empty();
+    }
+    // deliberately NOT plainBpmnProcessId(): that one answers the key itself for a process
+    // nobody registered, which is the right answer for a listener of a wired process and
+    // the wrong one here, where "this application did not deploy it" has to be sayable
+    final var bpmnProcessId = plainProcessIdsByScopedProcessId
+        .get(new RegistryKey(workflowModuleId, processDefinitionKey));
+    return bpmnProcessId == null
+        ? Optional.empty()
+        : Optional.of(new WorkflowProcess(workflowModuleId, bpmnProcessId));
 
   }
 

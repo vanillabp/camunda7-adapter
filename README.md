@@ -292,6 +292,51 @@ tracking user tasks depends on. And the history event handler is installed as a
 contributed handler sees every event as well. `Camunda7EngineCustomizerIT` holds both on Spring
 Boot, `Camunda7EngineCustomizerTest` on Quarkus.
 
+### What an extension may ask this adapter
+
+Camunda 7 runs embedded. An extension of this adapter runs in the same JVM, on the same
+execution tree and against the same process definitions, so every fact it needs is a fact this
+adapter already looked up. Where it had to read the engine's internals a second time, the two
+readings drifted apart on the next engine release. The package
+`io.vanillabp.camunda7.api` (module `core`) is what it asks instead. This is API of this
+repository, like `Camunda7EngineCustomizer`, and it is not part of the VanillaBP adapter SPI:
+none of it is a mechanism another BPMS shares.
+
+|                    Entry point                    |                                       What it answers                                        |
+|---------------------------------------------------|----------------------------------------------------------------------------------------------|
+| `Camunda7MultiInstances.of(execution)`            | the multi-instance scopes an execution runs in, keyed by BPMN element and outermost first    |
+| `Camunda7MultiInstances.of(engine, executionId)`  | the same, for a caller holding only a user task's execution id                               |
+| `Camunda7TaskDefinitions.of(formKey, elementId)`  | what a user task is called: the form key, and the element id where there is none             |
+| `Camunda7TaskDefinitions.formKeyOf(...)`          | the form key AS WRITTEN, read from the model, from a parsed task or from the engine          |
+| `Camunda7Executions.rootProcessInstanceIdOf(...)` | the root of a workflow, an instance nobody called being its own root                         |
+| `Camunda7EngineFacts`                             | one per configured adapter id: the tenant, the transaction answer, the registry, the version |
+
+`Camunda7EngineFacts` is a bean per configured `camunda7` adapter id on both platforms. On
+Spring Boot it is named `Camunda7_EngineFacts_<id>`, on Quarkus it is an entry of the produced
+`List<Camunda7EngineFacts>`, and `adapterId()` is what tells two engines apart. Through it an
+extension reaches `taskRegistry().resolve(tenantId, processDefinitionKey)`, which is the way
+back from what the engine reports to the workflow module and the plain BPMN process id, and
+`definitionOf(processDefinitionId)`, which answers the deployed version out of the cache a
+running workflow already paid for. How an operator reads that version is
+`DeployedProcessVersion.displayVersion()`, written by the platform so that every BPMS spells one
+deployment the same way.
+
+Two sentences are worth reading on the types themselves before using them. The registry fills up
+while the deployment pipeline runs, so it is complete for a workflow module once `wireBpmn` ran
+for it and complete for the application once the pipeline finished; asking earlier asks a
+registry which is still being filled. And a form key which is an expression resolves to its own
+text, `${formOf(task)}` staying `${formOf(task)}`, never to the value the engine computes from
+it: the computed value differs per workflow instance, so one task would otherwise reach a
+consumer under as many identities as it has instances.
+
+`joinsTheApplicationTransaction()` deserves its own paragraph, because it was answered wrongly
+once. It is true while the engine runs on the application's own data source, and false once the
+adapter id was given one of its own through `vanillabp.adapters.<id>.data-source-name`. That
+holds on Quarkus as well, where the engine is built on the container's transaction manager: a
+JTA transaction around two independent data sources is still two commits, and this adapter
+already treats such an engine as separate everywhere else. `Camunda7EngineFactsOnQuarkusTest`
+pins it on that platform, `Camunda7EngineFactsIT` and `Camunda7AdapterBootTest` on Spring Boot.
+
 ### Two engines on one database: `table-prefix`
 
 `vanillabp.adapters.<id>.table-prefix` sets Camunda's `databaseTablePrefix`, which is how

@@ -264,9 +264,10 @@ public class Camunda7WorkflowViewer {
     if (calledInstance == null) {
       return null;
     }
-    final var rootInstanceId = calledInstance.getRootProcessInstanceId() != null
-        ? calledInstance.getRootProcessInstanceId()
-        : calledInstance.getId();
+    // the walk to the root, and the rule that an instance nobody called is its own root,
+    // are stated once - see io.vanillabp.camunda7.api.Camunda7Executions
+    final var rootInstanceId = io.vanillabp.camunda7.api.Camunda7Executions
+        .rootProcessInstanceIdOf(calledInstance);
     if (!rootInstanceId.equals(primaryInstance.getId())) {
       log.warn(
           "Camunda7[{}]: the history context '{}' does not belong to the workflow of aggregate "

@@ -587,3 +587,43 @@ the way back, and no key silences it: what it says stays true for as long as the
 model, and a key turning it off would only make the loss invisible.
 
 See [Listeners somebody modelled](./README.md#listeners-somebody-modelled).
+
+### 21. An extension asks this adapter, not the engine
+
+Camunda 7 runs embedded, so an extension of this adapter runs in the same JVM, on the same
+execution tree and against the same process definitions. Every fact it needs is a fact this
+adapter already looked up. Where the adapter kept that lookup private, the extension read the
+engine's internals a second time, and six mechanics existed twice: the multi-instance walk through
+the execution tree, the way back from a process definition key to a workflow module, the tenant of
+an adapter id, whether the engine joins the caller's transaction, what a user task is called and
+the version of a process definition.
+
+Two of the six had already drifted. The task definition of a user task with an EXPRESSION form key
+was the written text on one side and the evaluated value on the other, so one task reached a
+consumer under two identities and looked like two tasks. And an engine on a data source of its own
+was reported as joining the application's transaction on Quarkus while this adapter answered the
+opposite everywhere else.
+
+So the mechanics are published, in `io.vanillabp.camunda7.api`. It is API of this repository, not
+of the VanillaBP adapter SPI: none of it is a mechanism another BPMS shares, and a core which knew
+about Camunda's execution tree would be knowing about Camunda 7. It sits next to
+`Camunda7EngineCustomizer`, which is the other half of the same idea, and it follows the same rule:
+one object per configured adapter id, because two ids are two engines.
+
+The transaction answer is the adapter's, and the answer is the data source rather than the
+transaction manager. Quarkus builds the engine on the container's transaction manager, which does
+enlist both resources, and a JTA transaction around two independent data sources is still two
+commits. So an adapter id given its own data source does not join, on either platform, and it is
+the same answer which already makes such an id deliver repeatable tasks and name its deliveries.
+Reading the data source name and concluding otherwise was reading the right key and drawing the
+wrong conclusion.
+
+What is published promises what it says and nothing more: what the adapter REPORTS does not change
+here. A user task without a form key still reaches the core with an empty task definition, and the
+rule which fills in the element id is published rather than applied.
+
+`Camunda7EngineFactsIT` and `Camunda7AdapterBootTest` hold it on Spring Boot,
+`Camunda7EngineFactsOnQuarkusTest` on Quarkus, and the tests in `io.vanillabp.camunda7.api` hold
+what each entry point promises.
+
+See [What an extension may ask this adapter](./README.md#what-an-extension-may-ask-this-adapter).

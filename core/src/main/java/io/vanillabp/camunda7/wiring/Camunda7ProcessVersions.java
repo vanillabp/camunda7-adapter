@@ -55,10 +55,22 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   private final Function<String, String> tenants;
 
   /**
-   * The version per process definition id - the engine's definition ids are stable,
-   * so this map only grows by the number of deployed versions.
+   * The deployed version per process definition id - the engine's definition ids are
+   * stable, so this map only grows by the number of deployed versions.
+   * <p>
+   * It holds the version TAG as well, not only the number: a caller showing a version to a
+   * person needs both, and the definition query which answers the number brings the tag
+   * along at no extra price. {@link #NOTHING_DEPLOYED} marks a definition the engine does
+   * not know, so such a definition does not cause a query per execution either.
    */
-  private final Map<String, String> versionsByDefinitionId = new ConcurrentHashMap<>();
+  private final Map<String, DeployedProcessVersion> versionsByDefinitionId = new ConcurrentHashMap<>();
+
+  /**
+   * What a definition id the engine does not know is remembered as - a record cannot be
+   * <code>null</code> in a {@link ConcurrentHashMap}, and not remembering it would mean a
+   * query per execution of a definition the engine dropped.
+   */
+  private static final DeployedProcessVersion NOTHING_DEPLOYED = new DeployedProcessVersion(null, null, null);
 
   /**
    * The engine's process definition id per (workflow module, BPMN process, version).
@@ -398,7 +410,8 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
 
     final var version = String.valueOf(definition.getVersion());
     definitionIdsByVersion.put(versionKey(workflowModuleId, bpmnProcessId, version), definition.getId());
-    versionsByDefinitionId.put(definition.getId(), version);
+    versionsByDefinitionId
+        .put(definition.getId(), DeployedProcessVersion.of(version, definition.getVersionTag()));
 
   }
 
@@ -416,20 +429,55 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
     if (processDefinitionId == null) {
       return null;
     }
-    // an unknown definition is remembered as well (empty string), so a definition
-    // the engine dropped does not cause a query per task execution either
-    final var version = versionsByDefinitionId
+    final var deployed = definitionOf(processDefinitionId);
+    return deployed == null
+        ? null
+        : deployed.version();
+
+  }
+
+  /**
+   * The deployed version behind a process definition id, resolved ONCE per definition id
+   * and answered from memory afterwards - the version the engine counted and the
+   * <code>camunda:versionTag</code> the modeller gave it.
+   * <p>
+   * This is the lookup {@link #versionOfDefinition(String)} reads as well, so a caller
+   * which needs the tag pays the engine nothing on top of what a running workflow already
+   * paid. How an operator reads the two together is
+   * {@link DeployedProcessVersion#displayVersion()}.
+   *
+   * @param processDefinitionId The engine's process definition id
+   * @return The version, or <code>null</code> if the engine does not know that definition
+   *         (any more)
+   */
+  public DeployedProcessVersion definitionOf(
+      final String processDefinitionId) {
+
+    if (processDefinitionId == null) {
+      return null;
+    }
+    // an unknown definition is remembered as well, so a definition the engine dropped does
+    // not cause a query per task execution either. The engine answers such an id by
+    // throwing rather than by returning nothing, and a definition somebody deleted while
+    // its history stayed is a normal thing to be asked about - so the throw is the empty
+    // answer here, and only that one. Everything else about the query stays an error
+    final var deployed = versionsByDefinitionId
         .computeIfAbsent(
             processDefinitionId,
             definitionId -> {
-              final var definition = repositoryService.getProcessDefinition(definitionId);
-              return definition == null
-                  ? ""
-                  : String.valueOf(definition.getVersion());
+              try {
+                final var definition = repositoryService.getProcessDefinition(definitionId);
+                return definition == null
+                    ? NOTHING_DEPLOYED
+                    : DeployedProcessVersion
+                        .of(String.valueOf(definition.getVersion()), definition.getVersionTag());
+              } catch (final org.camunda.bpm.engine.exception.NotFoundException e) {
+                return NOTHING_DEPLOYED;
+              }
             });
-    return version.isEmpty()
+    return deployed.version() == null
         ? null
-        : version;
+        : deployed;
 
   }
 
@@ -451,7 +499,8 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
       final int version,
       final String versionTag) {
 
-    versionsByDefinitionId.put(processDefinitionId, String.valueOf(version));
+    versionsByDefinitionId
+        .put(processDefinitionId, DeployedProcessVersion.of(String.valueOf(version), versionTag));
     definitionIdsByVersion
         .put(versionKey(workflowModuleId, bpmnProcessId, String.valueOf(version)), processDefinitionId);
     deployedVersions.put(workflowModuleId
