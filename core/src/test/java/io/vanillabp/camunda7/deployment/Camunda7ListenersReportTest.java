@@ -214,9 +214,10 @@ public class Camunda7ListenersReportTest {
     assertTrue(logged.contains("stops being portable"), () -> "what it costs the model: "
         + logged);
     assertFalse(
-        logged.contains("carries nothing back"),
-        () -> "and NOT the Camunda 8 sentence: on this engine a listener writes the shared values "
-            + "inside the engine's own transaction, exactly as a task does: "
+        logged.contains("What a listener method may write into the process instance depends"),
+        () -> "and NOT the Camunda 8 sentence: there it depends on the listener, while on this "
+            + "engine every listener writes the shared values inside the engine's own "
+            + "transaction, exactly as a task does: "
             + logged);
 
   }
