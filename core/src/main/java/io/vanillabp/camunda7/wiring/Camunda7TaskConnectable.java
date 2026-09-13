@@ -59,7 +59,33 @@ public record Camunda7TaskConnectable(
      * <code>camunda:formKey</code>; the handler (if any) is notified via task
      * listeners (CREATED/CANCELED) and never completes the task on return.
      */
-    USER_TASK
+    USER_TASK,
+    /**
+     * A {@code camunda:executionListener} somebody modelled, written as
+     * {@code camunda:expression}: the engine evaluates the expression, the handler runs
+     * while it is evaluated and the listener returns when the handler does. Served only
+     * where the application asked for it, see {@link Camunda7Listeners}.
+     */
+    EXECUTION_LISTENER_EXPRESSION,
+    /**
+     * A {@code camunda:executionListener} somebody modelled, written as
+     * {@code camunda:delegateExpression}: the engine expects the expression to yield a
+     * listener object, which is what the EL resolver hands it.
+     */
+    EXECUTION_LISTENER_DELEGATE_EXPRESSION
+  }
+
+  /**
+   * Whether this connectable serves a listener somebody modelled rather than a task of the
+   * model. A listener never leaves its element and never completes anything, which is the
+   * whole difference at runtime.
+   *
+   * @return Whether the connectable is one of the two execution-listener types
+   */
+  public boolean isExecutionListener() {
+
+    return (type == Type.EXECUTION_LISTENER_EXPRESSION) || (type == Type.EXECUTION_LISTENER_DELEGATE_EXPRESSION);
+
   }
 
   /**

@@ -66,6 +66,25 @@ public class VanillaBpCamunda7Properties {
 
     private Map<String, Camunda7ScopedProperties> adapters = Map.of();
 
+    /**
+     * The tasks of this workflow. Modelled here for one reason only: a key set at this level
+     * which the adapter does not resolve there has to be findable, so the boot can say where
+     * the key IS read instead of leaving a line which does nothing.
+     */
+    private Map<String, Camunda7TaskProperties> tasks = Map.of();
+
+  }
+
+  /**
+   * The Camunda 7 keys of one task - the most specific level, and the one
+   * <code>allow-listeners</code> does not resolve at.
+   */
+  @Getter
+  @Setter
+  public static class Camunda7TaskProperties {
+
+    private Map<String, Camunda7ScopedProperties> adapters = Map.of();
+
   }
 
   /**
@@ -80,6 +99,14 @@ public class VanillaBpCamunda7Properties {
      * for this scope.
      */
     private String serializationFormat;
+
+    /**
+     * Whether the execution listeners somebody modelled are served by
+     * <code>@WorkflowTask</code> methods, for this scope. A {@code Boolean} rather than a
+     * primitive, because unset has to be told apart from {@code false}: this is what lets a
+     * workflow module switch OFF what the adapter switched on.
+     */
+    private Boolean allowListeners;
 
   }
 
@@ -144,6 +171,99 @@ public class VanillaBpCamunda7Properties {
     return scoped != null
         ? scoped.getSerializationFormat()
         : null;
+
+  }
+
+  /**
+   * Resolves whether the execution listeners somebody modelled are served, most specific
+   * first: the workflow, its workflow module, the adapter. The most specific CONFIGURED value
+   * wins in both directions.
+   *
+   * @param adapterId The adapter id
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @return The setting together with the key it stands in, never <code>null</code>
+   */
+  public io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting allowListenersFor(
+      final String adapterId,
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    final var module = workflowModuleId != null
+        ? workflowModules.get(workflowModuleId)
+        : null;
+    final var workflow = (module != null) && (bpmnProcessId != null)
+        ? module
+            .getWorkflows()
+            .get(bpmnProcessId)
+        : null;
+    final var perWorkflow = workflow != null
+        ? workflow
+            .getAdapters()
+            .get(adapterId)
+        : null;
+    if ((perWorkflow != null) && (perWorkflow.getAllowListeners() != null)) {
+      return new io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting(
+          perWorkflow.getAllowListeners(), "vanillabp.workflow-modules.%s.workflows.%s.adapters.%s.%s"
+              .formatted(
+                  workflowModuleId, bpmnProcessId, adapterId,
+                  io.vanillabp.camunda7.wiring.Camunda7Listeners.ALLOW_LISTENERS_KEY));
+    }
+    final var perModule = module != null
+        ? module
+            .getAdapters()
+            .get(adapterId)
+        : null;
+    if ((perModule != null) && (perModule.getAllowListeners() != null)) {
+      return new io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting(
+          perModule.getAllowListeners(), "vanillabp.workflow-modules.%s.adapters.%s.%s"
+              .formatted(
+                  workflowModuleId, adapterId,
+                  io.vanillabp.camunda7.wiring.Camunda7Listeners.ALLOW_LISTENERS_KEY));
+    }
+    if (enginePropertiesFor(adapterId).isAllowListeners()) {
+      return new io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting(
+          true, io.vanillabp.camunda7.wiring.Camunda7Listeners.propertyKeyOf(adapterId));
+    }
+    return io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting.NOTHING_CONFIGURED;
+
+  }
+
+  /**
+   * Every <code>allow-listeners</code> this configuration puts at TASK level, fully spelled out
+   * - the level which does not resolve this key.
+   *
+   * @param adapterId The adapter id
+   * @return The keys found, in configuration order
+   */
+  public java.util.List<String> allowListenersKeysAtTaskLevel(
+      final String adapterId) {
+
+    return workflowModules
+        .entrySet()
+        .stream()
+        .flatMap(module -> module
+            .getValue()
+            .getWorkflows()
+            .entrySet()
+            .stream()
+            .flatMap(workflow -> workflow
+                .getValue()
+                .getTasks()
+                .entrySet()
+                .stream()
+                .filter(task -> {
+                  final var keys = task
+                      .getValue()
+                      .getAdapters()
+                      .get(adapterId);
+                  return (keys != null) && (keys.getAllowListeners() != null);
+                })
+                .map(task -> "vanillabp.workflow-modules.%s.workflows.%s.tasks.%s.adapters.%s.%s"
+                    .formatted(
+                        module.getKey(), workflow.getKey(), task.getKey(), adapterId,
+                        io.vanillabp.camunda7.wiring.Camunda7Listeners.ALLOW_LISTENERS_KEY))))
+        .toList();
 
   }
 

@@ -48,6 +48,10 @@ import lombok.Setter;
  *   <li><code>sleep-until-something-is-due</code> - OPTIONAL: the job executor waits
  *       until the next job is due instead of polling every 5 to 60 seconds; default
  *       <code>false</code>, see {@link Camunda7JobExecutorSleep};</li>
+ *   <li><code>allow-listeners</code> - OPTIONAL: whether the execution listeners somebody
+ *       MODELLED are served by <code>@WorkflowTask</code> methods, resolvable per workflow
+ *       module and workflow, default <code>false</code>, see
+ *       {@link io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver};</li>
  *   <li><code>db-metrics-reporting</code> - OPTIONAL: whether the engine's metrics
  *       reporter writes its counters to the database every 900 seconds. Unset means
  *       the opposite of the sleep, so an engine which is allowed to sleep is not woken
@@ -112,6 +116,26 @@ public class Camunda7EngineProperties {
    */
   @Setter
   private boolean acceptUnscopedIdentifiers = false;
+
+  /**
+   * Whether the execution listeners somebody MODELLED are served by <code>@WorkflowTask</code>
+   * methods. Adapter-level base of the most-specific-wins resolution over three levels (workflow
+   * &gt; workflow-module &gt; adapter), see
+   * {@link io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver}. Default
+   * <code>false</code>.
+   * <p>
+   * Without it a model carrying such a listener does not boot: the engine would evaluate the
+   * listener's expression itself, and a workflow reaching the element either fails on a name
+   * nothing resolves or runs a method the application never meant for that element. With it the
+   * listener is a task like any other - a method is asked for and a method serving no listener is
+   * reported - and what that costs is written into the boot log of every workflow module it
+   * applies to.
+   * <p>
+   * There is deliberately no TASK level: that level is keyed by a task DEFINITION, and whether a
+   * listener becomes a task at all is what this key decides.
+   */
+  @Setter
+  private boolean allowListeners = false;
 
   /**
    * Whether this adapter id's job executor waits until the next job is due instead of

@@ -45,6 +45,100 @@ public interface VanillaBpCamunda7Properties {
   Map<String, Camunda7WorkflowModuleKeys> workflowModules();
 
   /**
+   * Resolves whether the execution listeners somebody modelled are served, most specific first:
+   * the workflow, its workflow module, the adapter. The most specific CONFIGURED value wins in
+   * both directions.
+   *
+   * @param adapterId The adapter id
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @return The setting together with the key it stands in, never <code>null</code>
+   */
+  default io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting allowListenersFor(
+      final String adapterId,
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    final var module = workflowModuleId != null
+        ? workflowModules().get(workflowModuleId)
+        : null;
+    final var workflow = (module != null) && (bpmnProcessId != null)
+        ? module
+            .workflows()
+            .get(bpmnProcessId)
+        : null;
+    final var perWorkflow = workflow != null
+        ? workflow
+            .adapters()
+            .get(adapterId)
+        : null;
+    if ((perWorkflow != null) && perWorkflow.allowListeners().isPresent()) {
+      return new io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting(
+          perWorkflow.allowListeners().get(), "vanillabp.workflow-modules.%s.workflows.%s.adapters.%s.%s"
+              .formatted(
+                  workflowModuleId, bpmnProcessId, adapterId,
+                  io.vanillabp.camunda7.wiring.Camunda7Listeners.ALLOW_LISTENERS_KEY));
+    }
+    final var perModule = module != null
+        ? module
+            .adapters()
+            .get(adapterId)
+        : null;
+    if ((perModule != null) && perModule.allowListeners().isPresent()) {
+      return new io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting(
+          perModule.allowListeners().get(), "vanillabp.workflow-modules.%s.adapters.%s.%s"
+              .formatted(
+                  workflowModuleId, adapterId,
+                  io.vanillabp.camunda7.wiring.Camunda7Listeners.ALLOW_LISTENERS_KEY));
+    }
+    final var adapter = adapters().get(adapterId);
+    if ((adapter != null) && adapter.allowListeners().orElse(Boolean.FALSE)) {
+      return new io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting(
+          true, io.vanillabp.camunda7.wiring.Camunda7Listeners.propertyKeyOf(adapterId));
+    }
+    return io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver.Setting.NOTHING_CONFIGURED;
+
+  }
+
+  /**
+   * Every <code>allow-listeners</code> this configuration puts at TASK level, fully spelled out -
+   * the level which does not resolve this key.
+   *
+   * @param adapterId The adapter id
+   * @return The keys found
+   */
+  default java.util.List<String> allowListenersKeysAtTaskLevel(
+      final String adapterId) {
+
+    return workflowModules()
+        .entrySet()
+        .stream()
+        .flatMap(module -> module
+            .getValue()
+            .workflows()
+            .entrySet()
+            .stream()
+            .flatMap(workflow -> workflow
+                .getValue()
+                .tasks()
+                .entrySet()
+                .stream()
+                .filter(task -> {
+                  final var keys = task
+                      .getValue()
+                      .adapters()
+                      .get(adapterId);
+                  return (keys != null) && keys.allowListeners().isPresent();
+                })
+                .map(task -> "vanillabp.workflow-modules.%s.workflows.%s.tasks.%s.adapters.%s.%s"
+                    .formatted(
+                        module.getKey(), workflow.getKey(), task.getKey(), adapterId,
+                        io.vanillabp.camunda7.wiring.Camunda7Listeners.ALLOW_LISTENERS_KEY))))
+        .toList();
+
+  }
+
+  /**
    * The Camunda 7 keys of one <code>vanillabp.workflow-modules.&lt;module&gt;</code>
    * section which may override what the adapter section says.
    */
@@ -68,7 +162,27 @@ public interface VanillaBpCamunda7Properties {
   interface Camunda7WorkflowKeys {
 
     /**
-     * The per-adapter-id overrides of this workflow - the most specific level.
+     * The per-adapter-id overrides of this workflow.
+     */
+    Map<String, Camunda7ScopedKeys> adapters();
+
+    /**
+     * The tasks of this workflow. Modelled here for one reason only: a key set at this level
+     * which the adapter does not resolve there has to be findable, so the boot can say where
+     * the key IS read instead of leaving a line which does nothing.
+     */
+    Map<String, Camunda7TaskKeys> tasks();
+
+  }
+
+  /**
+   * The Camunda 7 keys of one task - the most specific level, and the one
+   * <code>allow-listeners</code> does not resolve at.
+   */
+  interface Camunda7TaskKeys {
+
+    /**
+     * The per-adapter-id overrides of this task.
      */
     Map<String, Camunda7ScopedKeys> adapters();
 
@@ -102,6 +216,13 @@ public interface VanillaBpCamunda7Properties {
      */
     Optional<String> serializationFormat();
 
+    /**
+     * Whether the execution listeners somebody modelled are served by
+     * <code>@WorkflowTask</code> methods, for this scope. Empty rather than <code>false</code>
+     * where nothing is configured, which is what lets a workflow module switch OFF what the
+     * adapter switched on.
+     */
+    Optional<Boolean> allowListeners();
 
   }
 
@@ -196,6 +317,14 @@ public interface VanillaBpCamunda7Properties {
      * mode). Default <code>false</code>.
      */
     Optional<Boolean> acceptUnscopedIdentifiers();
+
+    /**
+     * OPTIONAL: whether the execution listeners somebody MODELLED are served by
+     * <code>@WorkflowTask</code> methods. Adapter-level base of a resolution over three levels
+     * (workflow &gt; workflow-module &gt; adapter), default <code>false</code>, see
+     * {@link io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver}.
+     */
+    Optional<Boolean> allowListeners();
 
     /**
      * OPTIONAL: the job executor waits until the next job is due instead of polling every
