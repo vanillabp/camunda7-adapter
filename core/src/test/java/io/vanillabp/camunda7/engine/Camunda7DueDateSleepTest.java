@@ -16,6 +16,7 @@ import org.camunda.bpm.engine.ProcessEngine;
 import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
 import org.camunda.bpm.engine.impl.cfg.StandaloneProcessEngineConfiguration;
 import org.camunda.bpm.engine.impl.jobexecutor.JobExecutor;
+import org.camunda.bpm.engine.impl.jobexecutor.SequentialJobAcquisitionRunnable;
 import org.camunda.bpm.engine.variable.Variables;
 import org.camunda.bpm.model.bpmn.Bpmn;
 import org.camunda.bpm.model.bpmn.BpmnModelInstance;
@@ -39,8 +40,14 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * defaults.
  * <p>
  * The platform halves prove the wiring instead, each on its own datasource counter
- * ({@code Camunda7SleepingJobExecutorIT} on Spring Boot and the Quarkus lifecycle test),
- * because a correct strategy says nothing about a platform ever installing it.
+ * ({@code Camunda7SleepingEngineIT} on Spring Boot and {@code Camunda7SleepingEngineTest} on
+ * Quarkus), because a correct strategy says nothing about a platform ever installing it.
+ * <p>
+ * Where a measurement begins is read from the engine and not from the clock: a cycle which
+ * found nothing to do, with the acquisition thread parked afterwards. Before both of those
+ * the engine is backing off after work rather than sleeping, and a measurement which starts
+ * there measures the backoff. Waiting for a fixed number of polling intervals did that, and
+ * it turned a busy build machine into a red test.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -291,14 +298,95 @@ public class Camunda7DueDateSleepTest {
   }
 
   /**
-   * Lets the acquisition run its first cycle, then reports how many connections it takes
-   * while nothing is due.
+   * When the acquisition last started a cycle. The loop writes it into the context it keeps,
+   * so a cycle which ran while nobody was looking is still visible afterwards.
+   */
+  private long lastCycleAt() {
+
+    return ((SequentialJobAcquisitionRunnable) jobExecutor.getAcquireJobsRunnable())
+        .getAcquisitionContext()
+        .getAcquisitionTime();
+
+  }
+
+  /**
+   * Starts the executor and waits until the acquisition is asleep, which takes two things
+   * being true at once: its last cycle found nothing to do, and its thread is parked.
+   * <p>
+   * A cycle which found nothing is the one case whose wait the due date decides; a cycle
+   * which found work backs off instead. And the cycle which found nothing is still running
+   * for a moment after it says so, so the parked thread is what says the cycle is over and
+   * its connection given back. Starting a measurement before both were true measured the
+   * backoff and called it a sleep. Waiting for a fixed number of polling intervals did
+   * exactly that, and it made these measurements red on a machine busy with something else.
+   * <p>
+   * Nothing beyond that is waited for, and a wake-up is deliberately not waited for. The
+   * test's own questions of the engine are engine commands, and a committed engine command
+   * asks the acquisition to wake up, so an earlier version of this test sent such a wake-up
+   * itself and waited for the cycle it should cause. That timed out in four runs out of five
+   * on a loaded machine (Camunda 7.24.0, 2026-09-14): the acquisition copies the flag a
+   * wake-up sets into its cycle and clears it a few steps later, and this adapter's due-date
+   * query runs in between, so a wake-up arriving there is dropped. Waiting for the parked
+   * thread needs none of that - by then the wake-up has either been answered or been lost,
+   * and neither leaves anything on its way into the window.
+   * <p>
+   * The engine which does not sleep has no thread to ask, so there the cycle is all there
+   * is, which is enough: what that measurement asserts is that the engine keeps coming back.
+   *
+   * @return When the cycle which found nothing started
+   */
+  private long waitUntilTheEngineIsAsleep() throws InterruptedException {
+
+    jobExecutor.start();
+    final var deadline = System.currentTimeMillis() + PATIENCE;
+    for (;;) {
+      final var context = ((SequentialJobAcquisitionRunnable) jobExecutor.getAcquireJobsRunnable())
+          .getAcquisitionContext();
+      final var foundNothing = context
+          .areAllEnginesIdle() && !context.hasJobAcquisitionLockFailureOccurred() && (context
+              .getAcquisitionException() == null) && (context.getAcquisitionTime() > 0);
+      if (foundNothing && theAcquisitionThreadIsParked()) {
+        return context.getAcquisitionTime();
+      }
+      assertTrue(
+          System.currentTimeMillis() < deadline,
+          "the acquisition never ran a cycle which found nothing to do");
+      Thread.sleep(20);
+    }
+
+  }
+
+  /**
+   * Whether the thread running the acquisition cycles is waiting rather than working. The
+   * adapter answers which thread that is - {@code Camunda7WakeupAfterCommit} asks it about
+   * every committing thread - so the threads of this JVM are held against that answer
+   * instead of against a name somebody guessed.
+   *
+   * @return Whether it is parked, and <code>true</code> for an executor which does not
+   *         sleep, because there is no sleep to wait for
+   */
+  private boolean theAcquisitionThreadIsParked() {
+
+    if (!(jobExecutor.getAcquireJobsRunnable() instanceof Camunda7SleepingAcquisition acquisition)) {
+      return true;
+    }
+    return Thread
+        .getAllStackTraces()
+        .keySet()
+        .stream()
+        .filter(acquisition::runsTheAcquisition)
+        .anyMatch(
+            thread -> (thread.getState() == Thread.State.WAITING) || (thread.getState() == Thread.State.TIMED_WAITING));
+
+  }
+
+  /**
+   * Lets the acquisition fall asleep, then reports how many connections it takes while
+   * nothing is due.
    */
   private int connectionsTakenWhileNothingIsDue() throws InterruptedException {
 
-    jobExecutor.start();
-    // one cycle, so the measurement is about the waiting rather than about the start
-    Thread.sleep(POLLING_INTERVAL * 3L);
+    waitUntilTheEngineIsAsleep();
     final var before = connections.count();
     Thread.sleep(QUIET_WINDOW);
     return connections.count() - before;
@@ -311,9 +399,17 @@ public class Camunda7DueDateSleepTest {
 
     anEngine("c7-sleep-quiet", true);
 
+    final var fellAsleepAt = waitUntilTheEngineIsAsleep();
+    final var before = connections.count();
+    Thread.sleep(QUIET_WINDOW);
+
+    assertEquals(
+        fellAsleepAt,
+        lastCycleAt(),
+        "the acquisition ran another cycle while nothing was due, so it did not sleep");
     assertEquals(
         0,
-        connectionsTakenWhileNothingIsDue(),
+        connections.count() - before,
         "a sleeping acquisition must not take a single connection while nothing is due");
 
   }
@@ -335,27 +431,30 @@ public class Camunda7DueDateSleepTest {
   public void aJobDueLaterRunsAtItsDueDate() throws Exception {
 
     anEngine("c7-sleep-duedate", true);
-    jobExecutor.start();
-    Thread.sleep(POLLING_INTERVAL * 3L);
+    waitUntilTheEngineIsAsleep();
 
     // the engine hints its own executor only for a job due inside the executor's wait
     // time, so a timer further out is the case this feature has to cover itself
     final var before = connections.count();
+    final var dueAt = System.currentTimeMillis() + 2000;
     startTheTimerOf("PT2S");
 
     // nothing is asked of the engine while the timer runs, because every question of this
     // test would be counted as a connection as well
     Thread.sleep(1000);
-    assertEquals(
-        1,
-        runningWorkflows(),
-        "the timer is due in two seconds, so the workflow has to be waiting after one");
+    if (System.currentTimeMillis() < dueAt) {
+      assertEquals(
+          1,
+          runningWorkflows(),
+          "the timer is not due yet, so the workflow has to be waiting");
+    }
     Thread.sleep(2500);
+    // counted before the waiting below, which asks the engine on every turn
     final var spent = connections.count() - before;
-    assertEquals(0, runningWorkflows(), "the timer was due, so the workflow has to have ended");
+    waitForEveryWorkflowToEnd();
 
     // what those 3.5 seconds may cost: the start, the cycle the commit woke, the cycle at
-    // the due date, the job itself, the cycle after it, and the two questions above. A
+    // the due date, the job itself, the cycle after it, and the question above. A
     // polling engine would have come back thirty times instead
     assertTrue(
         spent < 15,
@@ -373,7 +472,7 @@ public class Camunda7DueDateSleepTest {
 
     // the acquisition is now asleep for half a minute
     startTheTimerOf("PT30S");
-    Thread.sleep(POLLING_INTERVAL * 3L);
+    waitUntilTheEngineIsAsleep();
 
     // and this commit has to pull the wake-up forward to the nearer due date
     startTheTimerOf("PT1S");
