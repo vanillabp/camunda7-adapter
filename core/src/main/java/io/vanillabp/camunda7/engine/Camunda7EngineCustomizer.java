@@ -24,10 +24,14 @@ import org.camunda.bpm.engine.impl.history.handler.HistoryEventHandler;
  * <p>
  * <b>Where the contributions land.</b> Parse listeners run before or after VanillaBP's
  * own, which is what decides the order of the listeners they attach to a BPMN element:
- * the built-in task listeners of a POST listener run after the ones VanillaBP attaches,
- * so an extension sees what VanillaBP did rather than the other way round. A history
- * event handler is installed as a COMPOSITE next to the engine's own, so the history
- * level and everything else about history stays exactly as configured.
+ * the built-in task listeners of a POST listener run after the ones VanillaBP attaches.
+ * A history event handler is installed as a COMPOSITE next to the engine's own, so the
+ * history level and everything else about history stays exactly as configured.
+ * <p>
+ * The order between an adapter and an extension is VanillaBP's promise, not this
+ * adapter's. The wiki page
+ * <a href="https://github.com/vanillabp/adapter-platform-integration/wiki/Extensions">Extensions</a>
+ * says what is promised and what is not.
  * <p>
  * On Spring Boot a customizer is a bean of this type; on Quarkus a CDI bean of it. Both
  * engine holders collect them while they build their engine.
