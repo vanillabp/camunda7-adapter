@@ -5,8 +5,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
+import org.camunda.bpm.engine.impl.jobexecutor.SequentialJobAcquisitionRunnable;
 import org.camunda.bpm.engine.impl.persistence.entity.ProcessDefinitionEntity;
 
+import io.vanillabp.camunda7.engine.Camunda7SleepingAcquisition;
 import io.vanillabp.camunda7.quarkus.runtime.Camunda7QuarkusEngineRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -143,7 +146,7 @@ public class C7E2eIntrospectionController {
   @Produces(MediaType.TEXT_PLAIN)
   public String jobExecutor() {
 
-    return ((org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl) engineRegistry
+    return ((ProcessEngineConfigurationImpl) engineRegistry
         .engineFor(ADAPTER_ID)
         .getProcessEngine()
         .getProcessEngineConfiguration())
@@ -167,6 +170,154 @@ public class C7E2eIntrospectionController {
   public String connectionsTaken() {
 
     return Long.toString(connectionsTaken.count());
+
+  }
+
+  /**
+   * What the engine's job acquisition is doing, and what it has cost the database so far.
+   * Nothing here touches the database, which is the point: a measurement of silence cannot
+   * ask its question through the thing it measures, and every engine command wakes the
+   * acquisition it is asking about.
+   * <p>
+   * The two values a measurement leans on are <code>lastCycleAt</code> and
+   * <code>foundNothing</code>. Together they say that the acquisition ran a cycle which
+   * found nothing to do and is therefore waiting for a due date rather than backing off
+   * after work. A cycle which runs later moves <code>lastCycleAt</code>, so a sleep which
+   * was interrupted cannot look like a sleep which held.
+   * <p>
+   * The engine's own rule has a fourth condition this cannot see, the executing threads
+   * being full. That case makes the acquisition busy rather than idle, so it shows up as
+   * <code>foundNothing</code> being false anyway.
+   *
+   * Whether that thread is parked is reported as well. The cycle which found nothing is
+   * still running for a moment after it says so, and the connection it gives back at the end
+   * of it would land inside a window opened too early.
+   *
+   * @return The acquisition's thread and whether it is parked, the moment of its last cycle,
+   *         whether that cycle found nothing, and the connections taken in total and by that
+   *         thread
+   */
+  @GET
+  @Path("/engine/acquisition")
+  public Map<String, Object> acquisition() {
+
+    final var runnable = (SequentialJobAcquisitionRunnable) ((ProcessEngineConfigurationImpl) engine()
+        .getProcessEngine()
+        .getProcessEngineConfiguration())
+        .getJobExecutor()
+        .getAcquireJobsRunnable();
+    final var context = runnable.getAcquisitionContext();
+    final var acquisitionThread = threadRunningTheAcquisition(runnable);
+
+    final var reported = new LinkedHashMap<String, Object>();
+    reported.put("thread", Long.valueOf(acquisitionThread));
+    reported.put("parked", Boolean.valueOf(isParked(acquisitionThread)));
+    reported.put("lastCycleAt", Long.valueOf(context.getAcquisitionTime()));
+    reported
+        .put(
+            "foundNothing",
+            Boolean
+                .valueOf(context.areAllEnginesIdle() && !context
+                    .hasJobAcquisitionLockFailureOccurred() && (context.getAcquisitionException() == null)));
+    reported.put("connectionsTaken", Long.valueOf(connectionsTaken.count()));
+    reported
+        .put(
+            "takenByTheAcquisition",
+            connectionsTaken
+                .diary()
+                .stream()
+                .filter(take -> take.threadId() == acquisitionThread)
+                .map(take -> "%d|%s".formatted(Long.valueOf(take.at()), take.threadName()))
+                .toList());
+    return reported;
+
+  }
+
+  /**
+   * Which thread runs the acquisition cycles right now. The adapter answers that question
+   * itself - {@code Camunda7WakeupAfterCommit} asks it about every committing thread - so
+   * the threads of the application are held against that answer instead of against a name
+   * somebody guessed.
+   *
+   * @param runnable The acquisition loop of the engine
+   * @return The thread's id, or -1 while no thread runs the loop
+   */
+  private boolean isParked(
+      final long threadId) {
+
+    return Thread
+        .getAllStackTraces()
+        .keySet()
+        .stream()
+        .filter(thread -> thread.threadId() == threadId)
+        .anyMatch(
+            thread -> (thread.getState() == Thread.State.WAITING) || (thread.getState() == Thread.State.TIMED_WAITING));
+
+  }
+
+  private long threadRunningTheAcquisition(
+      final SequentialJobAcquisitionRunnable runnable) {
+
+    if (!(runnable instanceof Camunda7SleepingAcquisition acquisition)) {
+      return -1;
+    }
+    return Thread
+        .getAllStackTraces()
+        .keySet()
+        .stream()
+        .filter(acquisition::runsTheAcquisition)
+        .mapToLong(Thread::threadId)
+        .findFirst()
+        .orElse(-1);
+
+  }
+
+  /**
+   * When the engine's next job falls due, which is the moment a sleeping acquisition wakes
+   * up at. The same question the sleep itself asks: the earliest due date of an active job
+   * which still has retries left.
+   * <p>
+   * Asking it costs a connection and wakes the acquisition, because every committed engine
+   * command does. So a measurement asks this BEFORE it starts looking and again after it
+   * stopped, never in between.
+   *
+   * @return The due date in epoch milliseconds and how many workflows are still running,
+   *         with an empty due date where the engine holds no job at all. A job the engine
+   *         gave no due date is due now, and is reported as the start of the epoch rather
+   *         than as nothing
+   */
+  @GET
+  @Path("/engine/next-due-date")
+  public Map<String, Object> nextDueDate() {
+
+    final var dueJobs = engine()
+        .getProcessEngine()
+        .getManagementService()
+        .createJobQuery()
+        .active()
+        .withRetriesLeft()
+        .orderByJobDuedate()
+        .asc()
+        .listPage(0, 1);
+    final var reported = new LinkedHashMap<String, Object>();
+    final var dueDate = dueJobs.isEmpty()
+        ? null
+        : dueJobs
+            .get(0)
+            .getDuedate();
+    reported
+        .put(
+            "dueAt",
+            dueJobs.isEmpty()
+                ? ""
+                : Long.toString(dueDate == null ? 0L : dueDate.getTime()));
+    reported
+        .put(
+            "runningWorkflows",
+            Long.valueOf(runtimeService()
+                .createProcessInstanceQuery()
+                .count()));
+    return reported;
 
   }
 
