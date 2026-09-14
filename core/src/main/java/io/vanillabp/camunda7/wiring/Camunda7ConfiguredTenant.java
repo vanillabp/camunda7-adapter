@@ -23,7 +23,7 @@ public record Camunda7ConfiguredTenant(
    * first: the workflow module, then the adapter. A blank value is read as nothing
    * configured, so an empty key does not deploy a workflow module into a tenant named "".
    *
-   * <h2>Why there is no per-workflow level</h2>
+   * <h4>Why there is no per-workflow level</h4>
    *
    * The mode is resolvable per workflow, a tenant is not: a tenant id is an attribute of the
    * DEPLOYMENT and this adapter makes one deployment per workflow module, so two workflows of
