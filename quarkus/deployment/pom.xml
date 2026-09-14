@@ -64,6 +64,22 @@
       <artifactId>test-utils</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- the engine needs a JSON dataformat before a nested value can travel in one, and
+         what the format makes of a number is what the lossy-format check measures. Test
+         scope and nowhere near the published artifacts: the same two dependencies serve
+         the Spring Boot integration tests. -->
+    <dependency>
+      <groupId>org.camunda.bpm</groupId>
+      <artifactId>camunda-engine-plugin-spin</artifactId>
+      <version>${camunda.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.camunda.spin</groupId>
+      <artifactId>camunda-spin-dataformat-json-jackson</artifactId>
+      <version>${camunda.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
