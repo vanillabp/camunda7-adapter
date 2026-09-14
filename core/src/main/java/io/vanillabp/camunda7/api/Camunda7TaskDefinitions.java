@@ -36,7 +36,8 @@ import org.camunda.bpm.model.bpmn.instance.UserTask;
  * writes into its own wiring. A story which changes the reported value is a change of
  * behaviour and is not this one.
  *
- * @see Camunda7TaskDefinitionsTest
+ * <p>
+ * The rules above are held by <code>Camunda7TaskDefinitionsTest</code>.
  */
 public final class Camunda7TaskDefinitions {
 

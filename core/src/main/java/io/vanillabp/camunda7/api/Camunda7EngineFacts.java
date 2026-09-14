@@ -32,7 +32,8 @@ import io.vanillabp.integration.adapter.spi.version.DeployedProcessVersion;
  * until the deployment service of this adapter id exists. Both are documented where they
  * stand.
  *
- * @see Camunda7EngineFactsTest
+ * <p>
+ * The promises above are held by <code>Camunda7EngineFactsTest</code>.
  */
 public final class Camunda7EngineFacts {
 

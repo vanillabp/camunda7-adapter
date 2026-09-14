@@ -181,14 +181,14 @@ public final class Camunda7Scoping {
    * The identifiers of one model which the WORKFLOW MODULE scopes: message names, signal
    * names, error codes and escalation codes, as the application knows them.
    *
-   * <h2>Why it costs nothing</h2>
+   * <h4>Why it costs nothing</h4>
    *
    * {@link #apply} rewrites exactly these four while it scopes a model, so the adapter
    * holds all of them at that moment, and a model the engine still holds is being read
    * anyway when somebody asks what an old version declares. Nothing is queried for it and
    * nothing is kept.
    *
-   * <h2>Why no task definition is among them</h2>
+   * <h4>Why no task definition is among them</h4>
    *
    * A task definition is process-local on this engine, which is the row this class' own
    * table explains: the expression is evaluated inside the process by VanillaBP's EL

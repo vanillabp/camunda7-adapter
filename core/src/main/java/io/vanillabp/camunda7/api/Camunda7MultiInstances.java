@@ -42,7 +42,8 @@ import io.vanillabp.integration.adapter.spi.workflowtask.MultiInstanceValue;
  * activity gives. The two cannot be told apart here, and a caller which has to tell them
  * apart asks the engine's history instead.
  *
- * @see Camunda7MultiInstancesTest
+ * <p>
+ * The promises above are held by <code>Camunda7MultiInstancesTest</code>.
  */
 public final class Camunda7MultiInstances {
 

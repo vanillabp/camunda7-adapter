@@ -26,7 +26,8 @@ import org.camunda.bpm.engine.impl.persistence.entity.ExecutionEntity;
  * an instance nobody knows anything about cannot be shown to be a called one. A caller which
  * has to tell "no root recorded" from "no history at all" apart asks the history itself.
  *
- * @see Camunda7ExecutionsTest
+ * <p>
+ * The rule above is held by <code>Camunda7ExecutionsTest</code>.
  */
 public final class Camunda7Executions {
 

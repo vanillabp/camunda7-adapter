@@ -94,7 +94,7 @@ public final class Camunda7TenantCheck {
    * Warns where the engine still runs workflows of this process somewhere the configured
    * scope does not reach.
    *
-   * <h2>Which mistake this catches</h2>
+   * <h4>Which mistake this catches</h4>
    *
    * <code>name-clash-avoidance</code> decides where a workflow module's processes live,
    * and its default is <code>by-adapter</code>, which is what VanillaBP 1 did: a tenant
@@ -109,7 +109,7 @@ public final class Camunda7TenantCheck {
    * and simply out of reach. Hence a query at startup, rather than trust in the guide
    * being read.
    *
-   * <h2>Why it warns rather than ending the boot</h2>
+   * <h4>Why it warns rather than ending the boot</h4>
    *
    * The finding has a legitimate reading: an application really may be leaving old
    * workflows behind, which is what the last step of a BPMS migration looks like. Ending

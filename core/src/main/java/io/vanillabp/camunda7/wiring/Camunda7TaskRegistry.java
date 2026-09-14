@@ -367,7 +367,7 @@ public class Camunda7TaskRegistry {
    * The way back from what the engine reports to what the application wrote: a tenant and a
    * process definition key become the workflow module and the plain BPMN process id.
    *
-   * <h2>When the answer is complete</h2>
+   * <h4>When the answer is complete</h4>
    *
    * A process enters this registry while the deployment pipeline wires it, in
    * <code>wireBpmn</code>, which is before the engine parses that workflow module's files
@@ -379,7 +379,7 @@ public class Camunda7TaskRegistry {
    * what a second registry filled at another stage of the pipeline gets wrong: the two see a
    * process at different moments and the process is reported under the wrong module.
    *
-   * <h2>What an empty answer means</h2>
+   * <h4>What an empty answer means</h4>
    *
    * That this application deployed no such process. An embedded engine may hold the
    * definitions of another application on the same database, and a definition of a release
