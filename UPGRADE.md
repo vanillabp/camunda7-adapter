@@ -291,3 +291,28 @@ version 1 shape.
 The [README section](https://github.com/vanillabp/camunda7-adapter/blob/main/README.md#listeners-somebody-modelled)
 and the [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#listeners-somebody-modelled)
 of the wiki carry the details.
+
+### A called process is told about the iteration of its caller, unless it has a workflow aggregate of its own
+
+Version 1 reported ONE multi-instance level, the innermost one, and it reported none at all for the
+most ordinary decomposition there is. A plain call activity inside a multi-instance subprocess, with
+the called process in a BPMN file of its own, ended the task with
+`No multi-instance context found for element '...' or its parents!`. The same models with both
+processes written into ONE file worked, because the lookup then found the enclosing element by
+chance. Version 2 reports every level of every caller, outermost first, whichever way the files are
+split.
+
+A handler which used to fail with that message runs now, and nothing has to be changed for it.
+
+A handler may now name an element which encloses its own. `@MultiInstanceElement("OrderBatch")` on a
+task inside `OrderBatch` used to be the only name the map held, and an outer element was answered
+with `null` or with a `NullPointerException` inside the framework. Both are answered now, and a
+`MultiInstanceElementResolver` finally sees the sorted map from outermost to innermost its javadoc
+always promised.
+
+A process with a workflow aggregate of ITS OWN is told nothing about the iteration which called it.
+Version 1 took every call activity for decomposition and reported across it. Version 2 asks whether
+the calling and the called process work on the same workflow aggregate, which is what the business
+key follows as well, and it reports nothing where they do not. If a handler of such a process reads
+`@MultiInstanceElement` of a caller today, model the value into the called process, for example with
+a `camunda:in` on the call activity, and read it with `@TaskParam`.

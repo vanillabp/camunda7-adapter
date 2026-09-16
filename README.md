@@ -337,6 +337,26 @@ JTA transaction around two independent data sources is still two commits, and th
 already treats such an engine as separate everywhere else. `Camunda7EngineFactsOnQuarkusTest`
 pins it on that platform, `Camunda7EngineFactsIT` and `Camunda7AdapterBootTest` on Spring Boot.
 
+### The multi-instance levels this adapter reports
+
+`Camunda7MultiInstances` walks the execution tree upwards and collects every multi-instance
+activity on the way, outermost first. The walk takes the BPMN model of EVERY execution it stands
+on rather than the one it started in, which is what lets it leave the process the task is modelled
+in: an execution of the calling process has to be looked up in the calling model, and looking it up
+in the model of the called process loses the level. Version 1 took the model once and lost it
+there, and so did this version until the walk was given a model per execution.
+
+The step into a calling process is taken where the called process continues the caller's workflow
+aggregate, which the deployment writes onto the call activity as a `camunda:property` named
+`vanillabp:sameWorkflowAggregate` (decision 22 in [`DECISIONS.md`](./DECISIONS.md)). A process with
+an aggregate of its own is a business case of its own and hears nothing about the iteration which
+called it.
+
+One level cannot be answered at all, and it is worth knowing before a handler asks for it. The item
+of an iteration is the variable named by `camunda:elementVariable`, so a multi-instance element
+whose model names none, a cardinality-based one above all, has no item to report and
+`@MultiInstanceElement` for it receives `null`. The index and the total are there either way.
+
 ### Two engines on one database: `table-prefix`
 
 `vanillabp.adapters.<id>.table-prefix` sets Camunda's `databaseTablePrefix`, which is how

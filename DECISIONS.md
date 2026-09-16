@@ -64,7 +64,8 @@ this adapter has to put into the model before it is deployed, so `prepareBpmn` a
 add: the `asyncBefore`/`asyncAfter` flags which make a service-like task a transaction boundary,
 built-in task listeners for the user-task events, execution listeners for the workflow starts the
 engine initiates and for the end of a workflow, the business key handed into a call activity which
-runs on the SAME workflow aggregate, and the scoped identifiers of decision 3.
+runs on the SAME workflow aggregate together with the note saying so (decision 22), and the scoped
+identifiers of decision 3.
 
 Each of those is bounded by a rule which keeps the deployed model predictable. A listener is
 added only where a handler exists, the business key is not injected where the called process has
@@ -627,3 +628,39 @@ rule which fills in the element id is published rather than applied.
 what each entry point promises.
 
 See [What an extension may ask this adapter](./README.md#what-an-extension-may-ask-this-adapter).
+
+### 22. The multi-instance chain crosses a call activity, and the deployed model says where it may
+
+Camunda 7 keeps the item, the index and the total of an iteration in the execution tree, and that
+tree does not end at a process boundary: the execution of a called process points back at the call
+activity which started it. So the walk which collects the levels of a task can carry on in the
+calling process, and it does. A task of a called process is told the iteration its call activity
+sits in, over as many levels as the models nest, and the application models nothing for it.
+
+Whether the walk SHOULD carry on is a question about the workflow aggregate rather than about the
+model. A called process which continues the caller's aggregate continues its business case, and
+the iteration the caller stands in belongs to that case. A process with an aggregate of its own is
+a business case of its own, and what the caller iterates over says nothing about it. Version 1
+assumed every call activity was decomposition, which is the assumption this entry drops.
+
+The core answers that question while the application starts, from what its workflow services
+declare. The walk needs the answer while a workflow runs, where there is no core to ask, so the
+answer travels in the model which was deployed: a call activity whose called process continues the
+caller's aggregate gets a `camunda:property` named `vanillabp:sameWorkflowAggregate`, written next
+to the business key of decision 5 and read by `Camunda7MultiInstances`. Two things follow from
+that. An older version of a process which the engine still runs keeps the answer it was deployed
+with, which is what the workflows still standing in it need. And a call activity which names the
+process to call in an expression carries no note, because nobody could be asked before it runs, so
+the walk ends there the way it ends at a foreign aggregate.
+
+The values themselves are never copied anywhere. The engine holds them in the executions of the
+calling process, and a called process which is not told about them can still read what the model
+passes it. What ends at the boundary is what this adapter REPORTS, which is the only place where
+the difference between two business cases is known.
+
+`Camunda7MultiInstancesAcrossCallActivitiesTest` runs the shapes against an embedded engine, with
+every called process in a BPMN file of its own: with the calling and the called process in one
+file the walk finds the enclosing element by chance, which is how the missing model of the caller
+stayed invisible from version 1 until this entry was written.
+
+See [The iteration a called process runs in](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#the-iteration-a-called-process-runs-in).
