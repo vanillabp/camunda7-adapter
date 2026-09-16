@@ -971,6 +971,41 @@ for the plugin section, `Camunda7ExpressionIdentifiersTest` for the paths and pl
 the startup reads, and `Camunda7UnsharedExpressionCheckIT` for what a boot actually says
 about the models of the expression suite.
 
+## What a `@TaskParam` reads here
+
+The value is the engine's answer, and the conversion into the type the handler declared is
+the platform's. `Camunda7WorkflowTaskBehavior#getTaskParameter` returns
+`execution.getVariableLocal(name)`, which is the deserialized value of the task's local
+variable, and it converts nothing. What a parameter may be declared as, and which pairs are
+refused, is documented once, with the conversion, in the
+[migration adapter](https://github.com/vanillabp/adapter-platform-integration/blob/main/migration-adapter/README.md),
+section "What a `@TaskParam` may be declared as".
+
+Three things about that value are Camunda 7's own.
+
+An input mapping writes the value a SECOND time. The engine evaluates the expression and
+stores the result as a local variable of the task's execution, and that write uses the
+engine's `defaultSerializationFormat`, which this adapter fills from the adapter level only
+(`Camunda7EngineHolder`, and `Camunda7QuarkusEngineHolder` on Quarkus). The aggregate push
+takes its format from the level resolved for the workflow, so an application which configures
+`serialization-format` for one workflow module has the two disagree. That half is read off
+the code and not measured: the runs which measured this configured the format for the adapter,
+where the two agree.
+
+What a parameter reads without an input mapping is decided by the model. Camunda 7 reads the
+execution's own scope, so a task standing straight in the process sees a process variable
+while the same task on a branch of a parallel gateway or inside an embedded subprocess sees
+`null`. Camunda 8 answers this the other way round and resolves a job's variables up the
+scope hierarchy, so a model ported between the two changes what its handler gets. Declare
+the input mapping rather than relying on either.
+
+The serialization format decides the scale of a decimal, not its value. Without a format the
+engine writes Java serialization and a `BigDecimal` of `120.50` comes back as `120.50`; with
+`application/json` it comes back as `120.5`. Both are the same number, so both convert into
+a `Double` and both are refused by an `int`. `AbstractParamTypesIT` runs the same cells in
+both worlds, with `Camunda7ParamTypesIT` and `Camunda7ParamTypesJsonIT` naming the one cell
+which differs.
+
 ## Signals
 
 `ProcessService.sendSignal(name)` broadcasts through `RuntimeService.createSignalEvent`
