@@ -722,6 +722,14 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                   .formatted(connectable.taskDefinition(), bpmnProcessId, workflowModuleId));
         });
 
+    // A handler reads the item of an iteration out of the variable the model names in
+    // 'camunda:elementVariable'. An element naming none hands no item over, so the
+    // parameter would receive null once a workflow reaches the task and nothing would say
+    // why. Only this adapter reads the model and only the core scans the handlers, so
+    // this is the one place the two halves meet
+    refuseHandlersWantingAnItemTheModelHasNot(
+        workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model, connectables);
+
     connectables.forEach(taskRegistry::register);
 
     // a process the engine starts on its own may have no tasks at all, so the way
@@ -1089,6 +1097,58 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             .putIfAbsent(
                 "%s|%s|%s".formatted(connectable.elementId(), connectable.taskDefinition(), connectable.type()),
                 connectable));
+
+  }
+
+  /**
+   * Ends the deployment where a <code>&#64;WorkflowTask</code> method wants the item of a
+   * multi-instance element this model never names one for.
+   * <p>
+   * Only elements of THIS model are judged. The multi-instance chain crosses a call
+   * activity, so a task of a called process asks for an element of its caller, and this
+   * model is the wrong place to look for that element. An id nothing here knows is
+   * therefore no finding.
+   * <p>
+   * The core is asked by the task definition AND by the element id, which is the pair
+   * {@code validateTaskWiring} matches a method against: a method may name either of the
+   * two, and a method naming the element id would otherwise be missed.
+   * <p>
+   * Every finding of the process goes into ONE message, the way the wiring validation
+   * reports every unwired task at once - a developer fixing one model should not have to
+   * restart to meet the next line of the same defect.
+   */
+  private void refuseHandlersWantingAnItemTheModelHasNot(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String scopedBpmnProcessId,
+      final BpmnModelInstance model,
+      final List<Camunda7TaskConnectable> connectables) {
+
+    final var withoutAnItem = Camunda7MultiInstanceItems.elementsWithoutAnItem(model, scopedBpmnProcessId);
+    if (withoutAnItem.isEmpty()) {
+      return;
+    }
+    final var findings = new LinkedList<Camunda7MultiInstanceItems.Finding>();
+    for (final var connectable : connectables) {
+      final var wanted = new java.util.LinkedHashSet<String>();
+      wanted
+          .addAll(workflowTaskWiring
+              .multiInstanceElementNames(workflowModuleId, bpmnProcessId, connectable.taskDefinition()));
+      wanted
+          .addAll(workflowTaskWiring
+              .multiInstanceElementNames(workflowModuleId, bpmnProcessId, connectable.elementId()));
+      wanted.retainAll(withoutAnItem);
+      if (!wanted.isEmpty()) {
+        findings
+            .add(new Camunda7MultiInstanceItems.Finding(
+                connectable.elementId(), connectable.taskDefinition(), wanted));
+      }
+    }
+    if (findings.isEmpty()) {
+      return;
+    }
+    throw new IllegalStateException(
+        Camunda7MultiInstanceItems.refusal(findings, bpmnProcessId, workflowModuleId));
 
   }
 

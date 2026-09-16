@@ -352,10 +352,27 @@ aggregate, which the deployment writes onto the call activity as a `camunda:prop
 an aggregate of its own is a business case of its own and hears nothing about the iteration which
 called it.
 
-One level cannot be answered at all, and it is worth knowing before a handler asks for it. The item
-of an iteration is the variable named by `camunda:elementVariable`, so a multi-instance element
-whose model names none, a cardinality-based one above all, has no item to report and
-`@MultiInstanceElement` for it receives `null`. The index and the total are there either way.
+One level cannot be answered at all, and the deployment says so rather than letting a handler find
+out. The item of an iteration is the variable named by `camunda:elementVariable`, so a
+multi-instance element whose model names none, a cardinality-based one above all, has no item to
+report. The index and the total are there either way.
+
+`Camunda7MultiInstanceItems` joins the two halves of that while `wireBpmn` runs. This adapter reads
+the model and collects the multi-instance elements of the process which name no
+`camunda:elementVariable`. The core answers `WorkflowTaskWiring#multiInstanceElementNames` for every
+task wired here, which is the element ids the methods serving it declare `@MultiInstanceElement`
+for. Where the two meet, the boot ends with a message naming the task, the element, the attribute
+and the two ways out.
+
+Neither half alone would do. An element which iterates a number of times is a model somebody meant
+to write, and so is a handler which reads the index and the total only; refusing either would end
+the boot of an application that does nothing wrong. Only the pairing is a defect, and it used to
+show up as a `null` parameter with nothing saying why.
+
+An element id this model does not know is no finding. The chain crosses a call activity, so a task
+of a called process asks for an element of its caller, and this model is the wrong place to look for
+it. The core is asked by the task definition and by the element id, because a method may name either
+of the two.
 
 ### Two engines on one database: `table-prefix`
 

@@ -75,6 +75,28 @@ public final class Camunda7MultiInstances {
   }
 
   /**
+   * The variable an element hands the item of the current round over in, or
+   * <code>null</code> where the model names none. An element which names none iterates
+   * without ever saying what the value of the round is called, so a handler asking for
+   * that item reads <code>null</code>; the deployment refuses such a pairing, see
+   * {@code Camunda7MultiInstanceItems}.
+   * <p>
+   * Published here because the deployment reads the same attribute, and reading an
+   * attribute by namespace is the one part of this class a Camunda 7 fork changes.
+   *
+   * @param loop The multi-instance characteristics of the element
+   * @return The variable name, or <code>null</code>
+   */
+  public static String elementVariableOf(
+      final MultiInstanceLoopCharacteristics loop) {
+
+    return loop == null
+        ? null
+        : loop.getAttributeValueNs(CAMUNDA_NS, ELEMENT_VARIABLE_ATTRIBUTE);
+
+  }
+
+  /**
    * The multi-instance scopes of an execution the engine handed over, which is what a
    * delegate, a listener or a task behaviour has at hand.
    *
@@ -224,7 +246,7 @@ public final class Camunda7MultiInstances {
     if (!(index instanceof final Integer itemNo) || !(total instanceof final Integer totalCount)) {
       return java.util.Optional.empty();
     }
-    final var elementVariable = loop.getAttributeValueNs(CAMUNDA_NS, ELEMENT_VARIABLE_ATTRIBUTE);
+    final var elementVariable = elementVariableOf(loop);
     final var item = elementVariable == null
         ? null
         : execution.getVariable(elementVariable);

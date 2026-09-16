@@ -316,3 +316,28 @@ the calling and the called process work on the same workflow aggregate, which is
 key follows as well, and it reports nothing where they do not. If a handler of such a process reads
 `@MultiInstanceElement` of a caller today, model the value into the called process, for example with
 a `camunda:in` on the call activity, and read it with `@TaskParam`.
+
+### A handler asking for an item the model hands none over for ends the boot
+
+`@MultiInstanceElement` reads the variable a multi-instance element names in
+`camunda:elementVariable`. An element naming none never says what the value of a round is called,
+so in version 1 the parameter received `null` and nothing said why. A cardinality-based element is
+the everyday case: it iterates a number of times and walks over nothing at all.
+
+Version 2 says it while the application boots. The deployment reads the multi-instance elements of
+the model, asks the core which of them a `@WorkflowTask` method wants the item of, and ends the boot
+where the two meet. The message names the task, the element, the attribute the model would have to
+carry and the two ways out.
+
+Either write the attribute on the element, giving it a collection to walk:
+
+```xml
+<bpmn:multiInstanceLoopCharacteristics camunda:collection="${items}" camunda:elementVariable="item"/>
+```
+
+Or drop the parameter. `@MultiInstanceIndex` and `@MultiInstanceTotal` are answered by every
+multi-instance element, whatever it iterates, so a handler which only counts needs no change to its
+model.
+
+Nothing else is refused. An element which iterates a number of times still deploys where no handler
+asks for its item, and so does a collection whose handler reads the index and the total only.
