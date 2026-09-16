@@ -584,11 +584,12 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         .containsKey(filename);
     if (!modelAlreadyScoped) {
       // A call activity of this engine does not pass the business key -
-      // which holds the workflow aggregate's ID - unless the model says so. Injected
-      // BEFORE scoping, which rewrites the called elements: here the process IDs are
+      // which holds the workflow aggregate's ID - unless the model says so, and what the
+      // core answers about the aggregate is needed again while a workflow runs. Both are
+      // done BEFORE scoping, which rewrites the called elements: here the process IDs are
       // still the ones the application knows
       io.vanillabp.camunda7.wiring.Camunda7CallActivities
-          .propagateBusinessKey(model, workflowModuleId, workflowTaskWiring);
+          .prepareCallActivities(model, workflowModuleId, workflowTaskWiring);
       // the names the engine resolves across process definitions, read while they are
       // still the ones the application modelled: scoping rewrites exactly these, so the
       // answer to "which of them does this module declare" is free right here

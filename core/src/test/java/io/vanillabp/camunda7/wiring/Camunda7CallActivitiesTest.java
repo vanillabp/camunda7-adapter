@@ -2,6 +2,7 @@ package io.vanillabp.camunda7.wiring;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -11,6 +12,7 @@ import org.camunda.bpm.model.bpmn.Bpmn;
 import org.camunda.bpm.model.bpmn.BpmnModelInstance;
 import org.camunda.bpm.model.bpmn.instance.CallActivity;
 import org.camunda.bpm.model.bpmn.instance.camunda.CamundaIn;
+import org.camunda.bpm.model.bpmn.instance.camunda.CamundaProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -93,8 +95,16 @@ public class Camunda7CallActivitiesTest {
   private static BpmnModelInstance preparedModel() {
 
     final var model = Bpmn.readModelFromStream(new ByteArrayInputStream(BPMN.getBytes(UTF_8)));
-    Camunda7CallActivities.propagateBusinessKey(model, MODULE, CORE);
+    Camunda7CallActivities.prepareCallActivities(model, MODULE, CORE);
     return model;
+
+  }
+
+  private static CallActivity callActivity(
+      final BpmnModelInstance model,
+      final String callActivityId) {
+
+    return (CallActivity) model.getModelElementById(callActivityId);
 
   }
 
@@ -147,6 +157,61 @@ public class Camunda7CallActivitiesTest {
   public void expressionsAreLeftAlone() {
 
     assertEquals(List.of(), businessKeysOf(preparedModel(), "whateverTheApplicationDecides"));
+
+  }
+
+  @Test
+  @DisplayName("The note about the workflow aggregate is written where the aggregate is the same")
+  public void theSharedAggregateIsNoted() {
+
+    final var model = preparedModel();
+
+    assertTrue(
+        Camunda7CallActivities.continuesTheCallersWorkflowAggregate(callActivity(model, "assessRisk")),
+        "a process called on the same aggregate continues the caller's business case");
+    assertTrue(
+        Camunda7CallActivities.continuesTheCallersWorkflowAggregate(callActivity(model, "collectDocuments")),
+        "also inside a subprocess");
+    assertTrue(
+        Camunda7CallActivities.continuesTheCallersWorkflowAggregate(callActivity(model, "assessRiskWithOwnKey")),
+        "a business key the application modelled itself says nothing about the aggregate");
+
+  }
+
+  @Test
+  @DisplayName("A call activity nobody could be asked about carries no note")
+  public void whatCannotBeAnsweredIsNotNoted() {
+
+    final var model = preparedModel();
+
+    assertFalse(
+        Camunda7CallActivities.continuesTheCallersWorkflowAggregate(callActivity(model, "chargeCard")),
+        "a process with an aggregate of its own");
+    assertFalse(
+        Camunda7CallActivities
+            .continuesTheCallersWorkflowAggregate(callActivity(model, "whateverTheApplicationDecides")),
+        "a called element which is an expression names a process nobody knows before it runs");
+
+  }
+
+  @Test
+  @DisplayName("A model prepared twice carries the note once")
+  public void preparingTwiceNotesOnce() {
+
+    final var model = preparedModel();
+    Camunda7CallActivities.prepareCallActivities(model, MODULE, CORE);
+
+    assertEquals(
+        1,
+        callActivity(model, "assessRisk")
+            .getExtensionElements()
+            .getElementsQuery()
+            .filterByType(CamundaProperties.class)
+            .list()
+            .stream()
+            .mapToLong(properties -> properties.getCamundaProperties().size())
+            .sum(),
+        "the note is written where it is missing, not once per preparation");
 
   }
 

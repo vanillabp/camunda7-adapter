@@ -1,17 +1,22 @@
 package io.vanillabp.camunda7.wiring;
 
+import java.util.stream.Stream;
+
 import org.camunda.bpm.model.bpmn.BpmnModelInstance;
 import org.camunda.bpm.model.bpmn.instance.CallActivity;
 import org.camunda.bpm.model.bpmn.instance.ExtensionElements;
+import org.camunda.bpm.model.bpmn.instance.FlowElement;
 import org.camunda.bpm.model.bpmn.instance.Process;
 import org.camunda.bpm.model.bpmn.instance.camunda.CamundaIn;
+import org.camunda.bpm.model.bpmn.instance.camunda.CamundaProperties;
+import org.camunda.bpm.model.bpmn.instance.camunda.CamundaProperty;
 
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring;
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * What a call activity needs on Camunda 7 to continue the SAME business case: the
- * business key.
+ * business key, and a note saying that this is what it does.
  * <p>
  * VanillaBP keeps the workflow aggregate's ID in Camunda's business key. Camunda 7
  * does not pass the business key to a called process unless the model says so, so the
@@ -34,8 +39,19 @@ import lombok.extern.slf4j.Slf4j;
  * modelled wins.</li>
  * </ul>
  * <p>
+ * The same question needs a second answer while a workflow runs, so a call activity whose
+ * called process continues the caller's workflow aggregate also gets a
+ * <code>camunda:property</code> saying so. The multi-instance walk
+ * ({@code Camunda7MultiInstances}) reads it when it leaves a called process: the iteration
+ * of a caller belongs to a called process which continues the caller's business case, and
+ * to no other. Nobody can be asked about that while a workflow runs, because the core
+ * answers it from declarations which are read while the application starts. So the answer
+ * travels with the model that was deployed, and an older version of a process the engine
+ * still runs keeps the answer it was deployed with.
+ * <p>
  * Why the business key is injected here rather than left to the application, and why it is not
- * injected blindly, is decision 5 in the repository's DECISIONS.md.
+ * injected blindly, is decision 5 in the repository's DECISIONS.md. What the note on a call
+ * activity is for is decision 22.
  */
 @Slf4j
 public final class Camunda7CallActivities {
@@ -45,20 +61,31 @@ public final class Camunda7CallActivities {
    */
   static final String PARENT_BUSINESS_KEY_EXPRESSION = "#{execution.processBusinessKey}";
 
+  /**
+   * The <code>camunda:property</code> this class writes onto a call activity whose called
+   * process works on the workflow aggregate of the calling one. It is written where the
+   * answer is known, so a call activity without it is one of three things: the called
+   * process has an aggregate of its own, the process to call is named by an expression and
+   * was unknown while the model was deployed, or the model was not prepared by this adapter
+   * at all.
+   */
+  public static final String SAME_WORKFLOW_AGGREGATE_PROPERTY = "vanillabp:sameWorkflowAggregate";
+
   private Camunda7CallActivities() {
     // utility class
   }
 
   /**
-   * Injects the business-key propagation into the call activities of the given model
-   * (see the class comment). Called BEFORE name-clash avoidance rewrites the called
-   * elements, so the process IDs are the ones the application knows.
+   * Prepares the call activities of the given model: the business-key propagation and the
+   * note about the workflow aggregate (see the class comment). Called BEFORE name-clash
+   * avoidance rewrites the called elements, so the process IDs are the ones the
+   * application knows.
    *
    * @param model The BPMN model of one file
    * @param workflowModuleId The workflow module the file belongs to
    * @param workflowTaskWiring The core, asked which processes share an aggregate
    */
-  public static void propagateBusinessKey(
+  public static void prepareCallActivities(
       final BpmnModelInstance model,
       final String workflowModuleId,
       final WorkflowTaskWiring workflowTaskWiring) {
@@ -79,6 +106,7 @@ public final class Camunda7CallActivities {
               .workflowsShareTheWorkflowAggregate(workflowModuleId, callingProcessId, calledElement)) {
             return;
           }
+          noteTheSharedWorkflowAggregate(model, callActivity);
           if (passesBusinessKeyAlready(callActivity)) {
             return;
           }
@@ -133,6 +161,76 @@ public final class Camunda7CallActivities {
         .anyMatch(camundaIn -> (camundaIn.getCamundaBusinessKey() != null) && !camundaIn
             .getCamundaBusinessKey()
             .isBlank());
+
+  }
+
+  /**
+   * Whether the called process of the given call activity continues the calling process'
+   * workflow aggregate, read from the note this class wrote while the model was deployed.
+   *
+   * @param element The element an execution stands on, of any kind and possibly
+   *          <code>null</code>
+   * @return Whether this is a call activity carrying the note
+   */
+  public static boolean continuesTheCallersWorkflowAggregate(
+      final FlowElement element) {
+
+    if (!(element instanceof final CallActivity callActivity)) {
+      return false;
+    }
+    return propertiesOf(callActivity)
+        .anyMatch(property -> SAME_WORKFLOW_AGGREGATE_PROPERTY.equals(property.getCamundaName()));
+
+  }
+
+  /**
+   * Writes the note the multi-instance walk reads. A model prepared twice carries it once.
+   */
+  private static void noteTheSharedWorkflowAggregate(
+      final BpmnModelInstance model,
+      final CallActivity callActivity) {
+
+    if (continuesTheCallersWorkflowAggregate(callActivity)) {
+      return;
+    }
+    final var property = model.newInstance(CamundaProperty.class);
+    property.setCamundaName(SAME_WORKFLOW_AGGREGATE_PROPERTY);
+    property.setCamundaValue(Boolean.TRUE.toString());
+    propertiesContainerOf(model, callActivity).getCamundaProperties().add(property);
+
+  }
+
+  private static Stream<CamundaProperty> propertiesOf(
+      final CallActivity callActivity) {
+
+    final var extensionElements = callActivity.getExtensionElements();
+    if (extensionElements == null) {
+      return Stream.empty();
+    }
+    return extensionElements
+        .getElementsQuery()
+        .filterByType(CamundaProperties.class)
+        .list()
+        .stream()
+        .flatMap(properties -> properties.getCamundaProperties().stream());
+
+  }
+
+  private static CamundaProperties propertiesContainerOf(
+      final BpmnModelInstance model,
+      final CallActivity callActivity) {
+
+    final var extensionElements = extensionElementsOf(model, callActivity);
+    final var existing = extensionElements
+        .getElementsQuery()
+        .filterByType(CamundaProperties.class)
+        .list();
+    if (!existing.isEmpty()) {
+      return existing.getFirst();
+    }
+    final var properties = model.newInstance(CamundaProperties.class);
+    extensionElements.addChildElement(properties);
+    return properties;
 
   }
 
