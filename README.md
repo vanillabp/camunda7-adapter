@@ -481,7 +481,7 @@ Outcomes:
 
 **The application does not start on that last defect.** While wiring,
 the adapter asks the core whether the method serving a task completes
-asynchronously (`WorkflowTaskInvoker#workflowTaskCompletesAsynchronously`,
+asynchronously (`WorkflowTaskWiring#workflowTaskCompletesAsynchronously`,
 answered by the `WorkflowTaskRegistry` from the method's `@TaskId` parameter) and
 aborts the deployment for every task wired by *Expression* whose method wants to
 keep it open. `Camunda7TaskELResolver` keeps the same guard for a model that
@@ -491,6 +491,13 @@ once in `Camunda7TaskConnectable#asynchronousTaskWiredByExpression`
 case is deliberately silent: *Delegate expression* serves a method without
 `@TaskId` just as well, because the behavior leaves the activity when the handler
 returns.
+
+The question is asked with the task definition and with the element id, the way the wiring
+validation matches a method. A method names either of the two. With one key only, an application
+wiring by `@WorkflowTask(id = ...)` walks past the check and meets the defect on a live workflow
+instead (`Camunda7AsynchronousTaskWiringTest`). A modelled listener is the exception and is asked
+by its task definition alone: an element can carry a task and a listener at once, so the element id
+would answer for the task's method there and refuse a model which is right.
 
 **Completing/canceling async tasks (`ProcessService#completeTask`/`#cancelTask`):**
 the `@TaskId` value is the parked execution's ID; completing signals

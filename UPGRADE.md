@@ -341,3 +341,19 @@ model.
 
 Nothing else is refused. An element which iterates a number of times still deploys where no handler
 asks for its item, and so does a collection whose handler reads the index and the total only.
+
+### A task which has to stay open but is wired by *Expression* ends the boot
+
+A method declaring `@TaskId` keeps its task open until the application completes it. An
+*Expression* task cannot do that: the engine completes it the moment the expression returns.
+Version 1 said nothing about the pairing while the application started, so it showed up once a
+workflow reached the task.
+
+Version 2 asks the core while it wires the process and ends the boot for every *Expression* task
+whose method wants to keep it open. The message names the task, the process, the workflow module
+and the remedy, which is to wire the task by *Delegate expression*.
+
+It applies whichever way the method is wired to the task, by `@WorkflowTask(taskDefinition = ...)`
+or by `@WorkflowTask(id = ...)`. The reverse pairing stays silent: a *Delegate expression* serves a
+method without `@TaskId` just as well, because the behavior leaves the activity when the handler
+returns.

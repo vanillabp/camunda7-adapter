@@ -77,6 +77,33 @@ public class Camunda7TaskWiringValidationIT {
   }
 
   @Test
+  @DisplayName("The same defect aborts the boot where the method is wired by the element id")
+  public void asynchronousTaskWiredByExpressionAbortsBootForAMethodWiredByTheElementId() {
+
+    // a method names its task by the task definition or by the element id, and the
+    // wiring validation accepts both - so both reach this check
+    final var failure = assertThrows(
+        RuntimeException.class,
+        () -> new SpringApplicationBuilder(TestApplication.class)
+            .run(
+                "--vanillabp.workflow-modules.c7-it.adapters.c7.resources-location=classpath*:c7-it/async-by-element-id",
+                "--spring.profiles.active=async-by-element-id",
+                "--spring.datasource.url=jdbc:h2:mem:c7-async-by-element-id;DB_CLOSE_DELAY=-1")
+            .close());
+
+    final var message = rootMessage(failure);
+    assertTrue(message.contains("'AsyncByElementIdProcess'"), "unexpected message: "
+        + message);
+    assertTrue(message.contains("@TaskId"), "unexpected message: "
+        + message);
+    assertTrue(
+        message.contains("'camunda:delegateExpression'"),
+        "unexpected message: "
+            + message);
+
+  }
+
+  @Test
   @DisplayName("A @WorkflowTask method matching no task of the module aborts the boot")
   public void orphanWorkflowTaskMethodAbortsBoot() {
 

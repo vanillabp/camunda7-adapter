@@ -688,10 +688,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     connectables
         .stream()
         .filter(connectable -> connectable.type() == Camunda7TaskConnectable.Type.EXPRESSION)
-        .filter(connectable -> workflowTaskWiring.workflowTaskCompletesAsynchronously(
-            workflowModuleId,
-            bpmnProcessId,
-            connectable.taskDefinition()))
+        .filter(connectable -> aMethodOfTheTaskWantsToKeepItOpen(workflowModuleId, bpmnProcessId, connectable))
         .findFirst()
         .ifPresent(connectable -> {
           throw new IllegalStateException(
@@ -703,7 +700,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     // a listener is notified and done: the engine is inside a transition of its own while the
     // listener runs, so a method declaring @TaskId would wait for a completion nobody can send.
-    // Version 1 accepted such a method and the workflow went on without it
+    // Version 1 accepted such a method and the workflow went on without it.
+    // Asked by the task definition ALONE, unlike the task above: a method serves a listener by
+    // naming its task definition and in no other way, because an element may carry a task and a
+    // listener at once and the element id cannot say which of them a method means. The element id
+    // would therefore answer for the task's method here and refuse a model which is right
     connectables
         .stream()
         .filter(Camunda7TaskConnectable::isExecutionListener)
@@ -1097,6 +1098,32 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             .putIfAbsent(
                 "%s|%s|%s".formatted(connectable.elementId(), connectable.taskDefinition(), connectable.type()),
                 connectable));
+
+  }
+
+  /**
+   * Whether a <code>&#64;WorkflowTask</code> method serving this task wants to keep it open,
+   * asked with BOTH keys a task is wired by: the task definition and the element id. A method
+   * names either of the two (<code>&#64;WorkflowTask(taskDefinition = ...)</code> respectively
+   * <code>&#64;WorkflowTask(id = ...)</code>), and <code>validateTaskWiring</code> matches on
+   * either, so a question asked with one key alone says nothing about an application which wires
+   * by the other one. Such an application would meet the defect as an incident on a live
+   * workflow instead of as a boot which does not start.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param connectable The task of the model
+   * @return Whether a method serving the task completes it asynchronously
+   */
+  private boolean aMethodOfTheTaskWantsToKeepItOpen(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final Camunda7TaskConnectable connectable) {
+
+    return workflowTaskWiring
+        .workflowTaskCompletesAsynchronously(workflowModuleId, bpmnProcessId,
+            connectable.taskDefinition()) || workflowTaskWiring
+                .workflowTaskCompletesAsynchronously(workflowModuleId, bpmnProcessId, connectable.elementId());
 
   }
 
