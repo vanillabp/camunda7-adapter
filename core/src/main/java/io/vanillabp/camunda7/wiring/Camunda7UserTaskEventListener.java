@@ -194,6 +194,23 @@ public class Camunda7UserTaskEventListener implements TaskListener {
     }
 
     @Override
+    public String getBpmnElementId() {
+
+      // the user task's element id as the model spells it. The task definition of a user
+      // task is its form key where it has one, so the two say different things here
+      return connectable.elementId();
+
+    }
+
+    @Override
+    public String getWorkflowId() {
+
+      // the engine's own id of the running instance the user task belongs to
+      return delegateTask.getProcessInstanceId();
+
+    }
+
+    @Override
     public String getTaskId() {
 
       // the engine's task ID (ACT_RU_TASK) - used by
