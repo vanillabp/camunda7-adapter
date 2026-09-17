@@ -10,8 +10,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * The task connectables of ONE Camunda 7 engine (= one adapter id), registered by
  * the deployment service during <code>wireBpmn</code> and looked up by the
  * {@link Camunda7TaskELResolver} whenever the engine evaluates a top-level EL name.
- * Keyed by (tenant ID = workflow module ID, BPMN process ID) - one engine serves
- * several workflow modules.
+ * Keyed by (workflow module ID, BPMN process ID) - one engine serves several workflow
+ * modules. A caller which only has what the engine reports hands the tenant over and
+ * gets the module back, see {@link #resolveWorkflowModuleId(String, String)}.
  */
 // see decision 4 in the repository's DECISIONS.md
 @SuppressWarnings({
@@ -261,6 +262,34 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * Which workflow module a Camunda TENANT belongs to. The two names are the same
+   * unless the application gave a workflow module a tenant name of its own, which
+   * {@link Camunda7ConfiguredTenant} lets it do, and then the engine reports a name
+   * this registry is not keyed by.
+   */
+  private final Map<String, String> workflowModuleIdsByTenantId = new ConcurrentHashMap<>();
+
+  /**
+   * Registers under which Camunda tenant a workflow module reaches the engine, so an
+   * execution reporting that tenant leads back to the module. Called by the deployment
+   * service while it wires a workflow module, with the very name the deployment uses.
+   *
+   * @param tenantId The tenant the module is deployed to, <code>null</code> where the
+   *          mode uses none
+   * @param workflowModuleId The workflow module ID
+   */
+  public void registerTenant(
+      final String tenantId,
+      final String workflowModuleId) {
+
+    if ((tenantId == null) || (workflowModuleId == null)) {
+      return;
+    }
+    workflowModuleIdsByTenantId.putIfAbsent(tenantId, workflowModuleId);
+
+  }
+
+  /**
    * Registers the plain signal name of a signal start event.
    *
    * @param workflowModuleId The workflow module ID
@@ -311,6 +340,12 @@ public class Camunda7TaskRegistry {
    * the module is isolated by a tenant; with prefixed identifiers there
    * is no tenant, so the module is looked up by the process definition key the
    * wiring registered - a KNOWN value, never parsed out of the key.
+   * <p>
+   * The tenant is not the module id where the application named the tenant itself. It is
+   * therefore translated through what the deployment registered, and only a tenant nobody
+   * registered is taken as the module id: that is a tenant of another application on the
+   * same engine, and answering it unchanged keeps the old behaviour for everything which
+   * never configured a name.
    *
    * @param tenantId The execution's tenant ID (may be <code>null</code>)
    * @param processDefinitionKey The execution's process definition key
@@ -321,7 +356,7 @@ public class Camunda7TaskRegistry {
       final String processDefinitionKey) {
 
     if (tenantId != null) {
-      return tenantId;
+      return workflowModuleIdsByTenantId.getOrDefault(tenantId, tenantId);
     }
     return workflowModuleIdsByScopedProcessId.get(processDefinitionKey);
 
@@ -378,6 +413,18 @@ public class Camunda7TaskRegistry {
    * finished. Asking earlier is asking a registry which is still being filled, and that is
    * what a second registry filled at another stage of the pipeline gets wrong: the two see a
    * process at different moments and the process is reported under the wrong module.
+   *
+   * <h4>Which name a caller hands over</h4>
+   *
+   * The one the ENGINE reports, which is what an execution, a task or a process definition
+   * carries. That name is the workflow module id only as long as nobody configured a tenant
+   * name of its own (<code>vanillabp.workflow-modules.&lt;id&gt;.adapters.&lt;adapter&gt;.tenant-id</code>
+   * and the adapter-wide key next to it); where somebody did, the engine reports the
+   * configured name and this registry translates it back. So a caller which has the module
+   * id at hand and no tenant may pass the module id as well, because the two are the same
+   * name for every application which left the key alone, and where they differ the
+   * translation answers both. Passing anything else is asking about another application's
+   * tenant, and the answer to that is empty.
    *
    * <h4>What an empty answer means</h4>
    *
