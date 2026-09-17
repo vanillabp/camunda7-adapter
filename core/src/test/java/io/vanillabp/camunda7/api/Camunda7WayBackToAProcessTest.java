@@ -73,6 +73,78 @@ public class Camunda7WayBackToAProcessTest {
   }
 
   @Test
+  @DisplayName("A workflow module with a tenant name of its own is found under that name")
+  public void aWorkflowModuleWithItsOwnTenantNameIsFoundUnderThatName() {
+
+    final var registry = new Camunda7TaskRegistry();
+    registry.registerTenant("big-bank", MODULE);
+    registry.registerProcess(MODULE, "RiskAssessment", "RiskAssessment");
+
+    final var byTheTenant = registry.resolve("big-bank", "RiskAssessment");
+
+    assertTrue(
+        byTheTenant.isPresent(),
+        "the engine reports the configured tenant, and that name has to lead back to the module");
+    assertEquals(MODULE, byTheTenant.get().workflowModuleId());
+    assertEquals("RiskAssessment", byTheTenant.get().bpmnProcessId());
+
+    final var byTheModule = registry.resolve(MODULE, "RiskAssessment");
+
+    assertTrue(
+        byTheModule.isPresent(),
+        "a caller holding the workflow module id may use it, whatever the tenant is called");
+    assertEquals(MODULE, byTheModule.get().workflowModuleId());
+
+  }
+
+  @Test
+  @DisplayName("A tenant name leads to the module for every caller, not only for resolve")
+  public void aTenantNameLeadsToTheModuleForEveryCaller() {
+
+    final var registry = new Camunda7TaskRegistry();
+    registry.registerTenant("big-bank", MODULE);
+    registry.registerProcess(MODULE, "RiskAssessment", "RiskAssessment");
+
+    assertEquals(
+        MODULE,
+        registry.resolveWorkflowModuleId("big-bank", "RiskAssessment"),
+        "the listeners of this adapter ask here, so they see the module and not the tenant");
+    assertEquals(
+        "RiskAssessment",
+        registry.plainBpmnProcessId(registry.resolveWorkflowModuleId("big-bank", "RiskAssessment"), "RiskAssessment"));
+    assertEquals(
+        "another-application",
+        registry.resolveWorkflowModuleId("another-application", "SomethingElse"),
+        "a tenant nobody registered is answered unchanged, which is what it was before");
+
+  }
+
+  @Test
+  @DisplayName("The deployment registers the tenant it deploys under, so the name is the engine's")
+  public void theDeploymentRegistersTheTenantItDeploysUnder() {
+
+    final var registry = new Camunda7TaskRegistry();
+    final var deployment = new io.vanillabp.camunda7.deployment.Camunda7DeploymentService(
+        ADAPTER_ID, null, null, io.vanillabp.camunda7.TestCollaborators.complete(), registry);
+    deployment
+        .setConfiguredTenants(
+            workflowModuleId -> io.vanillabp.camunda7.wiring.Camunda7ConfiguredTenant
+                .firstConfigured(ADAPTER_ID, workflowModuleId, "big-bank", null));
+
+    // the first thing which happens to a BPMN process of a workflow module, and the
+    // place the way back has to exist from
+    deployment.processVersionCatalogOf(MODULE, "RiskAssessment");
+
+    final var resolved = registry.resolve("big-bank", "RiskAssessment");
+
+    assertTrue(
+        resolved.isPresent(),
+        "the deployment knows the tenant it uses, so nothing else has to be asked for it");
+    assertEquals(MODULE, resolved.get().workflowModuleId());
+
+  }
+
+  @Test
   @DisplayName("The version behind a definition id is answered from the adapter's cache")
   public void theVersionBehindADefinitionIdIsAnsweredFromTheCache() {
 

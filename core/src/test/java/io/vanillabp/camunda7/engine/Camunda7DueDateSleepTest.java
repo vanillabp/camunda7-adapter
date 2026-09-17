@@ -324,11 +324,10 @@ public class Camunda7DueDateSleepTest {
    * test's own questions of the engine are engine commands, and a committed engine command
    * asks the acquisition to wake up, so an earlier version of this test sent such a wake-up
    * itself and waited for the cycle it should cause. That timed out in four runs out of five
-   * on a loaded machine (Camunda 7.24.0, 2026-09-14): the acquisition copies the flag a
-   * wake-up sets into its cycle and clears it a few steps later, and this adapter's due-date
-   * query runs in between, so a wake-up arriving there is dropped. Waiting for the parked
-   * thread needs none of that - by then the wake-up has either been answered or been lost,
-   * and neither leaves anything on its way into the window.
+   * on a loaded machine (Camunda 7.24.0, 2026-09-14), because a wake-up arriving while the
+   * next wait was being decided was dropped. That window is closed
+   * ({@code Camunda7WakeupInTheGapTest}), and waiting for the parked thread is still the
+   * cheaper question: it is about this loop and not about who woke it.
    * <p>
    * The engine which does not sleep has no thread to ask, so there the cycle is all there
    * is, which is enough: what that measurement asserts is that the engine keeps coming back.

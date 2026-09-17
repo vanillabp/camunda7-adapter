@@ -259,8 +259,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // later loses the end listener for good, because a parsed definition stays
     // cached (measured by Camunda7DeclaredIdRuntimeIT). May be null in tests
     if (taskRegistry != null) {
-      taskRegistry
-          .registerProcess(workflowModuleId, bpmnProcessId, scopedProcessId(workflowModuleId, bpmnProcessId));
+      registerTheWayBackFromTheEngine(
+          workflowModuleId, bpmnProcessId, scopedProcessId(workflowModuleId, bpmnProcessId));
     }
     return processVersions;
 
@@ -307,6 +307,30 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             configured != null
                 ? configured.tenantId()
                 : null);
+
+  }
+
+  /**
+   * The way back from what the engine reports to what the application wrote, for one BPMN
+   * process and for the workflow module it belongs to.
+   * <p>
+   * Both are registered together because both are read together: an execution names a
+   * tenant and a process definition key, and neither of them is what the core is keyed by
+   * as soon as the application gave the workflow module a tenant name of its own. Without
+   * the tenant the registry would answer that name as the workflow module, and every
+   * listener of such a module would look for its process under a module nobody registered.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param scopedBpmnProcessId The process definition key the engine knows
+   */
+  private void registerTheWayBackFromTheEngine(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String scopedBpmnProcessId) {
+
+    taskRegistry.registerTenant(tenantIdOf(workflowModuleId), workflowModuleId);
+    taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
 
   }
 
@@ -735,7 +759,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
     // a process the engine starts on its own may have no tasks at all, so the way
     // back from the engine's process-definition key is registered explicitly
-    taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
+    registerTheWayBackFromTheEngine(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
 
     // The engine can be asked which versions of this process it has, which
     // is what a version specification naming a version TAG needs
@@ -2494,7 +2518,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // is reported (Camunda7AsyncBpmnParseListener#parseProcess). It also serves a
     // process without any task: the version of an execution and the workflow module it
     // belongs to are read from here
-    taskRegistry.registerProcess(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
+    registerTheWayBackFromTheEngine(workflowModuleId, bpmnProcessId, scopedBpmnProcessId);
 
     // the workflows of those versions end like any other, so the application is told here
     // as well when this engine cannot deliver the end to a @WorkflowEnded method it kept

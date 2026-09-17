@@ -226,6 +226,13 @@ task delivery log runs once an hour. Anybody who switches this on and watches th
 sees those two, so the startup message names them rather than leaving somebody to look for
 them in the engine.
 
+What a lost wake-up can cost at worst, on one node, is the acquisition cycle which is
+already running. A wake-up which arrives after a cycle read the database is kept and ends
+that cycle's wait, so it is never paid for with the wait itself. Camunda's own loop drops
+such a wake-up and pays one idle interval for it; here the same loss would have been the
+whole wait, up to a year where no job is due at all, which is why this adapter closes that
+window. The reasoning is [decision 23](./DECISIONS.md#23-a-wake-up-which-arrives-while-the-next-wait-is-decided-still-ends-that-wait).
+
 A second application writing jobs into the same engine is not covered. Its commit runs in
 another process and reaches nothing here, so a node waiting on a due date computed before
 that write learns about the job when its own question next runs. Two applications against one
@@ -233,8 +240,9 @@ engine is not a setup this adapter supports.
 
 The reasoning is [decision 18](./DECISIONS.md#18-an-idle-engine-is-told-when-to-wake-up-instead-of-asking-whether-it-is-time-yet).
 `Camunda7DueDateSleepTest` holds the waiting rule against a real engine and counts the
-connections an idle one takes, and `Camunda7SleepingEngineIT` with its Quarkus twin holds
-that a booted application on either platform takes none while nothing is due.
+connections an idle one takes, `Camunda7WakeupInTheGapTest` holds that a job written while
+the next wait is being decided still runs, and `Camunda7SleepingEngineIT` with its Quarkus
+twin holds that a booted application on either platform takes none while nothing is due.
 
 ### Embedded-engine wiring
 
