@@ -664,3 +664,42 @@ file the walk finds the enclosing element by chance, which is how the missing mo
 stayed invisible from version 1 until this entry was written.
 
 See [The iteration a called process runs in](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#the-iteration-a-called-process-runs-in).
+
+### 23. A wake-up which arrives while the next wait is decided still ends that wait
+
+Camunda's acquisition loop reads its "a job was added" flag into the cycle which just ran, asks
+the strategy how long to wait, and clears the flag afterwards. A wake-up arriving between those
+two steps sets a flag nobody looks at any more, and one arriving a moment later races the point
+where the loop starts listening on its monitor. The engine lives with both and pays an idle
+interval for them, five to sixty seconds, which is fair: the next cycle is never far away.
+
+Decision 18 changed what that costs. The wait this adapter decides on reaches to the next due
+date, and where the engine holds no job at all it reaches a year. So the same lost wake-up is no
+longer a late cycle but a job which never runs, with no incident, no log line and no metric to
+show for it. The application it hurts is exactly the one the sleep was built for: one which is
+quiet until somebody gives it work.
+
+The answer is not a cap on the wait. A cap trades the whole saving for a probability and leaves
+the loss in place, only smaller; and the number somebody picks for it is never questioned again.
+The answer is that this loop keeps a wake-up of its own. It is set whenever somebody asks the
+executor to wake up, it is cleared where a cycle begins - before any engine is asked for jobs -
+and the loop refuses to suspend while it is set. So everything written after a cycle read the
+database ends that cycle's wait instead of being swallowed by it, and the worst a wake-up can
+cost is the cycle which is already running.
+
+Two smaller things follow. The flag is set BEFORE the executor's own, and read AFTER the loop
+announced that it is listening, which is the opposite order: one of the two sides therefore
+always sees the other, and there is no window left to make narrow. And a cycle the context
+reports as woken keeps the engine's own timing rather than a due date, because the wake-up says a
+job was written after the acquisition read the database and the due date it asked for is
+therefore older than the job.
+
+Camunda 8 and the Process-Engine-API have no acquisition loop of this kind: their tasks are
+pushed or polled per subscription and neither computes a wait from a due date, so neither has the
+window this entry closes.
+
+`Camunda7WakeupInTheGapTest` writes the job from inside the window itself and asserts the job
+runs, and it asserts what the strategy decides for a cycle somebody woke. It watches the job
+through a bean of the engine and not by asking the engine, because every question asked of an
+embedded engine is a command whose commit wakes the acquisition - a test polling the engine wakes
+the sleep it measures.

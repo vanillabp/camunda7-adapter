@@ -126,6 +126,12 @@ public class Camunda7SleepUntilSomethingIsDue extends BackoffJobAcquisitionStrat
   /**
    * Whether the cycle this context describes left the engine with nothing to do, the only
    * case whose wait this strategy decides (see the class comment).
+   * <p>
+   * A cycle somebody asked to wake up for is not such a cycle, however little it found.
+   * The wake-up says a job was written after the acquisition read the database, so the
+   * answer to the due-date question is older than the job and the engine's own timing is
+   * the right one: the superclass returns no wait at all for it and the next cycle starts
+   * at once.
    *
    * @param context What the cycle which just ran reported
    * @return Whether the due date decides the next wait
@@ -133,7 +139,7 @@ public class Camunda7SleepUntilSomethingIsDue extends BackoffJobAcquisitionStrat
   private boolean foundNothing(
       final JobAcquisitionContext context) {
 
-    return context.areAllEnginesIdle() && !context
+    return context.areAllEnginesIdle() && !context.isJobAdded() && !context
         .hasJobAcquisitionLockFailureOccurred() && (context.getAcquisitionException() == null) && !executionSaturated;
 
   }
