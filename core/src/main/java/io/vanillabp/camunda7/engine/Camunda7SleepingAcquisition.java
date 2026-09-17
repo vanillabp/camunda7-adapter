@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
  * inside itself and the sleep would never happen. {@link Camunda7WakeupAfterCommit} asks
  * here instead of guessing from a thread name.
  *
- * <h4>The other reason: a wake-up must not be lost between two cycles</h4>
+ * <h2>The other reason: a wake-up must not be lost between two cycles</h2>
  *
  * The engine's loop copies its "a job was added" flag into the cycle's context, asks the
  * strategy for the next wait, and clears the flag afterwards. A wake-up arriving in
