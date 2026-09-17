@@ -41,6 +41,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * BPMS, so the adapter's own phase-one check is what finds out, and what it raises has to
  * be the type the SPI documents. On the shared datasource no record exists, the platform
  * probes and answers with that type itself, so this is the only setup which can show it.
+ * <p>
+ * What a record CARRIES is asserted here as well, out of the table rather than out of the
+ * invocation context: the element id of the BPMN element and the engine's own id of the
+ * process instance. This is the only setup of the adapter which writes a record at all, so
+ * it is the only place those two fields can be read back.
  */
 @SpringBootTest(classes = {
     TestApplication.class, Camunda7RepeatedDeliveryIT.NamedDataSourceConfiguration.class
@@ -202,6 +207,64 @@ public class Camunda7RepeatedDeliveryIT {
         0,
         recordedDeliveriesOf("c7"),
         "an engine delivering in the application's transaction records nothing");
+
+  }
+
+  @Test
+  @DisplayName("The record of a delivery names the BPMN element and the engine's process instance")
+  public void theRecordNamesTheElementAndTheWorkflow() {
+
+    final var aggregateId = transactionTemplate
+        .execute(status -> taskRepository.save(new TaskTestAggregate()).getId());
+
+    // AsyncProcess parks at a @TaskId task, so the record of its delivery is written and
+    // stays. Its element id and its task definition differ, which is what makes the two
+    // fields tell apart here
+    final var processInstance = separateDataSourceEngine
+        .getRuntimeService()
+        .createProcessInstanceByKey("AsyncProcess")
+        .processDefinitionTenantId(MODULE_ID)
+        .businessKey(String.valueOf(aggregateId))
+        .execute();
+
+    // the handler runs before the record is written, and the record becomes visible with
+    // the commit - so the row is waited for rather than read in the next line
+    final var record = AwaitPhaseTwo
+        .untilAvailable(
+            () -> recordOf(String.valueOf(aggregateId)),
+            "the delivery of the asynchronous task to be recorded");
+
+    assertEquals("AP_Task", record.get("BPMN_ELEMENT_ID"), "the element id a modeller wrote");
+    assertEquals(
+        "asyncTask",
+        record.get("TASK_DEFINITION"),
+        "the task definition is the other value, and it is a different one");
+    assertEquals(
+        processInstance.getId(),
+        record.get("WORKFLOW_ID"),
+        "the engine's own id of the running instance");
+
+  }
+
+  /**
+   * The one record of a workflow aggregate, or <code>null</code> while there is none.
+   * Read by aggregate, because this test's process runs only once here.
+   *
+   * @param aggregateId The workflow aggregate's ID in the form the record carries it
+   * @return The row, or <code>null</code>
+   */
+  private java.util.Map<String, Object> recordOf(
+      final String aggregateId) {
+
+    final var rows = new org.springframework.jdbc.core.JdbcTemplate(applicationDataSource)
+        .queryForList(
+            "SELECT BPMN_ELEMENT_ID, WORKFLOW_ID, TASK_DEFINITION FROM VANILLABP_TASK_DELIVERY "
+                + "WHERE AGGREGATE_ID = ? AND BPMN_PROCESS_ID = ?",
+            aggregateId,
+            "AsyncProcess");
+    return rows.isEmpty()
+        ? null
+        : rows.getFirst();
 
   }
 

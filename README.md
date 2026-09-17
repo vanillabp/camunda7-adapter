@@ -701,6 +701,19 @@ element of a multi-instance activity and the next iteration of a loop each get t
 puts it into the idempotency key of a message correlation planned while the handler runs, which is
 what keeps three siblings of one workflow aggregate from sharing a key.
 
+Two more values travel with every delivery, and VanillaBP writes both into the delivery record: the
+element id a modeller wrote on the BPMN element, and the id the engine gave the running instance.
+Neither steers anything here. They are what somebody reading the record addresses the task by
+outside VanillaBP, an operator searching Cockpit or an extension linking into the model. The
+adapter has both at hand in every mode. The element id was read out of the model while wiring, and
+the execution and the user task each name their process instance.
+`Camunda7RepeatedDeliveryIT#theRecordNamesTheElementAndTheWorkflow` reads both back out of the
+table.
+
+The element id is not the task definition. A task definition here is the expression text of a
+service task and the form key of a user task, so somebody looking for the element needs the
+element id.
+
 The engine datasource mode has a picture of its own, [Camunda 7 on an engine datasource of its
 own](https://github.com/vanillabp/adapter-platform-integration/blob/main/migration-adapter/README.md#deliveries-vanillabp-already-processed-taskdeliverylog-spi),
 which puts the two commits on a time line and shows the job the engine repeats being answered from

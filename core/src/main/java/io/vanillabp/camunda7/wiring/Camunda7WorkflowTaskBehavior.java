@@ -302,6 +302,26 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
     }
 
     @Override
+    public String getBpmnElementId() {
+
+      // what a modeller wrote as the element's id, read out of the model while wiring.
+      // The task definition next to it is the expression text, so the two are different
+      // answers and a reader of the delivery record needs this one to find the element
+      return connectable.elementId();
+
+    }
+
+    @Override
+    public String getWorkflowId() {
+
+      // the engine's own id of the running instance - what an operator types into
+      // Cockpit. A task of a called process reports the id of THAT instance, which is
+      // the workflow the task belongs to
+      return execution.getProcessInstanceId();
+
+    }
+
+    @Override
     public String getTaskId() {
 
       // the execution's ID identifies the open task instance - used by
