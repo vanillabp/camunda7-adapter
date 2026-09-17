@@ -18,3 +18,12 @@ vanillabp:
       adapters:
         c7:
           resources-location: classpath:c7-test/processes
+      workflows:
+        CallingProcess:
+          allow-full-sync-with-bpms: true
+        EndedProcess:
+          allow-full-sync-with-bpms: true
+        QTaskProcess:
+          allow-full-sync-with-bpms: true
+        TestProcess:
+          allow-full-sync-with-bpms: true

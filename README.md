@@ -952,6 +952,29 @@ decides on what that task just computed, so the values are written INSIDE the en
 transaction, right after the handler returned and before the activity is left. A broadcast
 signal writes nothing, since it reaches workflows of other aggregates.
 
+Sharing everything is where an application lands by doing nothing, so VanillaBP does not let
+it pass quietly. Take an aggregate which carries neither `@SyncWithBPMS` nor
+`@NoSyncWithBPMS`, anywhere in what it reaches: its workflow refuses to start, and the
+message names the aggregate and the attributes which travel. An aggregate holding nothing but
+its id is fine, because that value reaches the engine whatever the sync model says. There are
+two ways on. Tell the aggregate what the models really need, or let this one workflow share
+all of it:
+
+```yaml
+vanillabp:
+  workflow-modules:
+    my-module:
+      workflows:
+        MyProcess:
+          allow-full-sync-with-bpms: true
+```
+
+The permission is read at the workflow and nowhere else. The same line at the workflow module
+or at the application does not apply, it is answered with a message saying where it belongs.
+The test applications of this repository take the permission: their aggregates hold test
+data, so sharing all of it is the truth. The reason stands here because the YAML formatter of
+the build drops comments written inside a mapping.
+
 A value the engine has a variable type for becomes a scalar variable: a short, an integer,
 a long, a double, a boolean, a string, a date and bytes, plus a `Character`, which is
 written as a string. Everything else keeps its class in an object variable of the format

@@ -22,3 +22,6 @@ vanillabp:
           resources-location: classpath:c7-test/processes
         c7b:
           resources-location: classpath:c7-test/processes
+      workflows:
+        TestProcess:
+          allow-full-sync-with-bpms: true

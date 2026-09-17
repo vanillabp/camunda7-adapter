@@ -21,3 +21,10 @@ vanillabp:
       adapters:
         c7:
           resources-location: classpath:c7-e2e/processes
+      workflows:
+        AggregateChangedProcess:
+          allow-full-sync-with-bpms: true
+        TaskProcess:
+          allow-full-sync-with-bpms: true
+        TimerStartProcess:
+          allow-full-sync-with-bpms: true
