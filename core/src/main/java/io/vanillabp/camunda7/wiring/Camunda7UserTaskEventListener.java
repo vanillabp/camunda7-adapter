@@ -88,8 +88,7 @@ public class Camunda7UserTaskEventListener implements TaskListener {
         connectable.get(), delegateTask, event, taskRegistry
             .versionOfDefinition(processDefinition.getId()), taskRegistry.getAdapterId(), taskRegistry
                 .engineRunsOnItsOwnDataSource());
-    if (!workflowTaskInvoker.workflowTaskHandlerExists(
-        workflowModuleId, bpmnProcessId, context.getTaskDefinition())) {
+    if (!aMethodServesThisUserTask(workflowModuleId, bpmnProcessId, context)) {
       log.trace(
           "Camunda7: no @WorkflowTask handler for user task '{}' of BPMN process '{}' - skipping "
               + "the {} notification",
@@ -114,6 +113,34 @@ public class Camunda7UserTaskEventListener implements TaskListener {
               + "ProcessService#cancelUserTask instead.")
               .formatted(event, delegateTask.getTaskDefinitionKey(), bpmnProcessId, workflowModuleId));
     }
+
+  }
+
+  /**
+   * Whether a <code>&#64;WorkflowTask</code> method serves this user task, asked with BOTH
+   * keys a task is wired by: the task definition and the element id. A method names either
+   * of the two (<code>&#64;WorkflowTask(taskDefinition = ...)</code> respectively
+   * <code>&#64;WorkflowTask(id = ...)</code>), and the task definition of a user task is its
+   * FORM KEY wherever the model carries one, so the two are different names here more often
+   * than anywhere else.
+   * <p>
+   * Asked with the task definition alone, a user task with a form key whose handler names the
+   * element id answered "nobody serves this" and the notification was skipped without a word.
+   * That is worse than a task which fails, because nothing happens at all.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param context What this notification reports about the user task
+   * @return Whether a method serves it
+   */
+  private boolean aMethodServesThisUserTask(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final TaskInvocationContext context) {
+
+    return workflowTaskInvoker
+        .workflowTaskHandlerExists(workflowModuleId, bpmnProcessId, context.getTaskDefinition()) || workflowTaskInvoker
+            .workflowTaskHandlerExists(workflowModuleId, bpmnProcessId, context.getBpmnElementId());
 
   }
 
