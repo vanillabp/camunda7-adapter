@@ -22,6 +22,7 @@ vanillabp:
           allow-listeners: false
       workflows:
         TestProcess:
+          allow-full-sync-with-bpms: true
           adapters:
             c7:
               allow-listeners: true

@@ -13,10 +13,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The workflow aggregate of pushing a changed aggregate. Nothing is shared
- * with the BPMS explicitly - Camunda 7 reads the aggregate live, so what the
- * conditional events look at is the aggregate itself, and the push is what makes the
- * engine look at all.
+ * The workflow aggregate of pushing a changed aggregate. It annotates nothing, so all of
+ * it travels to the engine and the test application allows that (see "Sharing the workflow
+ * aggregate" in the README). The engine looks at the condition of a conditional event when
+ * a variable of that event's scope changes, and the push is what changes one.
  */
 @Entity
 @Table(name = "C7_E2E_PUSH_AGGREGATE")
