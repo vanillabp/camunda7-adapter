@@ -12,7 +12,9 @@ fragile kind this log exists to avoid.
 Links below point into this repository's [`README.md`](./README.md), which carries the detail an
 entry deliberately leaves out.
 
-### 1. The workflow aggregate is shared as process variables
+### 1. The workflow aggregate is shared as process variables - the version named for the removal superseded by decision 25
+
+*Superseded by decision 25: no version is named for the removal of the migration fallback.*
 
 Camunda 7 runs embedded, so the EL resolver could read the aggregate live - and that is
 exactly what makes a model portable in one direction only: `${riskAcceptable}` would work
@@ -703,3 +705,24 @@ runs, and it asserts what the strategy decides for a cycle somebody woke. It wat
 through a bean of the engine and not by asking the engine, because every question asked of an
 embedded engine is a command whose commit wakes the acquisition - a test polling the engine wakes
 the sleep it measures.
+
+### 25. The migration fallback names no version for its removal
+
+Decision 1 ends by saying that version 2.1 removes the live read of the aggregate. Nobody can
+hold that date today. So the date is gone from every message, from the README and from both
+wikis, and this entry says what stands instead: the fallback stays a fallback, it will be
+removed, and whoever needs a date asks the VanillaBP team. Everything else decision 1 says stays
+as it is. The values an aggregate shares are written as process variables, the engine evaluates
+its expressions against them, and the live read answers only where the engine holds no variable
+of the name an expression asks for.
+
+What a reader can watch instead of a version is the fallback itself. It warns once per workflow
+module, process and name that it answered an expression by reading the aggregate. It also says,
+at most once an hour, how many workflow instances it has served since the application started.
+That count falls on its own, because a workflow stops needing the fallback as soon as it reaches
+a point where this adapter writes the shared values. A count which keeps growing says something
+else: a model reads an attribute which is not shared, and the startup check names those
+expressions.
+
+`Camunda7UnsharedExpressionCheckIT` asserts the sentence the startup check prints about the
+fallback, so a message which goes back to naming a version fails the build.
