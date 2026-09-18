@@ -51,6 +51,20 @@ public class Camunda7JobExecutorLifecycleTest {
   @Inject
   UserTransaction userTransaction;
 
+  /**
+   * How long the engine is watched while its job executor is stopped, before a job which
+   * was not executed counts as one which will not be.
+   * <p>
+   * One second, against the moment a running job executor needs: this engine is told about
+   * a new job by the transaction which wrote it, so it acquires the job at the commit
+   * rather than on the next sweep of its own.
+   * <p>
+   * A guard and not a budget anybody has to be faster than: what is asserted afterwards is
+   * an instance which is still there, and a machine which leaves this JVM without a turn
+   * only makes the silence longer.
+   */
+  private static final long UNTIL_A_RUNNING_EXECUTOR_WOULD_HAVE_TAKEN_THE_JOB = 1000;
+
   private long countInstances(
       final String businessKey) {
 
@@ -90,7 +104,7 @@ public class Camunda7JobExecutorLifecycleTest {
 
     // ...and stays pending while the executor is stopped (completing would end
     // the instance - the trivial ${true} service task is the only wait state)
-    Thread.sleep(1000);
+    Thread.sleep(UNTIL_A_RUNNING_EXECUTOR_WOULD_HAVE_TAKEN_THE_JOB);
     Assertions.assertEquals(
         1,
         countInstances(businessKey),

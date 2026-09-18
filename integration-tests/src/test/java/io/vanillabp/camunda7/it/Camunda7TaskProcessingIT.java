@@ -139,6 +139,21 @@ public class Camunda7TaskProcessingIT {
 
   }
 
+  /**
+   * How long the engine is watched after a rolled-back operation, before what did not
+   * happen counts as something which never will.
+   * <p>
+   * Half a second, against the moment a committed operation takes: this engine shares the
+   * caller's transaction, so a completion which committed is in the database when the
+   * transaction returns, and an asynchronous continuation is handed to a job executor
+   * which is told about it at the same commit.
+   * <p>
+   * A guard and not a budget anybody has to be faster than: what is asserted afterwards is
+   * that the instance is where it was, and a machine which leaves this JVM without a turn
+   * only makes the silence longer.
+   */
+  private static final long UNTIL_A_COMPLETION_WOULD_HAVE_ARRIVED = 500;
+
   private void awaitUntil(
       final Supplier<Boolean> condition,
       final String description) throws InterruptedException {
@@ -408,31 +423,27 @@ public class Camunda7TaskProcessingIT {
   }
 
   @Test
-  @DisplayName("completeTask of an unknown task raises the guiding TaskNotFoundException, at once")
+  @DisplayName("completeTask of an unknown task raises the guiding TaskNotFoundException in the caller's transaction")
   public void completeUnknownTaskRaisesGuidingException() {
 
     final var aggregateId = startSecondaryProcess("AsyncProcess", true, null);
 
-    final var startedAt = System.nanoTime();
     final var exception = assertThrows(
         io.vanillabp.spi.process.TaskNotFoundException.class,
         () -> transactionTemplate.executeWithoutResult(status -> {
           final var aggregate = repository.findById(aggregateId).orElseThrow();
           workflowService.completeAsyncTask(aggregate, "no-such-task");
         }));
-    final var elapsed = java.time.Duration.ofNanos(System.nanoTime() - startedAt);
 
+    // the probe of a task is an engine question with an exact answer, so nothing is
+    // gained by asking again - and this runs in the caller's transaction (decision 27
+    // of the platform's DECISIONS.md). The exception is the whole promise: an embedded
+    // engine reports no visibility window, so there is no window a caller could sit out,
+    // and how long the call took would say more about the machine than about the code
     assertTrue(
         exception.getMessage().contains("no-such-task"),
         "expected the unknown task to be named but got: "
             + exception.getMessage());
-    // the probe of a task is an engine question with an exact answer, so nothing is
-    // gained by asking again - and this runs in the caller's transaction (decision 27
-    // of the platform's DECISIONS.md)
-    assertTrue(
-        elapsed.toSeconds() < 5,
-        "an unknown task must fail without waiting, but took "
-            + elapsed);
 
   }
 
@@ -695,8 +706,17 @@ public class Camunda7TaskProcessingIT {
           throw new RuntimeException("test rollback");
         }));
 
-    Thread.sleep(500);
-    assertNotNull(instanceIdOf(aggregateId), "the process must still be active");
+    Thread.sleep(UNTIL_A_COMPLETION_WOULD_HAVE_ARRIVED);
+    final var instanceId = instanceIdOf(aggregateId);
+    assertNotNull(instanceId, "the process must still be active");
+    assertEquals(
+        1,
+        processEngine
+            .getTaskService()
+            .createTaskQuery()
+            .processInstanceId(instanceId)
+            .count(),
+        "and the user task the rolled-back transaction completed is still open");
 
     // the retried completion converges
     transactionTemplate.executeWithoutResult(status -> {
@@ -839,8 +859,16 @@ public class Camunda7TaskProcessingIT {
           throw new RuntimeException("test rollback");
         }));
 
-    Thread.sleep(500);
+    Thread.sleep(UNTIL_A_COMPLETION_WOULD_HAVE_ARRIVED);
     assertNotNull(instanceIdOf(aggregateId), "the rolled-back correlation must leave the instance waiting");
+    assertEquals(
+        1,
+        runtimeService
+            .createExecutionQuery()
+            .messageEventSubscriptionName("PaymentReceived")
+            .processInstanceBusinessKey(String.valueOf(aggregateId))
+            .count(),
+        "and the instance still waits at the message catch event");
 
     // retried correlation converges
     transactionTemplate.executeWithoutResult(status -> {
