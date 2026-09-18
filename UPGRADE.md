@@ -62,7 +62,7 @@ for keeps its class instead of being widened to a double, which is what version 
 `${total > 100}` compares numbers either way, and `${total}` renders the value your code holds
 rather than one somebody converted on the way in.
 
-The [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#nested-values-and-why-java-serialization-is-not-an-option)
+The [page about a shared value](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/What-becomes-of-a-shared-value)
 of the wiki carries the narrated version. Why such a value travels in the engine's own format
 rather than as a JSON string is decision 9 in the repository's [`DECISIONS.md`](./DECISIONS.md),
 and why a number keeps its class is decision 16.
