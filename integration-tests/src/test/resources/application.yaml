@@ -28,6 +28,14 @@ vanillabp:
           allow-full-sync-with-bpms: true
         DeclaredRuntimeOld:
           allow-full-sync-with-bpms: true
+        ForeignConditionProcess:
+          allow-full-sync-with-bpms: true
+        ForeignNumericIdProcess:
+          allow-full-sync-with-bpms: true
+        ForeignSignalProcess:
+          allow-full-sync-with-bpms: true
+        ForeignTimerProcess:
+          allow-full-sync-with-bpms: true
         LossyFormat:
           allow-full-sync-with-bpms: true
         ModelledListenerProcess:

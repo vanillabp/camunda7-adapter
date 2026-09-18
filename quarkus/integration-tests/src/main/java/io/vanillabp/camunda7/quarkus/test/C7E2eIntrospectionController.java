@@ -410,6 +410,29 @@ public class C7E2eIntrospectionController {
 
   }
 
+  /**
+   * Starts a process which the ENGINE starts on its own the way a system past VanillaBP
+   * does it: through the engine's API, with a business key of its own choosing. Nobody
+   * hands VanillaBP a workflow aggregate here, and the key is not the id of one.
+   *
+   * @param businessKey The key the starter chose
+   * @return The key, so the test can address the workflow by it
+   */
+  @POST
+  @Path("/started-past-vanillabp/{businessKey}")
+  @Transactional
+  public Map<String, Object> startPastVanillaBp(
+      @PathParam("businessKey") final String businessKey) {
+
+    runtimeService()
+        .createProcessInstanceByKey("TimerStartProcess")
+        .processDefinitionTenantId(MODULE_ID)
+        .businessKey(businessKey)
+        .execute();
+    return Map.of("businessKey", businessKey);
+
+  }
+
   // --- what the application asks of VanillaBP ---
 
   @POST

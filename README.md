@@ -1112,10 +1112,22 @@ A process with a timer, signal or conditional start event runs without anybody c
 builds the workflow aggregate and stores the aggregate's ID as the process instance's
 business key, which is how this adapter addresses workflows everywhere else. The listener
 runs inside the engine's own transaction, so aggregate and process instance commit
-together and a failure rolls both back for the engine to retry. Instances started by the
-application are skipped, since they already carry a business key. The engine does not tell
+together and a failure rolls both back for the engine to retry. The engine does not tell
 a listener the timer's scheduled time, so the aggregate's ID is derived from the moment the
 instance is created, which costs nothing when both are written in one transaction.
+
+An instance which already carries a business key does not end the listener's work. On
+Camunda 7 the key IS the aggregate's ID, so it names an aggregate rather than saying who
+started the workflow, and anybody with access to the engine can start such a process with a
+key of their own. The key is handed to the core as the name the workflow already goes by:
+where an aggregate of that ID exists the start was the application's own (or a workflow
+taken over from version 1, which carries its ID in the key and nowhere else), and where
+none exists the workflow was started past VanillaBP and gets its aggregate under that key,
+reported with one INFO line. A key which cannot be an ID of that aggregate is refused,
+because VanillaBP would otherwise have to name the workflow something else and overwrite a
+key somebody chose. The reasoning is
+[decision 24](./DECISIONS.md#24-a-start-is-the-applications-own-where-the-id-already-has-an-aggregate),
+and `Camunda7ForeignStartIT` walks every case against the engine.
 
 Where a workflow service declares a `@WorkflowEnded` method, the adapter attaches an END
 execution listener to the PROCESS scope, again inside the engine's transaction. Camunda 7
