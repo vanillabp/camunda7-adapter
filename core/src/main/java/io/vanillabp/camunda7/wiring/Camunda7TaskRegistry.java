@@ -220,6 +220,68 @@ public class Camunda7TaskRegistry {
 
   }
 
+  /**
+   * One served listener which has to be told that its element was canceled.
+   *
+   * @param elementId The BPMN element the listener sits on
+   * @param taskDefinition The listener's task definition, which is what resolves its
+   *          <code>&#64;WorkflowTask</code> method
+   */
+  public record ListenerNeedingACancellation(
+                                             String elementId,
+                                             String taskDefinition) {
+  }
+
+  /**
+   * Per process definition key the engine knows, the served listeners which have to be told
+   * about a cancellation. Read while the engine PARSES a model, which is why it is keyed by
+   * what the engine reports there.
+   */
+  private final Map<RegistryKey, List<ListenerNeedingACancellation>> listenersNeedingACancellation = new ConcurrentHashMap<>();
+
+  /**
+   * Remembers a served listener whose method has to hear the cancellation of its element.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param scopedBpmnProcessId The process definition key the engine knows
+   * @param elementId The BPMN element the listener sits on
+   * @param taskDefinition The listener's task definition
+   */
+  public void registerListenerNeedingACancellation(
+      final String workflowModuleId,
+      final String scopedBpmnProcessId,
+      final String elementId,
+      final String taskDefinition) {
+
+    final var listener = new ListenerNeedingACancellation(elementId, taskDefinition);
+    final var known = listenersNeedingACancellation
+        .computeIfAbsent(
+            new RegistryKey(workflowModuleId, scopedBpmnProcessId),
+            key -> new CopyOnWriteArrayList<>());
+    // a second deployment of the same model registers the same listener again, and the engine
+    // would then notify the one method twice
+    if (!known.contains(listener)) {
+      known.add(listener);
+    }
+
+  }
+
+  /**
+   * The served listeners of one process which have to be told about a cancellation.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param scopedBpmnProcessId The process definition key the engine knows
+   * @return The listeners, empty where none was registered
+   */
+  public List<ListenerNeedingACancellation> listenersNeedingACancellation(
+      final String workflowModuleId,
+      final String scopedBpmnProcessId) {
+
+    return listenersNeedingACancellation
+        .getOrDefault(new RegistryKey(workflowModuleId, scopedBpmnProcessId), List.of());
+
+  }
+
   public void register(
       final Camunda7TaskConnectable connectable) {
 

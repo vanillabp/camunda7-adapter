@@ -211,6 +211,10 @@ public class Camunda7ListenersReportTest {
         logged.contains("execution listener on 'end'"),
         () -> "and the event, which is part of the listener's identity: "
             + logged);
+    assertTrue(
+        logged.contains("VanillaBP tells your method when the element the listener sits on is canceled"),
+        () -> "how the cancellation of the element reaches the method: "
+            + logged);
     assertTrue(logged.contains("stops being portable"), () -> "what it costs the model: "
         + logged);
     assertFalse(

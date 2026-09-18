@@ -79,6 +79,7 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
       final Element processElement,
       final org.camunda.bpm.engine.impl.persistence.entity.ProcessDefinitionEntity processDefinition) {
 
+    attachCancellationToElementsCarryingAServedListener(processDefinition);
     if ((workflowEndedListener == null) || (workflowEndedHandlerExists == null)) {
       return;
     }
@@ -106,6 +107,63 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
         .addListener(
             org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_END,
             workflowEndedListener);
+
+  }
+
+  /**
+   * Attaches the cancellation listener to every element of the process which carries a listener
+   * somebody modelled and this application serves.
+   * <p>
+   * Read here rather than in one of the {@code parseXxx} methods because a listener may sit on
+   * any element a modeller can select, and asking the parsed process once is a shorter answer
+   * than a method per element type. The engine has parsed the whole scope by the time this runs,
+   * so the activities are there to be found.
+   * <p>
+   * An element which already carries the listener is left alone. Every service-like activity
+   * does, because the transaction boundaries put it there, and a second copy would report one
+   * cancellation twice.
+   *
+   * @param processDefinition The parsed process
+   */
+  private void attachCancellationToElementsCarryingAServedListener(
+      final org.camunda.bpm.engine.impl.persistence.entity.ProcessDefinitionEntity processDefinition) {
+
+    if (cancellationListener == null) {
+      return;
+    }
+    final var workflowModuleId = cancellationListener
+        .taskRegistry()
+        .resolveWorkflowModuleId(processDefinition.getTenantId(), processDefinition.getKey());
+    if (workflowModuleId == null) {
+      // a process of another application on the same engine, or one this adapter has not wired
+      // yet: nothing of it is VanillaBP's business
+      return;
+    }
+    cancellationListener
+        .taskRegistry()
+        .listenersNeedingACancellation(workflowModuleId, processDefinition.getKey())
+        .forEach(listener -> {
+          final var activity = processDefinition.findActivity(listener.elementId());
+          if (activity == null) {
+            // a listener on something which is no activity of the engine, a sequence flow being
+            // the case a modeller reaches: such an element is never canceled
+            log.debug(
+                "Camunda7: the element '{}' of process definition '{}' carries a served listener "
+                    + "but is no activity, so it is never canceled and nothing is attached",
+                listener.elementId(),
+                processDefinition.getKey());
+            return;
+          }
+          if (activity
+              .getListeners(org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_END)
+              .contains(cancellationListener)) {
+            return;
+          }
+          activity
+              .addListener(
+                  org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_END,
+                  cancellationListener);
+        });
 
   }
 

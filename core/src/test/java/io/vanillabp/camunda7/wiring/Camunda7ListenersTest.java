@@ -1,6 +1,7 @@
 package io.vanillabp.camunda7.wiring;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -331,8 +332,32 @@ public class Camunda7ListenersTest {
         Camunda7Listeners.WHAT_IT_COSTS.contains("gap 16 and 17"),
         "with the evidence behind the portability claim, which is the Process-Engine-API's GAPS.md");
     assertTrue(
-        Camunda7Listeners.WHAT_IT_COSTS.contains("TaskEvent.Event has no value"),
-        "and the one ambiguity this design leaves");
+        Camunda7Listeners.WHAT_IT_COSTS.contains("A listener knows two events and no more"),
+        "and what a served method is told");
+
+  }
+
+  @Test
+  @DisplayName("Which listener hears a cancellation through itself and which one needs VanillaBP")
+  public void whichListenerNeedsACancellation() {
+
+    assertTrue(
+        Camunda7Listeners.isACancellation(
+            new Camunda7Listeners.ModelledListener(
+                "Loan", "Activity_Approve", "end", Camunda7Listeners.Implementation.EXPRESSION, "${auditIt}", "auditIt")),
+        "this engine fires an END execution listener on a cancellation too, so such a method "
+            + "already hears the moment");
+    assertFalse(
+        Camunda7Listeners.isACancellation(
+            new Camunda7Listeners.ModelledListener(
+                "Loan", "Activity_Approve", "start", Camunda7Listeners.Implementation.EXPRESSION, "${auditIt}", "auditIt")),
+        "a start listener never fires for an element a boundary event takes away");
+    assertFalse(
+        Camunda7Listeners.isACancellation(
+            new Camunda7Listeners.ModelledListener(
+                "Loan", "Flow_Approved", "take", Camunda7Listeners.Implementation.EXPRESSION, "${auditIt}", "auditIt")),
+        "a take listener needs one as far as this rule is concerned, and the parse listener then "
+            + "finds no activity for its sequence flow");
 
   }
 

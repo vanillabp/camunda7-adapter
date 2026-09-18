@@ -658,10 +658,29 @@ Where the switch is on, the listener is a task like any other one:
   behaves differently at those two placements.
 
 The event is part of a listener's identity: one method serves one event of one element. `@TaskEvent`
-receives `CREATED` for every listener, which is the only value that works at all, because a method
-without that parameter subscribes to `CREATED` alone and any other value would leave such a method
-silently uncalled. `TaskEvent.Event` has no value for a listener's own event, and the startup report
-says so.
+receives `CREATED` when that listener fires, whichever event the modeller picked for it, because a
+method without that parameter subscribes to `CREATED` alone and any other value would leave such a
+method silently uncalled.
+
+`CANCELED` is the second event a listener knows. A modelled listener fires at its own moment and at no
+other, so an element taken away by an interrupting boundary event or by a terminating end event never
+reaches a `start` listener and the method learns nothing. `Camunda7TaskCancellationListener` therefore
+serves the listeners of an element as well as its task, and `Camunda7AsyncBpmnParseListener#parseProcess`
+attaches it to the elements which carry one. The process is asked once, after the engine parsed its
+whole scope, rather than per element type: a listener may sit wherever a modeller can select something,
+and an element the engine has no activity for, a sequence flow being the case a modeller reaches, is
+never canceled and is skipped with a debug line.
+
+A listener the modeller put on `end` gets nothing of VanillaBP's own. This engine fires an END
+execution listener when the element is canceled too, which is how the cancellation listener hears a
+cancellation at all, so such a method already hears the moment and a second report would be the same
+moment twice. `Camunda7Listeners#isACancellation` is that rule, and
+`Camunda7TaskRegistry#registerListenerNeedingACancellation` is what the wiring writes down for the
+parse listener to read.
+
+An element which already carries the cancellation listener is left alone. Every service-like activity
+does, because the transaction boundaries put it there, and a second copy would report one cancellation
+twice.
 
 Two shapes end the boot besides the missing key, each with a message naming the listener and the way
 out. `refuseListenersSharingATaskDefinition` answers two served listeners of one element under ONE
@@ -676,8 +695,8 @@ incident which says nothing, since the engine is inside a transition of its own 
 route.
 
 Every boot of a workflow module whose listeners are served writes one framed WARN naming the key, the
-module, every served listener with its element, its event and its expression, what it costs and the
-way back. Nothing silences it, see
+module, every served listener with its element, its event and its expression, what it costs, how a
+cancellation reaches the method and the way back. Nothing silences it, see
 [decision 20](./DECISIONS.md#20-a-listener-somebody-modelled-is-a-task-and-only-where-the-application-asked-for-it).
 Where the switch is on and no model of the module carries a listener, the boot writes one line instead
 of the frame.

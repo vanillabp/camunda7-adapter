@@ -1434,6 +1434,15 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
           if (context != null) {
             context.recordModelledListener(listener);
           }
+          if ((connectables != null) && (taskRegistry != null) && !io.vanillabp.camunda7.wiring.Camunda7Listeners
+              .isACancellation(listener)) {
+            // the element is taken away without this listener's own moment ever arriving, so
+            // VanillaBP tells the method itself - the parse listener attaches the engine's end
+            // listener to the element, and this is where it learns which elements need one
+            taskRegistry
+                .registerListenerNeedingACancellation(
+                    workflowModuleId, scopedBpmnProcessId, listener.elementId(), listener.taskDefinition());
+          }
           if (connectables != null) {
             connectables.add(new Camunda7TaskConnectable(
                 workflowModuleId, bpmnProcessId, scopedBpmnProcessId, listener.elementId(), listener
@@ -1632,6 +1641,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             {}
             {}
             {}
+            {}
             The way back: move what the listener does into a task of the model with a @WorkflowTask \
             method behind it, or set '{}: false'.
             {}""",
@@ -1648,6 +1658,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
             .collect(java.util.stream.Collectors.joining("\n")),
         io.vanillabp.camunda7.wiring.Camunda7Listeners.WHAT_IT_COSTS,
         io.vanillabp.camunda7.wiring.Camunda7Listeners.WHICH_METHOD_SERVES_WHICH,
+        io.vanillabp.camunda7.wiring.Camunda7Listeners.HOW_A_CANCELLATION_IS_REPORTED,
         io.vanillabp.camunda7.wiring.Camunda7Listeners.propertyKeyOf(adapterId),
         io.vanillabp.camunda7.wiring.Camunda7Listeners.FRAME_LINE);
 

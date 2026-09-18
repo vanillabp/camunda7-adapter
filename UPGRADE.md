@@ -263,11 +263,14 @@ Four things change beyond the key itself.
 Any element may carry a served listener now, not only an end event and an intermediate throw event.
 That is a wider door than version 1 had, and the key is what keeps it shut by default.
 
-`@TaskEvent` tells the method nothing any more. On version 1 it received `CREATED` for every listener
-event, which said nothing about whether the listener fired on `start`, on `end` or on `take`. Now the
-event is part of the wiring: one method serves one event of one element, the parameter still receives
-`CREATED` because a method without it subscribes to `CREATED` alone, and `TaskEvent.Event` has no value
-for a listener's event at all. Drop the parameter where it only carried noise.
+`@TaskEvent` answers two moments now. On version 1 it received `CREATED` for every listener event,
+which said nothing about whether the listener fired on `start`, on `end` or on `take`. Here the event is
+part of the wiring: one method serves one event of one element, so the parameter receives `CREATED`
+whenever the modelled listener fires. It receives `CANCELED` when the element the listener sits on is
+canceled, which VanillaBP reports through the engine's end listener. A method without the parameter
+subscribes to `CREATED` alone and hears no cancellation. A listener you modelled on `end` gets no report
+of its own, because the engine fires an END execution listener on a cancellation too and such a method
+already hears the moment.
 
 A `@TaskId` parameter is refused while the process is wired. A listener is notified and done, so such a
 task can never stay open and the id would complete nothing. Version 1 accepted the method and the
