@@ -850,11 +850,33 @@ public class Camunda7WorkflowLifecycleTest {
         "the task following the timer start event to run and the end to be reported, but got: "
             + strings("introspect/timer-aggregates"));
 
-    final var reported = strings("introspect/timer-aggregates").getFirst();
     // the id is the trigger time in its ISO-8601 form, which is what makes a repeated
-    // notification for the same firing recognizable
-    assertTrue(reported.startsWith("2") && reported.contains("Z|"), "the aggregate's id is the trigger time: "
-        + reported);
+    // notification for the same firing recognizable. The table holds the workflow of the
+    // test below as well, which was started with a name of its own, so the one the timer
+    // started is the one carrying that shape
+    assertTrue(
+        strings("introspect/timer-aggregates")
+            .stream()
+            .anyMatch(reported -> reported.startsWith("2") && reported.contains("Z|")),
+        "the aggregate's id is the trigger time: "
+            + strings("introspect/timer-aggregates"));
+
+  }
+
+  @Test
+  @DisplayName("A workflow started past VanillaBP gets its aggregate under the key it was started with")
+  public void aWorkflowStartedPastVanillaBp() throws Exception {
+
+    // the same process, started through the engine by somebody who never asked
+    // VanillaBP - which is what anybody with access to the engine can do
+    post("introspect/started-past-vanillabp/started-past-vanillabp");
+
+    await(
+        () -> strings("introspect/timer-aggregates")
+            .stream()
+            .anyMatch(reported -> reported.startsWith("started-past-vanillabp|recordStart|COMPLETED/")),
+        "the workflow started past VanillaBP to get its aggregate and run to its end, but got: "
+            + strings("introspect/timer-aggregates"));
 
   }
 

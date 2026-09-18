@@ -706,6 +706,53 @@ through a bean of the engine and not by asking the engine, because every questio
 embedded engine is a command whose commit wakes the acquisition - a test polling the engine wakes
 the sleep it measures.
 
+### 24. A start is the application's own where the ID already has an aggregate
+
+On Camunda 7 the business key IS the workflow aggregate's ID. `Camunda7ProcessService` writes the ID
+into the key when the application starts a workflow, and every other part of this adapter reads the
+key back as the ID. A key therefore names an aggregate, and it says nothing about who started the
+workflow.
+
+The listener on a timer, signal or conditional start event used to return as soon as the instance
+carried a key. Measured against a running engine, that assumption does not hold in three ways: a
+process whose only start event is a timer can be started through `startProcessInstanceByKey` with
+any key, so can one with a signal start event, and a conditional start the engine performs itself
+carries a key whenever the caller of `evaluateStartConditions` named one. In all three cases no
+aggregate was built and nothing was logged. The first task of that workflow then failed with "no
+workflow aggregate of class ... was found", which blames a deleted aggregate for a workflow which
+never had one, and the job retried until it became an incident.
+
+The rule which replaced it is the one question Camunda 7 can answer: a start is the application's
+own where the ID already has an aggregate. The key travels to the core as the name the instance
+goes by, the core looks for an aggregate of that ID, and the answer says which case it was. An
+aggregate which existed belongs to the application's own start, or to a workflow taken over from
+version 1, which carries its ID in the business key and nowhere else. An aggregate which was
+created belongs to a workflow somebody started past VanillaBP, and it is created under that key so
+the workflow keeps the name it was started with. That case is worth one INFO line, once per
+workflow: the application would otherwise hear of the workflow only when its first task arrives.
+
+What this costs is one load of the aggregate per BPMS-initiated start, where the early return cost
+nothing. A signal broadcast which starts many workflows pays it per workflow. The price buys the
+only reliable answer there is, and a start which is followed by a task loads the aggregate a moment
+later anyway.
+
+One case is refused rather than repaired: a key which cannot be an ID of that workflow aggregate,
+such as a text where the ID attribute is a number or a UUID. VanillaBP would have to give the
+workflow an ID of its own and overwrite a key somebody chose, which destroys the name the starter
+is working with. Nothing is written, and the message names the instance, the key and the two ways
+out. This adapter raises no incident of its own: the engine retries the start and raises one
+afterwards, the way it does with any failing start.
+
+Two things stay invisible, with open eyes. A key which happens to look like the ID of an existing
+aggregate attaches that workflow to it without a word, and nothing here can catch it, because
+catching it needs two values naming the instance and Camunda 7 keeps one. And an application which
+deletes an aggregate while its workflow still runs looks like a foreign start at the next
+BPMS-initiated start of the same ID.
+
+`Camunda7ForeignStartIT` starts all three kinds from outside, holds the application's own start
+against them, and reads the message of the refused one. See
+[Workflows the engine starts itself](./README.md#workflows-the-engine-starts-itself-and-workflows-which-ended).
+
 ### 25. The migration fallback names no version for its removal
 
 Decision 1 ends by saying that version 2.1 removes the live read of the aggregate. Nobody can
