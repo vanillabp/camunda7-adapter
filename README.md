@@ -1434,6 +1434,19 @@ behalf of the startup check about older versions, and nobody can change it any m
   [Embedded-engine wiring](#embedded-engine-wiring)) using
   `org.camunda.bpm:camunda-engine-spring-6` and does **not** use the starter.
 
+## Building
+
+Prerequisites installed into the local Maven repository first (build order): `spi-for-java` →
+`adapter-platform-integration` → this repository. Then:
+
+```bash
+mvn spotless:apply
+mvn install
+```
+
+The engine runs embedded on an in-memory database, so the tests need neither Docker nor a network.
+What a pull request needs beyond a green build is in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+
 ## Test coverage
 
 `mvn install` builds one aggregated JaCoCo report per platform (`install`, not
