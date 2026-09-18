@@ -66,13 +66,15 @@ for the runtime and `Camunda7TaskWiringValidationIT` for the deployment.
 
 ## Platform version guard
 
-`META-INF/vanillabp/adapter-camunda7.properties` carries this adapter's version and the
-version of the VanillaBP platform integration it was built against
+`META-INF/vanillabp/adapter-camunda7.properties` carries this adapter's version, its Maven
+coordinates and the version of the VanillaBP platform integration it was built against
 (`platform.version=${adapter-platform.version}`, filled by resource filtering configured
 in `pom.xml`). The `Camunda7DeploymentService` constructor passes it to
-`AdapterPlatformVersion.requireCompatiblePlatform(...)`, which aborts the startup with a
-guiding message if the platform integration on the classpath is older (the comparison
-itself is held by `AdapterPlatformVersionTest` of the platform repository) — Maven does not
-report that as a conflict, because a version managed by the application always wins over
-the version required transitively by this adapter, even as a downgrade. See
-`migration-adapter/README.md`, section "Adapter/platform version guard".
+`VanillaBpParts.requireAdapterFitsPlatform(...)`, and the platform judges the same
+descriptor once more while it boots. The boot ends with a message naming both versions and
+the dependency to change if the platform integration on the classpath is older than the one
+this adapter was built against, or if this adapter is older than the oldest one that
+platform integration still serves. Maven does not report either as a conflict, because a
+version managed by the application always wins over the version required transitively by
+this adapter, even as a downgrade. See `migration-adapter/README.md`, section "Parts which
+do not belong together", of the VanillaBP platform repository.
