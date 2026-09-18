@@ -20,11 +20,12 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
  * Every other name falls through to the engine's remaining resolvers, which is where the
  * process variables live.
  * <p>
- * <b>Attributes of the workflow aggregate are a MIGRATION FALLBACK here</b>, removed in
- * 2.1. Reading the aggregate live made a model reading <code>${riskAcceptable}</code> work
- * on Camunda 7 and fail on every remote BPMS - the opposite of what {@code @SyncWithBPMS}
- * is for. The values are pushed as process variables at every sync point now, so the engine
- * resolves them itself (see decision 1 in the repository's DECISIONS.md).
+ * <b>Attributes of the workflow aggregate are a MIGRATION FALLBACK here</b>, and it will be
+ * removed. Reading the aggregate live made a model reading <code>${riskAcceptable}</code>
+ * work on Camunda 7 and fail on every remote BPMS - the opposite of what
+ * {@code @SyncWithBPMS} is for. The values are pushed as process variables at every sync
+ * point now, so the engine resolves them itself (see decision 1 in the repository's
+ * DECISIONS.md).
  * <p>
  * The fallback exists because an application upgrading to this version has workflows
  * RUNNING which carry no such variables yet, and because version 1 resolved attributes
@@ -49,7 +50,7 @@ public class Camunda7TaskELResolver extends ELResolver {
 
   /**
    * How many workflow INSTANCES the fallback served since this application started -
-   * which is what version 2.1 needs to know before it removes the fallback, and what the
+   * which is what has to be known before the fallback can be removed, and what the
    * report of names cannot answer. A name says a model reads something unshared; an
    * instance says a workflow still depends on the live read.
    * <p>
@@ -100,7 +101,7 @@ public class Camunda7TaskELResolver extends ELResolver {
   // fallback, and this resolver is the only production caller of it: the
   // 'removal' lint is mandatory and @Deprecated on a caller does not silence it, so
   // without this the adapter reported the same two warnings in every build. Goes away
-  // in 2.1 together with the fallback.
+  // together with the fallback.
   @SuppressWarnings("removal")
   @Override
   public Object getValue(
@@ -241,7 +242,7 @@ public class Camunda7TaskELResolver extends ELResolver {
    * Says at most once an hour how many workflow instances are still being answered by
    * the fallback, and only while that number keeps growing.
    * <p>
-   * This is the number version 2.1 needs, and it is not the one the startup check
+   * This is the number the removal needs, and it is not the one the startup check
    * reports. That check names the EXPRESSIONS which read something unshared, which is a
    * modelling gap and stays the same however many workflows there are. This says how
    * many workflows still depend on the live read, and it falls on its own: an instance
@@ -271,11 +272,12 @@ public class Camunda7TaskELResolver extends ELResolver {
             Camunda7[{}]: {}{} workflow(s) of workflow module '{}' were answered by the MIGRATION \
             FALLBACK since this application started - they carry no process variable for an \
             attribute their model reads, which is how workflows started under VanillaBP 1 arrive \
-            here. Version 2.1 removes the fallback, so this number is the one to watch: it falls on \
+            here. The fallback will be removed, so this number is the one to watch: it falls on \
             its own, because a workflow stops needing the fallback as soon as it reaches a point \
             where this adapter writes the shared values. A number which keeps growing means new \
             workflows run into the same gap, and then the model reads something which is not \
-            shared - the startup names those expressions.""",
+            shared - the startup names those expressions. Ask the VanillaBP team if you need a \
+            date for the removal.""",
         taskRegistry.getAdapterId(),
         usage().atLeast()
             ? "at least "
@@ -327,7 +329,7 @@ public class Camunda7TaskELResolver extends ELResolver {
   /**
    * Says ONCE per workflow module, process and name that an expression was answered by
    * reading the aggregate instead of a process variable - the migration fallback which
-   * version 2.1 removes.
+   * will be removed.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID
@@ -345,9 +347,10 @@ public class Camunda7TaskELResolver extends ELResolver {
         """
             Camunda7[{}]: the expression '{}' of BPMN process '{}' (workflow module '{}') was \
             answered by reading the workflow aggregate directly, because the workflow carries no \
-            process variable of that name. That is the MIGRATION FALLBACK of VanillaBP 2.0, and \
-            version 2.1 REMOVES it - a workflow started with this version writes the variable at \
-            every sync point. To become independent of it: make the attribute a readable getter \
+            process variable of that name. That is the MIGRATION FALLBACK of VanillaBP 2.0, which \
+            exists for the upgrade and WILL BE REMOVED - ask the VanillaBP team if you need a date \
+            for that. A workflow started with this version writes the variable at every sync \
+            point. To become independent of it: make the attribute a readable getter \
             (the values shared with a BPMS are read from getters, never from fields) and make sure \
             it is shared (@SyncWithBPMS on the getter, or an aggregate class which shares \
             everything - the default). Workflows which were already running when you upgraded keep \

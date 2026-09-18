@@ -331,8 +331,8 @@ public abstract class AbstractNestedExpressionsIT {
 
     // 'hiddenOrder' is no process variable, so the EL resolver reads the live aggregate
     // and the expression meets the object graph itself rather than a map. Everything a
-    // version-1 model could do works here, and all of it stops working when 2.1 removes
-    // the fallback.
+    // version-1 model could do works here, and all of it stops working once the fallback
+    // is removed.
     assertEquals("120.50", valueOf("${hiddenOrder.getTotal()}").toString(), "the getter call of version 1");
     assertEquals(2027, valueOf("${hiddenOrder.dueDate.year}"), "a property of a live temporal");
     assertEquals("IC-9", valueOf("${hiddenOrder.internalCode}"), "an attribute unshared at both levels");
@@ -413,7 +413,7 @@ public abstract class AbstractNestedExpressionsIT {
         output
             .getAll()
             .contains("MIGRATION FALLBACK"),
-        "reading 'hiddenOrder' live has to be reported, because version 2.1 removes the fallback");
+        "reading 'hiddenOrder' live has to be reported, because the fallback will be removed");
     assertTrue(
         output
             .getAll()

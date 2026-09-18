@@ -1023,8 +1023,9 @@ The EL resolver serves the WIRED TASKS. It still answers attribute names as well
 as the **migration fallback** described above, and only where the engine has no variable of that
 name: workflows started with an older version carry none, and version 1 also resolved
 attributes without a getter or through an `isX()` returning a non-boolean. Each such read
-is logged once with the way out, and version 2.1 removes the fallback together with the SPI
-methods behind it (`workflowAggregateHasProperty`, `resolveWorkflowAggregateProperty`).
+is logged once with the way out. The fallback will be removed together with the SPI methods
+behind it (`workflowAggregateHasProperty`, `resolveWorkflowAggregateProperty`); no version is
+named for that, so ask the VanillaBP team if you need a date.
 
 While the application starts, `wireBpmn` reports the expressions whose PATH stops short of
 a value the engine holds, naming the element, the expression, the segment which stops it,

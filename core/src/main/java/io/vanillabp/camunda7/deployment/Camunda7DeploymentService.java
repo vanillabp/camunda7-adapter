@@ -1908,7 +1908,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
               from an isX() returning something else (VanillaBP 1 read those, this version \
               does not); or let the expression read something the aggregate does share. Until \
               you do, VanillaBP 2.0 still answers this expression by reading the aggregate \
-              directly - version 2.1 removes that fallback.""",
+              directly, and that fallback will be removed.""",
           adapterId,
           origin.expression(),
           origin.elementId(),

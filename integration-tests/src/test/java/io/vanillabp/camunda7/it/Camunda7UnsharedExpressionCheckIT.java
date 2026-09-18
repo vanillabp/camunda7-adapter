@@ -119,7 +119,7 @@ public class Camunda7UnsharedExpressionCheckIT {
                 + topLevel);
     Assertions
         .assertTrue(
-            topLevel.contains("version 2.1 removes that fallback"),
+            topLevel.contains("that fallback will be removed"),
             () -> "a top-level name IS answered by the fallback, so the sentence belongs here: "
                 + topLevel);
 
