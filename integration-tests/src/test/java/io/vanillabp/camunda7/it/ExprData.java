@@ -113,7 +113,7 @@ public abstract class ExprData {
    * The same object graph under a name the aggregate does NOT share. The engine has no
    * variable of it, so the migration fallback of {@code Camunda7TaskELResolver} answers
    * it from the live aggregate - which is what keeps the whole version-1 grammar alive
-   * until 2.1 removes the fallback.
+   * until the fallback is removed.
    */
   @Transient
   @NoSyncWithBPMS

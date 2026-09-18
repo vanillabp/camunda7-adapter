@@ -27,8 +27,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * read those variables;</li>
  * <li>an aggregate which minimizes ({@code @SyncWithBPMS} on one attribute derives opt-out
  * for the rest) writes exactly what it named - and an expression reading something it did
- * NOT share only works through the MIGRATION FALLBACK of the EL resolver, which version
- * 2.1 removes;</li>
+ * NOT share only works through the MIGRATION FALLBACK of the EL resolver, which will be
+ * removed;</li>
  * <li>the demanding case: the gateway right behind a service task branches
  * on what THAT task computed, which means the value has to be a variable by then. The
  * condition also navigates a NESTED shared value, which travels as an object variable.</li>
@@ -122,7 +122,7 @@ public class Camunda7AggregateSyncIT {
 
     // the gateway condition reads the NOT shared attribute, so the workflow got past it
     // through the migration fallback - the EL resolver still reads the
-    // aggregate where the engine has no variable of that name. Version 2.1 removes that,
+    // aggregate where the engine has no variable of that name. That fallback will be removed,
     // and the startup check names such expressions while the application boots
     assertTrue(
         waitForTaskId(aggregateId),
