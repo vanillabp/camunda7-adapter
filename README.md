@@ -1473,11 +1473,11 @@ happen, and `TestClassConventionsTest` next to it is what keeps every test class
 suppression the printed lines below depend on.
 
 The gate reports what it measured on every run, green ones included, which is the one place in
-VanillaBP where a passing test prints:
+VanillaBP where a passing test prints. The angle brackets stand for the numbers of the run:
 
 ```
-coverage gate | Spring Boot: 91.23 % instructions (790 of 9012 missed) | at the rule of 90 %
-coverage gate | Quarkus: 86.02 % instructions (1194 of 8541 missed) | 3.98 points below the rule of 90 %, build breaks below 85 %
+coverage gate | Spring Boot: <percent> % instructions (<missed> of <total> missed) | at the rule of 90 %
+coverage gate | Quarkus: <percent> % instructions (<missed> of <total> missed) | <gap> points below the rule of 90 %, build breaks below 85 %
 ```
 
 Both platforms run the documented features end to end against a real embedded engine: Spring Boot in
