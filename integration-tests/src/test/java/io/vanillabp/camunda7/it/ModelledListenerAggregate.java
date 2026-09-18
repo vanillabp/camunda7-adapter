@@ -41,6 +41,19 @@ public class ModelledListenerAggregate {
    */
   private boolean theWorkWasDone;
 
+  /**
+   * Written by the listener of the user task when that listener FIRES, which is the ordinary
+   * notification every served listener gets.
+   */
+  private boolean theWaitBegan;
+
+  /**
+   * Written by the same listener method when the boundary timer takes the user task away. The
+   * method is called a second time, with CANCELED, through the listener VanillaBP attaches
+   * itself.
+   */
+  private boolean theWaitWasCanceled;
+
   public Long getId() {
 
     return id;
@@ -70,6 +83,32 @@ public class ModelledListenerAggregate {
       final boolean theEndWasDone) {
 
     this.theEndWasDone = theEndWasDone;
+
+  }
+
+  public boolean isTheWaitBegan() {
+
+    return theWaitBegan;
+
+  }
+
+  public void setTheWaitBegan(
+      final boolean theWaitBegan) {
+
+    this.theWaitBegan = theWaitBegan;
+
+  }
+
+  public boolean isTheWaitWasCanceled() {
+
+    return theWaitWasCanceled;
+
+  }
+
+  public void setTheWaitWasCanceled(
+      final boolean theWaitWasCanceled) {
+
+    this.theWaitWasCanceled = theWaitWasCanceled;
 
   }
 

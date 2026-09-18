@@ -20,6 +20,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * listener object, and the object the adapter serves a TASK with is an activity behavior, which
  * the engine would refuse here. Nothing but a running engine proves that the right object
  * arrives, and version 1 got that right with a type version 2 no longer has.
+ * <p>
+ * The cancellation is the same kind of question. The model has a user task which nobody
+ * completes and an interrupting boundary timer which takes it away, so the listener of that task
+ * fires once and is then called a second time with CANCELED. Only an engine shows that the
+ * listener VanillaBP attaches to the element really runs on a cancellation, because the engine
+ * decides what a canceled execution reports about itself.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -32,7 +38,7 @@ public class Camunda7ModelledListenerIT {
   private static final String DATABASE = "--spring.datasource.url=jdbc:h2:mem:c7-modelled-listeners-it;DB_CLOSE_DELAY=-1";
 
   @Test
-  @DisplayName("Both listener forms reach a method, and the aggregate each of them changed is saved")
+  @DisplayName("Both listener forms reach a method, and a canceled element reaches the method serving its listener")
   public void bothListenerFormsReachAMethod(
       final CapturedOutput output) throws Exception {
 
@@ -62,6 +68,15 @@ public class Camunda7ModelledListenerIT {
               .assertTrue(
                   aggregate.isTheWorkWasDone(),
                   "the task before the end event ran as it always did");
+          Assertions
+              .assertTrue(
+                  aggregate.isTheWaitBegan(),
+                  "the listener of the user task fired when the task was created");
+          Assertions
+              .assertTrue(
+                  aggregate.isTheWaitWasCanceled(),
+                  "and the same method was told when the boundary timer took the task away, which "
+                      + "is the moment the listener of the model never reaches by itself");
           return;
         }
         Thread.sleep(100);
@@ -71,11 +86,14 @@ public class Camunda7ModelledListenerIT {
       Assertions
           .fail(
               ("the listeners of the end event did not both reach a method within 30 seconds: the "
-                  + "camunda:expression one %s, the camunda:delegateExpression one %s, the task before them %s")
+                  + "camunda:expression one %s, the camunda:delegateExpression one %s, the task before them %s, "
+                  + "the listener of the user task %s, its cancellation %s")
                   .formatted(
                       aggregate.isTheEndWasReached(),
                       aggregate.isTheEndWasDone(),
-                      aggregate.isTheWorkWasDone()));
+                      aggregate.isTheWorkWasDone(),
+                      aggregate.isTheWaitBegan(),
+                      aggregate.isTheWaitWasCanceled()));
 
     } finally {
       final var log = output.getAll().substring(alreadyLogged);

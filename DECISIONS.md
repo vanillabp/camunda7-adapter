@@ -567,11 +567,10 @@ for a `@WorkflowTask` method and ends the boot where none exists, and
 `validateNoUnwiredWorkflowTaskMethods` reports a method which matches no listener of any wired
 process. Version 1 wired its listeners privately and had neither direction.
 
-The event is part of a listener's identity, because one method serves one event of one element.
-`@TaskEvent` tells such a method nothing: `TaskEvent.Event` has `CREATED`, `CANCELED` and `ALL`, and
-a listener's own event is none of those. What the parameter receives is therefore `CREATED` for every
-listener, which is the only value that works at all, since a method without the parameter subscribes
-to `CREATED` alone. Two served listeners of one element under ONE expression end the boot naming
+The event is part of a listener's identity, because one method serves one event of one element. What
+`@TaskEvent` receives is therefore `CREATED` for every listener, which is the only value that works at
+all, since a method without the parameter subscribes to `CREATED` alone. What a method hears when the
+element is CANCELED is decided by entry 26, which supersedes this paragraph in that one. Two served listeners of one element under ONE expression end the boot naming
 both: one method would serve two events and nothing it could ask would say which one it is in, and
 that is the case version 1 decided with a `findFirst`. Two listeners of one element under different
 expressions are fine, and a method then has to name the task definition, because
@@ -773,3 +772,48 @@ expressions.
 
 `Camunda7UnsharedExpressionCheckIT` asserts the sentence the startup check prints about the
 fallback, so a message which goes back to naming a version fails the build.
+
+### 26. A served listener is told when its element is canceled, through the listener the engine already fires
+
+This supersedes the paragraph of decision 20 about what `@TaskEvent` receives. The rest of that entry
+stays as it is.
+
+A listener fires at the moment the modeller picked and at no other. An element taken away by an
+interrupting boundary event or by a terminating end event never reaches a `start` listener, so the
+method serving it is never told that the work it was waiting for is gone. Version 1 had the same hole
+and said nothing about it.
+
+`TaskEvent.Event` is not widened for this. A listener is a construct no BPMS promises the same way:
+this engine knows `start`, `end` and `take`, Camunda 8 knows `creating`, `assigning`, `updating`,
+`completing` and `canceling` on a task listener, and a common set over the two would be a promise
+VanillaBP cannot keep. So a listener knows the two events `TaskEvent.Event` already has. `CREATED` is
+the modelled listener firing, whichever moment it is, and the event a method really wants is in the
+model: one listener per event, one method per listener. `CANCELED` is the element going away.
+
+The engine already fires an END execution listener when an element is canceled, which is how
+`Camunda7TaskCancellationListener` hears a cancellation for a TASK. The same listener therefore serves
+the listeners of an element, and `Camunda7AsyncBpmnParseListener#parseProcess` attaches it to the
+elements which carry one. The process is asked once, after its whole scope was parsed, rather than
+through a `parseXxx` method per element type: a listener may sit wherever a modeller can select
+something, and a method per type would be a list which falls behind the next BPMN element the engine
+learns. An element the engine has no activity for is skipped, a sequence flow being the case a
+modeller reaches, because a sequence flow is never canceled.
+
+A listener the modeller put on `end` gets nothing of VanillaBP's own. Such a method already hears the
+cancellation through its own listener, as `CREATED`, and a second report would be the same moment
+twice. The Camunda 8 adapter draws the same line for the listener a modeller puts on its own cancel
+moment: whoever hears the moment already is not told a second time.
+
+An element which already carries the cancellation listener keeps the one it has. Every service-like
+activity does, because the transaction boundaries put it there, and a second copy would report one
+cancellation twice.
+
+Nothing is written into the BPMN for this, which is the rule decision 14 states for everything
+VanillaBP and its extensions attach here. What the wiring learns is written into
+`Camunda7TaskRegistry`, and the parse listener reads it there under the process definition key the
+engine reports.
+
+`Camunda7ListenersTest` holds which listener needs a cancellation and which one does not, and
+`Camunda7ModelledListenerIT` holds a boundary event taking an element away and the method hearing it.
+
+See [Listeners somebody modelled](./README.md#listeners-somebody-modelled).

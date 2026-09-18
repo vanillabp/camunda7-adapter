@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 
 import io.vanillabp.spi.process.ProcessService;
 import io.vanillabp.spi.service.BpmnProcess;
+import io.vanillabp.spi.service.TaskEvent;
 import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
@@ -45,6 +46,25 @@ public class ModelledListenerWorkflowService {
       final ModelledListenerAggregate aggregate) {
 
     aggregate.setTheWorkWasDone(true);
+
+  }
+
+  /**
+   * The listener of the user task, which is served for both moments a listener knows. It fires
+   * when the task is created, and it is called again when the boundary timer takes the task
+   * away, because VanillaBP attaches the engine's end listener to that element for exactly
+   * this.
+   */
+  @WorkflowTask(taskDefinition = "theWaitBegins")
+  public void theWaitBegins(
+      final ModelledListenerAggregate aggregate,
+      @TaskEvent(TaskEvent.Event.ALL) final TaskEvent.Event event) {
+
+    if (event == TaskEvent.Event.CANCELED) {
+      aggregate.setTheWaitWasCanceled(true);
+      return;
+    }
+    aggregate.setTheWaitBegan(true);
 
   }
 

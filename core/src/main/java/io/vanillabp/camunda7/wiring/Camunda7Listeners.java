@@ -54,6 +54,16 @@ public final class Camunda7Listeners {
   public static final String ALLOW_LISTENERS_KEY = "allow-listeners";
 
   /**
+   * The <code>camunda:event</code> of an execution listener which the engine fires when the
+   * element ends, as the model spells it.
+   * <p>
+   * This engine fires an END execution listener when the element is CANCELED as well, which is
+   * how {@link Camunda7TaskCancellationListener} hears a cancellation at all. So a modeller who
+   * wrote one already hears the cancellation, and VanillaBP adds none beside it.
+   */
+  public static final String EVENT_END = "end";
+
+  /**
    * How the BPMN wires a modelled listener.
    */
   public enum Implementation {
@@ -206,8 +216,35 @@ public final class Camunda7Listeners {
       no listener at this element, and a migration of the model stops at the method serving it. \
       The Process-Engine-API has no listener concept at all, which is gap 16 and 17 of that \
       adapter's GAPS.md. The event is part of a listener's identity here, so one @WorkflowTask \
-      method serves one event of one element - and @TaskEvent tells such a method nothing, \
-      because TaskEvent.Event has no value for a listener's event.""";
+      method serves one event of one element. A listener knows two events and no more: @TaskEvent \
+      receives CREATED when the modelled listener fires, and CANCELED when the element it sits on \
+      is canceled. A listener on any other moment of its element still arrives as CREATED.""";
+
+  /**
+   * How a served listener hears that its element was canceled, in the words of the startup
+   * report.
+   */
+  public static final String HOW_A_CANCELLATION_IS_REPORTED = """
+      VanillaBP tells your method when the element the listener sits on is canceled, and it \
+      arrives as CANCELED at the same method. A listener you modelled on 'end' gets none: this \
+      engine fires an END execution listener on a cancellation too, so such a method already hears \
+      the moment, and a second report would be the same moment twice. A listener on a sequence \
+      flow gets none either, because a sequence flow is never canceled.""";
+
+  /**
+   * Whether a listener somebody modelled hears the cancellation of its element through itself.
+   * Such a listener needs nothing from VanillaBP: the engine fires an END execution listener when
+   * the element is canceled as well, so the method would hear the same moment twice.
+   *
+   * @param listener The listener
+   * @return Whether the modeller put it on the moment which covers a cancellation
+   */
+  public static boolean isACancellation(
+      final ModelledListener listener) {
+
+    return EVENT_END.equals(listener.event());
+
+  }
 
   /**
    * The sentence about the one ambiguity this design leaves, said wherever listeners are
