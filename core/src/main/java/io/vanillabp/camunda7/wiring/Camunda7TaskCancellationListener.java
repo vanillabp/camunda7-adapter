@@ -77,9 +77,13 @@ public class Camunda7TaskCancellationListener implements ExecutionListener {
     final var bpmnProcessId = taskRegistry.plainBpmnProcessId(workflowModuleId, scopedBpmnProcessId);
 
     final var connectable = taskRegistry
+        // the SCOPED id, because that is what the registry is keyed by. The plain id
+        // belongs into the delivery and into the log, never into a lookup: with
+        // prefixed identifiers the two differ, the lookup finds nothing and the
+        // cancellation stays silent
         .resolve(
             workflowModuleId,
-            bpmnProcessId,
+            scopedBpmnProcessId,
             execution.getCurrentActivityId(),
             null)
         // a TASK of the element and nothing else. A user task is told about its cancellation by
