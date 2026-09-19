@@ -34,7 +34,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <li>task delivery: the prefixed key has to be translated back to find the
  * {@code @WorkflowTask} handler;</li>
  * <li>message correlation with the PLAIN message name against the prefixed
- * subscription.</li>
+ * subscription;</li>
+ * <li>the cancellation of a task: the handler subscribing to {@code CANCELED} has to hear
+ * it here as well, and it is the one delivery whose absence looks like nothing happening.</li>
  * </ul>
  */
 @SpringBootTest(classes = TestApplication.class, properties = {
@@ -201,6 +203,54 @@ public class Camunda7NameClashAvoidanceIT {
             .getResults()
             .contains("message-arrived"),
         "the @WorkflowTask behind the message catch event has to have run");
+
+  }
+
+  @Test
+  @DisplayName("a canceled task reports CANCELED although the engine only knows the prefixed key")
+  public void cancellationReachesTheHandlerUnderPrefixedIdentifiers() throws Exception {
+
+    final var aggregateId = transactionTemplate.execute(status -> {
+      final var aggregate = new TaskTestAggregate();
+      aggregate.setApproved(true);
+      final var saved = taskRepository.save(aggregate);
+      runtimeService
+          .createProcessInstanceByKey(PREFIX
+              + "CancelEventProcess")
+          .processDefinitionWithoutTenantId()
+          .businessKey(String.valueOf(saved.getId()))
+          .execute();
+      return saved.getId();
+    });
+
+    awaitUntil(
+        () -> taskRepository.findById(aggregateId).orElseThrow().getTaskId() != null,
+        "the handler to run for the CREATED event and park the task");
+    assertEquals(
+        "event-created",
+        taskRepository.findById(aggregateId).orElseThrow().getResults(),
+        "the task has to be parked before anything cancels it");
+
+    final var instanceId = runtimeService
+        .createProcessInstanceQuery()
+        .processInstanceBusinessKey(String.valueOf(aggregateId))
+        .withoutTenantId()
+        .singleResult()
+        .getProcessInstanceId();
+    transactionTemplate
+        .executeWithoutResult(
+            status -> runtimeService.deleteProcessInstance(instanceId, "prefixed cancellation test"));
+
+    // the engine reports the prefixed key, the handler is registered under it, and the
+    // plain id is only what the application sees. A lookup with the plain id finds
+    // nothing here and the handler is never called, which no exception and no log line
+    // would show
+    awaitUntil(
+        () -> {
+          final var results = taskRepository.findById(aggregateId).orElseThrow().getResults();
+          return (results != null) && results.contains("event-canceled");
+        },
+        "the CANCELED event to reach the handler");
 
   }
 

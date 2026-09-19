@@ -527,9 +527,14 @@ public class Camunda7TaskRegistry {
    * Resolves the connectable serving the given EL name - matching by the BPMN
    * element the expression is evaluated at, or by the task definition (the EL
    * name itself).
+   * <p>
+   * The process id is the SCOPED one, the key the engine reports, because that is what
+   * {@link #register(Camunda7TaskConnectable)} stores under. Handing the plain id over
+   * works as long as nothing is prefixed and answers nothing as soon as something is,
+   * and nothing answers is the one outcome a caller cannot tell from "no handler here".
    *
    * @param workflowModuleId The workflow module (= tenant) ID
-   * @param bpmnProcessId The BPMN process ID
+   * @param scopedBpmnProcessId The process definition key the engine knows
    * @param currentElementId The BPMN element the expression evaluates at (may be
    *          <code>null</code>)
    * @param propertyName The top-level EL name
@@ -538,14 +543,14 @@ public class Camunda7TaskRegistry {
    */
   public Optional<Camunda7TaskConnectable> resolve(
       final String workflowModuleId,
-      final String bpmnProcessId,
+      final String scopedBpmnProcessId,
       final String currentElementId,
       final String propertyName) {
 
     // by NAME first: a name which IS a task definition means that task, wherever it
     // is evaluated. Only then by element, which matches any name evaluated there
     final var byName = connectables
-        .getOrDefault(new RegistryKey(workflowModuleId, bpmnProcessId), List.of())
+        .getOrDefault(new RegistryKey(workflowModuleId, scopedBpmnProcessId), List.of())
         .stream()
         .filter(connectable -> connectable.appliesByName(propertyName))
         .findFirst();
@@ -553,7 +558,7 @@ public class Camunda7TaskRegistry {
       return byName;
     }
     return connectables
-        .getOrDefault(new RegistryKey(workflowModuleId, bpmnProcessId), List.of())
+        .getOrDefault(new RegistryKey(workflowModuleId, scopedBpmnProcessId), List.of())
         .stream()
         .filter(connectable -> connectable.appliesByElement(currentElementId))
         .findFirst();
@@ -565,17 +570,17 @@ public class Camunda7TaskRegistry {
    * opposed to serving whatever is evaluated at its BPMN element.
    *
    * @param workflowModuleId The workflow module ID
-   * @param bpmnProcessId The SCOPED BPMN process ID
+   * @param scopedBpmnProcessId The process definition key the engine knows
    * @param propertyName The EL name
    * @return Whether a connectable is named like this
    */
   public boolean isTaskDefinitionName(
       final String workflowModuleId,
-      final String bpmnProcessId,
+      final String scopedBpmnProcessId,
       final String propertyName) {
 
     return connectables
-        .getOrDefault(new RegistryKey(workflowModuleId, bpmnProcessId), List.of())
+        .getOrDefault(new RegistryKey(workflowModuleId, scopedBpmnProcessId), List.of())
         .stream()
         .anyMatch(connectable -> connectable.appliesByName(propertyName));
 
