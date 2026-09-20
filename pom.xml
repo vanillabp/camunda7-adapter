@@ -180,6 +180,15 @@
           <version>3.16.0</version>
           <configuration>
             <release>${version.java}</release>
+            <compilerArgs>
+              <!-- most of this adapter is internal, so most of its javadoc is out of reach
+                   of the javadoc plugin of this pom: that one reads what Maven Central
+                   shows and starts at protected. javac reads the comment on a private field as well,
+                   which is where a link to a renamed method quietly rots. Every group is
+                   checked but 'missing', because a comment which was never written is a
+                   warning and not a broken build. -->
+              <arg>-Xdoclint:all,-missing</arg>
+            </compilerArgs>
             <annotationProcessorPaths>
               <path>
                 <groupId>org.projectlombok</groupId>
