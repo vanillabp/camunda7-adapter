@@ -32,6 +32,11 @@ platforms play the documented features through a real engine rather than a doubl
 `integration-tests` and Quarkus in `quarkus/integration-tests`. A core which is correct says nothing
 about a platform's glue ever calling it.
 
+The build reads the javadoc twice. The compiler runs `-Xdoclint:all,-missing`, which covers every
+class down to the private ones, and the javadoc plugin, which this repository runs in every build,
+covers what the published documentation shows and therefore stops at protected. A broken `{@link}` or a tag HTML no
+longer knows fails the build in either place.
+
 The build also measures itself. `test-coverage-report/coverage-gate` is the last module of the
 reactor and fails below 85 percent of covered instructions per platform, while the rule is 90. See
 [Test coverage](./README.md#test-coverage) for what the gate prints and why the threshold is not

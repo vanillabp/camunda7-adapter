@@ -117,7 +117,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * Whether the engine of this adapter id attached the end listener, see
-   * {@link #setWorkflowEndedSupport}.
+   * {@link #setEngineDeliversWorkflowEnded(boolean)}.
    */
   private boolean engineDeliversWorkflowEnded;
 

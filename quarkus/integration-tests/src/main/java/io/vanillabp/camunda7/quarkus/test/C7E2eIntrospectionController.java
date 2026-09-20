@@ -234,13 +234,11 @@ public class C7E2eIntrospectionController {
   }
 
   /**
-   * Which thread runs the acquisition cycles right now. The adapter answers that question
-   * itself - {@code Camunda7WakeupAfterCommit} asks it about every committing thread - so
-   * the threads of the application are held against that answer instead of against a name
-   * somebody guessed.
+   * Whether the thread with this id waits right now. The acquisition thread sleeps between
+   * two cycles, and a test which expects the engine to be idle asks for exactly that.
    *
-   * @param runnable The acquisition loop of the engine
-   * @return The thread's id, or -1 while no thread runs the loop
+   * @param threadId The id of the thread to look at
+   * @return Whether that thread waits or waits with a timeout
    */
   private boolean isParked(
       final long threadId) {
@@ -255,6 +253,15 @@ public class C7E2eIntrospectionController {
 
   }
 
+  /**
+   * Which thread runs the acquisition cycles right now. The adapter answers that question
+   * itself - {@code Camunda7WakeupAfterCommit} asks it about every committing thread - so
+   * the threads of the application are held against that answer instead of against a name
+   * somebody guessed.
+   *
+   * @param runnable The acquisition loop of the engine
+   * @return The thread's id, or -1 while no thread runs the loop
+   */
   private long threadRunningTheAcquisition(
       final SequentialJobAcquisitionRunnable runnable) {
 
