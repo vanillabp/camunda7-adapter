@@ -1150,9 +1150,17 @@ and `Camunda7ForeignStartIT` walks every case against the engine.
 
 Where a workflow service declares a `@WorkflowEnded` method, the adapter attaches an END
 execution listener to the PROCESS scope, again inside the engine's transaction. Camunda 7
-tells the two kinds apart: an execution carrying a delete reason was cancelled, deleted or
-terminated (`CANCELED`), everything else reached an end event (`COMPLETED`, with the id
-of that end event). Processes without such a method get no listener.
+tells the two kinds apart: an execution carrying a delete reason was canceled or deleted
+(`CANCELED`), everything else ran to its end (`COMPLETED`, with the id of the element it
+ended at). Processes without such a method get no listener.
+
+Two paths a modeller would call a cancelation are not one here. A terminate end event and
+an interrupting event subprocess both end the instance WITHOUT a delete reason, so the
+application hears `COMPLETED`. The id reported with it is the element the instance ended
+at, which is the terminate end event in the first case and the event subprocess in the
+second, so an id arriving there is not always an end event. Camunda 8 answers the same
+about both paths, which is why the SPI promises no mapping of modelled paths at all.
+`Camunda7WorkflowEndKindIT` holds both against the embedded engine.
 
 Both listeners follow the datasource mode like the task delivery does. An engine on a
 datasource of its own runs its transaction where the application's persistence cannot join,
