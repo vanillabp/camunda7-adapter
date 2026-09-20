@@ -1151,7 +1151,7 @@ and `Camunda7ForeignStartIT` walks every case against the engine.
 Where a workflow service declares a `@WorkflowEnded` method, the adapter attaches an END
 execution listener to the PROCESS scope, again inside the engine's transaction. Camunda 7
 tells the two kinds apart: an execution carrying a delete reason was cancelled, deleted or
-terminated (`TERMINATED`), everything else reached an end event (`COMPLETED`, with the id
+terminated (`CANCELED`), everything else reached an end event (`COMPLETED`, with the id
 of that end event). Processes without such a method get no listener.
 
 Both listeners follow the datasource mode like the task delivery does. An engine on a

@@ -77,7 +77,7 @@ public class Camunda7WorkflowEndedListener implements ExecutionListener {
         : null;
     final var kind = deleteReason == null
         ? WorkflowEnd.Kind.COMPLETED
-        : WorkflowEnd.Kind.TERMINATED;
+        : WorkflowEnd.Kind.CANCELED;
     // the activity the process instance ends at: the end event for a regular end,
     // nothing where the instance was cancelled
     final var endEventId = kind == WorkflowEnd.Kind.COMPLETED
