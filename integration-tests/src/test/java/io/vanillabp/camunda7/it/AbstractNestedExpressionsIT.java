@@ -75,6 +75,19 @@ public abstract class AbstractNestedExpressionsIT {
 
   private static final long POLL_INTERVAL_MS = 100;
 
+  /**
+   * The store keeps the BPMN process in a column of its own, so the three queries below
+   * ask for it directly instead of matching the idempotency key it is part of.
+   */
+  private static final String BLOCKED_ENTRIES_OF_THE_PROCESS = """
+      select count(*) from VANILLABP_PHASE_TWO_OUTBOX where BPMN_PROCESS_ID = ? and STATUS = 'BLOCKED'""";
+
+  private static final String ATTEMPTS_OF_THE_PROCESS = """
+      select max(ATTEMPTS) from VANILLABP_PHASE_TWO_OUTBOX where BPMN_PROCESS_ID = ?""";
+
+  private static final String DELETE_ENTRIES_OF_THE_PROCESS = """
+      delete from VANILLABP_PHASE_TWO_OUTBOX where BPMN_PROCESS_ID = ?""";
+
   @Autowired
   protected ProcessEngine processEngine;
 
@@ -843,10 +856,10 @@ public abstract class AbstractNestedExpressionsIT {
       final String bpmnProcessId) {
 
     try (var connection = dataSource.getConnection(); var statement = connection
-        .prepareStatement("select blocked from TXNO_OUTBOX where uniqueRequestId like ?")) {
-      statement.setString(1, "%%|%s|%%".formatted(bpmnProcessId));
+        .prepareStatement(BLOCKED_ENTRIES_OF_THE_PROCESS)) {
+      statement.setString(1, bpmnProcessId);
       try (var results = statement.executeQuery()) {
-        return results.next() && results.getBoolean(1);
+        return results.next() && (results.getInt(1) > 0);
       }
     } catch (final Exception cannotRead) {
       return fail("the outbox table could not be read", cannotRead);
@@ -858,8 +871,8 @@ public abstract class AbstractNestedExpressionsIT {
       final String bpmnProcessId) {
 
     try (var connection = dataSource.getConnection(); var statement = connection
-        .prepareStatement("select max(attempts) from TXNO_OUTBOX where uniqueRequestId like ?")) {
-      statement.setString(1, "%%|%s|%%".formatted(bpmnProcessId));
+        .prepareStatement(ATTEMPTS_OF_THE_PROCESS)) {
+      statement.setString(1, bpmnProcessId);
       try (var results = statement.executeQuery()) {
         return results.next()
             ? results.getInt(1)
@@ -875,8 +888,8 @@ public abstract class AbstractNestedExpressionsIT {
       final String bpmnProcessId) {
 
     try (var connection = dataSource.getConnection(); var statement = connection
-        .prepareStatement("delete from TXNO_OUTBOX where uniqueRequestId like ?")) {
-      statement.setString(1, "%%|%s|%%".formatted(bpmnProcessId));
+        .prepareStatement(DELETE_ENTRIES_OF_THE_PROCESS)) {
+      statement.setString(1, bpmnProcessId);
       statement.executeUpdate();
     } catch (final Exception cannotDelete) {
       fail("the outbox entry could not be taken away", cannotDelete);
