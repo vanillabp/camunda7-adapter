@@ -164,7 +164,10 @@ public class Camunda7DeclaredProcessWiringTest {
 
     service.startWorkflowProcessing(MODULE, new Camunda7ProcessingContext(MODULE));
 
-    final var logged = output.getOut() + output.getErr();
+    // the view of this test, not of the class: the test above prints the sentence this
+    // one says is absent, so read over the whole class the assertion would hold only as
+    // long as that test happens to run later
+    final var logged = output.getAllOfThisTest();
     assertFalse(
         logged.contains("A @WorkflowEnded method serves BPMN process"),
         () -> "no version means no workflow which could end, and a misspelled declared id "
