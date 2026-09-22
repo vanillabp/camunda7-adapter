@@ -7,12 +7,17 @@ import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 import javax.sql.DataSource;
 
 import org.camunda.bpm.engine.ProcessEngine;
+import org.camunda.bpm.engine.delegate.ExecutionListener;
 import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
 import org.camunda.bpm.engine.impl.cfg.StandaloneProcessEngineConfiguration;
 import org.camunda.bpm.engine.impl.jobexecutor.JobExecutor;
@@ -48,6 +53,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * the engine is backing off after work rather than sleeping, and a measurement which starts
  * there measures the backoff. Waiting for a fixed number of polling intervals did that, and
  * it turned a busy build machine into a red test.
+ * <p>
+ * Where a measurement ends is read from the engine as well, and for a reason of the same
+ * kind: a listener on the workflow says that the job ran. Asking the engine in a loop
+ * instead would answer the question and spoil the answer, because every committed engine
+ * command wakes the acquisition, and each of those wake-ups is a cycle in the count being
+ * taken. Twenty questions a second turned eleven connections into sixty-four.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -66,11 +77,41 @@ public class Camunda7DueDateSleepTest {
   private static final long QUIET_WINDOW = 2000;
 
   /**
-   * How long a test waits for a workflow which should have finished. Generous, because a
-   * build machine running other builds is allowed to be slow; what the tests assert is
-   * never the exact moment.
+   * How long the timer of the due date test runs. Further out than the wait time of the
+   * executor, so the hint the engine gives its own executor does not cover it and the due
+   * date has to.
    */
-  private static final long PATIENCE = 20000;
+  private static final Duration TIMER = Duration.ofSeconds(2);
+
+  /**
+   * How long a test waits for something which should have happened before it says that it
+   * never will. Three times the longest thing any test here waits for, which is the timer,
+   * and never less than twenty seconds, because a machine carrying other builds leaves this
+   * JVM without a turn for seconds at a time and such a pause does not get smaller when the
+   * timer does. Nothing is measured against this number, so it is spent only when a test
+   * fails; a test which is right stops waiting the moment the thing has happened.
+   */
+  private static final long PATIENCE = Math.max(20000, TIMER.multipliedBy(3).toMillis());
+
+  /**
+   * How many cycles the due date test allows the acquisition: the one woken by the commit
+   * which wrote the timer, the one woken by the question this test asks while the timer
+   * runs, the one at the due date, and one more for the job it found there.
+   */
+  private static final int CYCLES_A_DUE_DATE_COSTS = 4;
+
+  /**
+   * What one of those cycles may cost: the query for due jobs, the job it locks, the job it
+   * runs, and a spare for a step this test does not know about.
+   */
+  private static final int CONNECTIONS_PER_CYCLE = 4;
+
+  /**
+   * When the acquisition counts as polling rather than as waiting for the due date. A
+   * polling engine comes back every {@link #POLLING_INTERVAL} instead, which over this
+   * timer is twenty cycles where four are allowed here.
+   */
+  private static final int TOO_MANY_CONNECTIONS = CYCLES_A_DUE_DATE_COSTS * CONNECTIONS_PER_CYCLE;
 
   private static final String SLEEPER = "ASleeper";
 
@@ -81,6 +122,13 @@ public class Camunda7DueDateSleepTest {
   private JobExecutor jobExecutor;
 
   private CountingConnections connections;
+
+  /**
+   * Counted down when the workflow which waits in a timer has reached its end. The engine
+   * itself says so, from a listener on the end event, which is the last thing the timer job
+   * does before it commits.
+   */
+  private final CountDownLatch theTimerHasFired = new CountDownLatch(1);
 
   @AfterEach
   public void closeTheEngine() {
@@ -203,6 +251,7 @@ public class Camunda7DueDateSleepTest {
         .intermediateCatchEvent()
         .timerWithDuration("${duration}")
         .endEvent()
+        .camundaExecutionListenerDelegateExpression("end", "${theTimerHasFired}")
         .done();
 
   }
@@ -238,6 +287,12 @@ public class Camunda7DueDateSleepTest {
 
     final var configuration = new StandaloneProcessEngineConfiguration();
     configuration.setProcessEngineName(name);
+    configuration
+        .setBeans(
+            Map
+                .of(
+                    "theTimerHasFired",
+                    (ExecutionListener) execution -> theTimerHasFired.countDown()));
     configuration.setDataSource(connections);
     configuration.setDatabaseSchemaUpdate("create-drop");
     configuration.setHistoryTimeToLive("P180D");
@@ -263,11 +318,11 @@ public class Camunda7DueDateSleepTest {
   }
 
   private void startTheTimerOf(
-      final String duration) {
+      final Duration duration) {
 
     processEngine
         .getRuntimeService()
-        .startProcessInstanceByKey(SLEEPER, Variables.putValue("duration", duration));
+        .startProcessInstanceByKey(SLEEPER, Variables.putValue("duration", duration.toString()));
 
   }
 
@@ -435,30 +490,39 @@ public class Camunda7DueDateSleepTest {
     // the engine hints its own executor only for a job due inside the executor's wait
     // time, so a timer further out is the case this feature has to cover itself
     final var before = connections.count();
-    final var dueAt = System.currentTimeMillis() + 2000;
-    startTheTimerOf("PT2S");
+    final var dueAt = System.currentTimeMillis() + TIMER.toMillis();
+    startTheTimerOf(TIMER);
 
-    // nothing is asked of the engine while the timer runs, because every question of this
-    // test would be counted as a connection as well
-    Thread.sleep(1000);
+    // halfway through the timer the workflow still has to be waiting. Asking costs a
+    // connection and wakes the acquisition, which is why it is asked once and not in a
+    // loop, and a machine which needed the whole timer to get here is not asked at all
+    Thread.sleep(TIMER.toMillis() / 2);
     if (System.currentTimeMillis() < dueAt) {
       assertEquals(
           1,
           runningWorkflows(),
           "the timer is not due yet, so the workflow has to be waiting");
     }
-    Thread.sleep(2500);
-    // counted before the waiting below, which asks the engine on every turn
-    final var spent = connections.count() - before;
-    waitForEveryWorkflowToEnd();
 
-    // what those 3.5 seconds may cost: the start, the cycle the commit woke, the cycle at
-    // the due date, the job itself, the cycle after it, and the question above. A
-    // polling engine would have come back thirty times instead
+    // and here the test waits for the thing it is about: the job ran. The engine says so
+    // itself, so the wait ends the moment it happens and asks the database nothing while
+    // it lasts. Waiting a fixed span instead paid for the slowest machine on every run and
+    // still left the job no more room than that span happened to hold
+    final var itRan = theTimerHasFired.await(PATIENCE, TimeUnit.MILLISECONDS);
+    final var spent = connections.count() - before;
+
     assertTrue(
-        spent < 15,
+        itRan,
+        "the timer was due %d ms ago and its job has not run"
+            .formatted(Long.valueOf(System.currentTimeMillis() - dueAt)));
+    assertTrue(
+        spent < TOO_MANY_CONNECTIONS,
         "the acquisition took %d connections where it should have waited for the due date"
             .formatted(Integer.valueOf(spent)));
+
+    // the listener runs inside the transaction of the job, so this is what says that the
+    // transaction was committed as well
+    waitForEveryWorkflowToEnd();
 
   }
 
@@ -470,11 +534,11 @@ public class Camunda7DueDateSleepTest {
     jobExecutor.start();
 
     // the acquisition is now asleep for half a minute
-    startTheTimerOf("PT30S");
+    startTheTimerOf(Duration.ofSeconds(30));
     waitUntilTheEngineIsAsleep();
 
     // and this commit has to pull the wake-up forward to the nearer due date
-    startTheTimerOf("PT1S");
+    startTheTimerOf(Duration.ofSeconds(1));
     final var deadline = System.currentTimeMillis() + PATIENCE;
     while (runningWorkflows() > 1) {
       assertTrue(
