@@ -31,6 +31,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
+import io.vanillabp.integration.test.utils.outbox.PhaseTwoOutboxReader;
 
 /**
  * What a Camunda 7 model reads when the value it navigates was flattened by the sync
@@ -75,19 +76,6 @@ public abstract class AbstractNestedExpressionsIT {
 
   private static final long POLL_INTERVAL_MS = 100;
 
-  /**
-   * The store keeps the BPMN process in a column of its own, so the three queries below
-   * ask for it directly instead of matching the idempotency key it is part of.
-   */
-  private static final String BLOCKED_ENTRIES_OF_THE_PROCESS = """
-      select count(*) from VANILLABP_PHASE_TWO_OUTBOX where BPMN_PROCESS_ID = ? and STATUS = 'BLOCKED'""";
-
-  private static final String ATTEMPTS_OF_THE_PROCESS = """
-      select max(ATTEMPTS) from VANILLABP_PHASE_TWO_OUTBOX where BPMN_PROCESS_ID = ?""";
-
-  private static final String DELETE_ENTRIES_OF_THE_PROCESS = """
-      delete from VANILLABP_PHASE_TWO_OUTBOX where BPMN_PROCESS_ID = ?""";
-
   @Autowired
   protected ProcessEngine processEngine;
 
@@ -98,7 +86,17 @@ public abstract class AbstractNestedExpressionsIT {
   protected TransactionTemplate transactionTemplate;
 
   @Autowired
-  protected DataSource dataSource;
+  private DataSource dataSource;
+
+  /**
+   * What the cases about a start which never reached the engine ask of the phase-two
+   * outbox. It comes from the platform's test tools, so the name of the table and the
+   * values of its state column stay out of this class.
+   * <p>
+   * This application runs the outbox table VanillaBP writes itself, so the reader is
+   * told which table to read instead of looking for the one which is there.
+   */
+  private PhaseTwoOutboxReader outbox;
 
   @Autowired
   protected ExprConditionsWorkflowService conditionsService;
@@ -142,6 +140,13 @@ public abstract class AbstractNestedExpressionsIT {
 
     historyService = processEngine.getHistoryService();
     managementService = processEngine.getManagementService();
+
+  }
+
+  @BeforeEach
+  void takeTheOutbox() {
+
+    outbox = PhaseTwoOutboxReader.ofTheVanillaBpOutbox(dataSource);
 
   }
 
@@ -562,7 +567,7 @@ public abstract class AbstractNestedExpressionsIT {
 
     // a blocked entry is never attempted again, so leaving it would cost nothing; it goes
     // anyway, so this case leaves the context the way it found it
-    dropOutboxEntriesOf("ExprEventSub");
+    outbox.removeEntriesOf("ExprEventSub");
 
   }
 
@@ -847,53 +852,27 @@ public abstract class AbstractNestedExpressionsIT {
       final String bpmnProcessId) {
 
     awaitEngine(
-        () -> outboxEntryOfIsBlocked(bpmnProcessId),
+        () -> outbox
+            .entriesOf(bpmnProcessId)
+            .stream()
+            .anyMatch(PhaseTwoOutboxReader.Entry::isBlocked),
         "the start of '%s' has to end up blocked".formatted(bpmnProcessId));
 
   }
 
-  private boolean outboxEntryOfIsBlocked(
-      final String bpmnProcessId) {
-
-    try (var connection = dataSource.getConnection(); var statement = connection
-        .prepareStatement(BLOCKED_ENTRIES_OF_THE_PROCESS)) {
-      statement.setString(1, bpmnProcessId);
-      try (var results = statement.executeQuery()) {
-        return results.next() && (results.getInt(1) > 0);
-      }
-    } catch (final Exception cannotRead) {
-      return fail("the outbox table could not be read", cannotRead);
-    }
-
-  }
-
+  /**
+   * @param bpmnProcessId The process whose start failed
+   * @return The most attempts any entry of that process carries, zero where it has none
+   */
   private int outboxAttemptsOf(
       final String bpmnProcessId) {
 
-    try (var connection = dataSource.getConnection(); var statement = connection
-        .prepareStatement(ATTEMPTS_OF_THE_PROCESS)) {
-      statement.setString(1, bpmnProcessId);
-      try (var results = statement.executeQuery()) {
-        return results.next()
-            ? results.getInt(1)
-            : 0;
-      }
-    } catch (final Exception cannotRead) {
-      return fail("the outbox table could not be read", cannotRead);
-    }
-
-  }
-
-  private void dropOutboxEntriesOf(
-      final String bpmnProcessId) {
-
-    try (var connection = dataSource.getConnection(); var statement = connection
-        .prepareStatement(DELETE_ENTRIES_OF_THE_PROCESS)) {
-      statement.setString(1, bpmnProcessId);
-      statement.executeUpdate();
-    } catch (final Exception cannotDelete) {
-      fail("the outbox entry could not be taken away", cannotDelete);
-    }
+    return outbox
+        .entriesOf(bpmnProcessId)
+        .stream()
+        .mapToInt(PhaseTwoOutboxReader.Entry::attempts)
+        .max()
+        .orElse(0);
 
   }
 
