@@ -36,6 +36,22 @@ import io.vanillabp.camunda7.springboot.processservice.Camunda7ProcessServiceCon
 })
 public class Camunda7WebappsAutoConfiguration {
 
+  /**
+   * Spring Boot builds the class to read the bean method below.
+   */
+  public Camunda7WebappsAutoConfiguration() {
+
+  }
+
+  /**
+   * Registers VanillaBP's engines with the Camunda webapps, so Cockpit, Tasklist and Admin
+   * show them. The engines are resolved lazily, because they are built while the context
+   * refreshes and this bean is defined before that.
+   *
+   * @param engines The engines VanillaBP built, one per configured adapter id
+   * @param properties Which adapter ids the webapps serve, and who the administrator is
+   * @return The registration, which runs when the context is ready
+   */
   @Bean
   public Camunda7WebappsRegistration vanillaBpCamunda7WebappsRegistration(
       final ObjectProvider<Camunda7EngineHolder> engines,

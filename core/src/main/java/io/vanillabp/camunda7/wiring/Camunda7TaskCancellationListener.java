@@ -37,6 +37,13 @@ public class Camunda7TaskCancellationListener implements ExecutionListener {
 
   private final Camunda7TaskRegistry taskRegistry;
 
+  /**
+   * One listener for the whole engine, attached to every activity whose cancelation a
+   * method of the application asks about.
+   *
+   * @param workflowTaskInvoker Where the application's method is called
+   * @param taskRegistry What the method serving the canceled element is looked up in
+   */
   public Camunda7TaskCancellationListener(
       final WorkflowTaskInvoker workflowTaskInvoker,
       final Camunda7TaskRegistry taskRegistry) {

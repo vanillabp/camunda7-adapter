@@ -35,6 +35,13 @@ public class Camunda7WorkflowEndedListener implements ExecutionListener {
 
   private final Camunda7TaskRegistry taskRegistry;
 
+  /**
+   * One listener for the whole engine, attached to the process scope of every model whose
+   * application has a method for the end of a workflow.
+   *
+   * @param workflowEndedInvoker Where the core is told that a workflow ended
+   * @param taskRegistry What the workflow module of the ended process is looked up in
+   */
   public Camunda7WorkflowEndedListener(
       final WorkflowEndedInvoker workflowEndedInvoker,
       final Camunda7TaskRegistry taskRegistry) {

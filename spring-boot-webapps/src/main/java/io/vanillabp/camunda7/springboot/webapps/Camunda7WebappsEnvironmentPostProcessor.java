@@ -29,6 +29,14 @@ import org.springframework.core.env.MapPropertySource;
  */
 public class Camunda7WebappsEnvironmentPostProcessor implements EnvironmentPostProcessor {
 
+  /**
+   * Spring Boot builds the class from <code>spring.factories</code>, before the context
+   * exists.
+   */
+  public Camunda7WebappsEnvironmentPostProcessor() {
+
+  }
+
   static final String CAMUNDA_BPM_ENABLED = "camunda.bpm.enabled";
 
   private static final String PROPERTY_SOURCE_NAME = "vanillabp-camunda7-webapps";

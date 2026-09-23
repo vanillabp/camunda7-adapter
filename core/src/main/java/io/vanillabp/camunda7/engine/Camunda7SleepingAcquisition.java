@@ -83,6 +83,13 @@ public class Camunda7SleepingAcquisition extends SequentialJobAcquisitionRunnabl
    */
   private volatile Thread acquisitionThread;
 
+  /**
+   * The acquisition loop this adapter runs instead of the engine's own, because the wait
+   * it computes is long enough that a lost wake-up would be a job nobody runs.
+   *
+   * @param adapterId The adapter id whose engine this belongs to, for the log
+   * @param jobExecutor The engine's job executor, whose acquisition cycle this runs
+   */
   public Camunda7SleepingAcquisition(
       final String adapterId,
       final JobExecutor jobExecutor) {
@@ -178,6 +185,9 @@ public class Camunda7SleepingAcquisition extends SequentialJobAcquisitionRunnabl
   }
 
   /**
+   * Whether a thread is the one acquiring jobs. It is asked before a commit wakes the
+   * acquisition: the acquisition waking itself would be a loop rather than a wake-up.
+   *
    * @param thread A thread about to commit something
    * @return Whether it is the thread running the acquisition cycles
    */

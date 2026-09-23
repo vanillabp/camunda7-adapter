@@ -18,6 +18,12 @@ public class Camunda7SleepingSpringJobExecutor extends SpringJobExecutor {
 
   private final String adapterId;
 
+  /**
+   * Builds the executor with the waiting acquisition in place of the polling one, on the
+   * application's own thread pool.
+   *
+   * @param adapterId The adapter id whose engine this executor belongs to, for the log
+   */
   public Camunda7SleepingSpringJobExecutor(
       final String adapterId) {
 

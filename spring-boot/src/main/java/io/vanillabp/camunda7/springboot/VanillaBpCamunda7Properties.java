@@ -30,6 +30,15 @@ import lombok.Setter;
 public class VanillaBpCamunda7Properties {
 
   /**
+   * Spring Boot builds the class and fills it with the keys of this overlay it recognises.
+   * An application which configures nothing keeps the empty maps, and every lookup then
+   * answers what the adapter section or the default says.
+   */
+  public VanillaBpCamunda7Properties() {
+
+  }
+
+  /**
    * The adapter sections of the shared tree, keyed by adapter ID - only the
    * Camunda 7 engine keys are modeled here (bound directly onto the
    * platform-neutral {@link Camunda7EngineProperties}).
@@ -51,6 +60,13 @@ public class VanillaBpCamunda7Properties {
   @Setter
   public static class Camunda7WorkflowModuleProperties {
 
+    /**
+     * Spring Boot builds one per section it finds and fills it through the setters.
+     */
+    public Camunda7WorkflowModuleProperties() {
+
+    }
+
     private Map<String, Camunda7ModuleScopedProperties> adapters = Map.of();
 
     private Map<String, Camunda7WorkflowProperties> workflows = Map.of();
@@ -63,6 +79,13 @@ public class VanillaBpCamunda7Properties {
   @Getter
   @Setter
   public static class Camunda7WorkflowProperties {
+
+    /**
+     * Spring Boot builds one per section it finds and fills it through the setters.
+     */
+    public Camunda7WorkflowProperties() {
+
+    }
 
     private Map<String, Camunda7ScopedProperties> adapters = Map.of();
 
@@ -83,6 +106,13 @@ public class VanillaBpCamunda7Properties {
   @Setter
   public static class Camunda7TaskProperties {
 
+    /**
+     * Spring Boot builds one per section it finds and fills it through the setters.
+     */
+    public Camunda7TaskProperties() {
+
+    }
+
     private Map<String, Camunda7ScopedProperties> adapters = Map.of();
 
   }
@@ -93,6 +123,13 @@ public class VanillaBpCamunda7Properties {
   @Getter
   @Setter
   public static class Camunda7ScopedProperties {
+
+    /**
+     * Spring Boot builds one per section it finds and fills it through the setters.
+     */
+    public Camunda7ScopedProperties() {
+
+    }
 
     /**
      * The serialization format of the shared values the engine has no variable type for,
@@ -118,6 +155,13 @@ public class VanillaBpCamunda7Properties {
   @Getter
   @Setter
   public static class Camunda7ModuleScopedProperties extends Camunda7ScopedProperties {
+
+    /**
+     * Spring Boot builds one per section it finds and fills it through the setters.
+     */
+    public Camunda7ModuleScopedProperties() {
+
+    }
 
     /**
      * The Camunda tenant this workflow module is deployed into, overriding the name the

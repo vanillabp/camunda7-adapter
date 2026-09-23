@@ -384,6 +384,12 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   /**
    * Convenience constructor without the instance-identity resolver (tests) - two
    * adapter ids of this type are not checked for distinctness then.
+   *
+   * @param adapterId The configured adapter id this service deploys for
+   * @param repositoryService The engine's repository, where the resources are deployed
+   * @param workflowProcessingLifecycle What starts and stops the job executor of this engine
+   * @param collaborators Everything the platform hands over, wiring and invoker included
+   * @param taskRegistry What the engine's listeners and the EL resolver look a task up in
    */
   public Camunda7DeploymentService(
       final String adapterId,
@@ -396,6 +402,19 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
 
   }
 
+  /**
+   * The constructor a platform integration uses. Two embedded engines on one schema are
+   * one engine state, so the identity resolver is what lets the boot refuse that before
+   * anybody deploys anything.
+   *
+   * @param adapterId The configured adapter id this service deploys for
+   * @param repositoryService The engine's repository, where the resources are deployed
+   * @param workflowProcessingLifecycle What starts and stops the job executor of this engine
+   * @param collaborators Everything the platform hands over, wiring and invoker included
+   * @param taskRegistry What the engine's listeners and the EL resolver look a task up in
+   * @param instanceIdentities Where an adapter id's datasource and table prefix are read,
+   *          so two ids on the same one end the boot
+   */
   public Camunda7DeploymentService(
       final String adapterId,
       final RepositoryService repositoryService,

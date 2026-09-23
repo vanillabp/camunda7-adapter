@@ -380,36 +380,67 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
   }
 
+  /**
+   * Which configured adapter id this engine belongs to.
+   *
+   * @return The adapter id
+   */
   public String getAdapterId() {
 
     return adapterId;
 
   }
 
+  /**
+   * The engine itself, for a caller which needs something none of the services below
+   * offers.
+   *
+   * @return The embedded engine of this adapter id
+   */
   public ProcessEngine getProcessEngine() {
 
     return processEngine;
 
   }
 
+  /**
+   * The engine's runtime, where a workflow is started and a message is correlated.
+   *
+   * @return The runtime service of this engine
+   */
   public RuntimeService getRuntimeService() {
 
     return processEngine.getRuntimeService();
 
   }
 
+  /**
+   * The engine's tasks, where a user task is completed.
+   *
+   * @return The task service of this engine
+   */
   public org.camunda.bpm.engine.TaskService getTaskService() {
 
     return processEngine.getTaskService();
 
   }
 
+  /**
+   * The engine's repository, where the resources of a workflow module are deployed.
+   *
+   * @return The repository service of this engine
+   */
   public RepositoryService getRepositoryService() {
 
     return processEngine.getRepositoryService();
 
   }
 
+  /**
+   * The engine's history, which is what the viewer API reads.
+   *
+   * @return The history service of this engine
+   */
   public org.camunda.bpm.engine.HistoryService getHistoryService() {
 
     return processEngine.getHistoryService();
@@ -417,6 +448,10 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   }
 
   /**
+   * Whether this engine has a datasource of its own. On the application's default
+   * datasource an engine command joins the caller's transaction, which is the guarantee an
+   * embedded engine is chosen for; on a named one it cannot.
+   *
    * @return Whether this adapter id's engine runs on a named datasource (see class
    *         comment)
    */

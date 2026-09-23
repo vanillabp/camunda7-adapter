@@ -58,6 +58,13 @@ public class Camunda7SleepUntilSomethingIsDue extends BackoffJobAcquisitionStrat
 
   private long waitTime;
 
+  /**
+   * The strategy answering how long the acquisition waits, in place of the widening
+   * interval the engine brings.
+   *
+   * @param adapterId The adapter id whose engine this belongs to, for the log
+   * @param jobExecutor The engine's job executor, whose waiting this replaces
+   */
   public Camunda7SleepUntilSomethingIsDue(
       final String adapterId,
       final JobExecutor jobExecutor) {

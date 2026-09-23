@@ -17,6 +17,9 @@ public class Camunda7RefusedStart extends RuntimeException {
   private static final long serialVersionUID = 1L;
 
   /**
+   * Wraps what the engine refused a create command with, so the outbox blocks the entry
+   * instead of repeating a command which will be refused the same way every time.
+   *
    * @param message What an operator reads next to the blocked outbox entry
    * @param refusal What the engine answered the create command with
    */

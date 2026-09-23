@@ -124,6 +124,12 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
    *        application's default) - the engine cannot join the caller's transaction
    *        then, which the task delivery has to account for
    * @param transactionManager The CDI (Narayana) transaction manager
+   * @param workflowTaskInvoker Where the application's method is called, handed to the
+   *        listeners this engine is given
+   * @param bpmsInitiatedStartInvoker The core's notification of a workflow the engine
+   *        started on its own, or <code>null</code> where no method asks for one
+   * @param workflowEndedInvoker The core's notification of a workflow which ended, or
+   *        <code>null</code> where the application has no method for it
    */
   public Camunda7QuarkusEngineHolder(
       final String adapterId,
@@ -257,42 +263,79 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
 
   }
 
+  /**
+   * What the listeners of this engine look a task up in. One registry per engine, because
+   * one engine serves the workflow modules of one adapter id.
+   *
+   * @return This engine's task registry
+   */
   public Camunda7TaskRegistry getTaskRegistry() {
 
     return taskRegistry;
 
   }
 
+  /**
+   * Which configured adapter id this engine belongs to.
+   *
+   * @return The adapter id
+   */
   public String getAdapterId() {
 
     return adapterId;
 
   }
 
+  /**
+   * The engine itself, for a caller which needs something none of the services below
+   * offers.
+   *
+   * @return The embedded engine of this adapter id
+   */
   public ProcessEngine getProcessEngine() {
 
     return processEngine;
 
   }
 
+  /**
+   * The engine's tasks, where a user task is completed.
+   *
+   * @return The task service of this engine
+   */
   public org.camunda.bpm.engine.TaskService getTaskService() {
 
     return processEngine.getTaskService();
 
   }
 
+  /**
+   * The engine's runtime, where a workflow is started and a message is correlated.
+   *
+   * @return The runtime service of this engine
+   */
   public RuntimeService getRuntimeService() {
 
     return processEngine.getRuntimeService();
 
   }
 
+  /**
+   * The engine's repository, where the resources of a workflow module are deployed.
+   *
+   * @return The repository service of this engine
+   */
   public RepositoryService getRepositoryService() {
 
     return processEngine.getRepositoryService();
 
   }
 
+  /**
+   * The engine's history, which is what the viewer API reads.
+   *
+   * @return The history service of this engine
+   */
   public org.camunda.bpm.engine.HistoryService getHistoryService() {
 
     return processEngine.getHistoryService();
@@ -300,6 +343,10 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
   }
 
   /**
+   * Whether this engine has a datasource of its own. On the application's default
+   * datasource an engine command joins the caller's transaction, which is the guarantee an
+   * embedded engine is chosen for; on a named one it cannot.
+   *
    * @return Whether this adapter id's engine runs on a NAMED datasource (see class
    *         comment)
    */

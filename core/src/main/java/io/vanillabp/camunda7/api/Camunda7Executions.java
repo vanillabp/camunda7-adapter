@@ -35,6 +35,10 @@ public final class Camunda7Executions {
   }
 
   /**
+   * The instance at the top of a call hierarchy. Camunda leaves the root empty on an
+   * instance nobody called, so the answer falls back to the instance's own id and a caller
+   * gets one id to group by either way.
+   *
    * @param instance The historic process instance, or <code>null</code>
    * @return The id of the root instance, the instance's own id where it has no root, and
    *         <code>null</code> for no instance

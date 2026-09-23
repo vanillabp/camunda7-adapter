@@ -16,6 +16,11 @@ public class Camunda7SleepingJobExecutor extends DefaultJobExecutor {
 
   private final String adapterId;
 
+  /**
+   * Builds the executor with the waiting acquisition in place of the polling one.
+   *
+   * @param adapterId The adapter id whose engine this executor belongs to, for the log
+   */
   public Camunda7SleepingJobExecutor(
       final String adapterId) {
 

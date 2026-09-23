@@ -32,6 +32,12 @@ public class Camunda7ProcessingContext {
    */
   private final Map<String, BpmnModelInstance> resourcesByFilename = new LinkedHashMap<>();
 
+  /**
+   * Starts an empty context for one workflow module, which is what the adapter deploys in
+   * one call.
+   *
+   * @param workflowModuleId The workflow module this context collects
+   */
   public Camunda7ProcessingContext(
       final String workflowModuleId) {
 
@@ -189,6 +195,10 @@ public class Camunda7ProcessingContext {
   }
 
   /**
+   * Whether there is anything to deploy. A module which brings no executable process is
+   * legitimate - it may carry nothing but decision tables - and the deployment is skipped
+   * rather than refused.
+   *
    * @return Whether no BPMN models were accumulated (e.g. a workflow module without any
    *         executable BPMN process).
    */

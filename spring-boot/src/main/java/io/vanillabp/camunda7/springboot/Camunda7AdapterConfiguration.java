@@ -16,6 +16,18 @@ import io.vanillabp.integration.processservice.SpringBootMigrationAdapterAutoCon
 @AutoConfiguration(before = SpringBootMigrationAdapterAutoConfiguration.class)
 public class Camunda7AdapterConfiguration extends AdapterConfigurationBase {
 
+  /**
+   * Spring Boot builds the class while it applies the auto-configuration, and that is all
+   * it does: the announcement below is read from the instance.
+   */
+  public Camunda7AdapterConfiguration() {
+
+  }
+
+  /**
+   * The BPMS type an application writes in <code>vanillabp.adapters.&lt;id&gt;.type</code>
+   * to configure this adapter.
+   */
   public static final String ADAPTER_TYPE = Camunda7DeploymentService.ADAPTER_TYPE;
 
   @Override

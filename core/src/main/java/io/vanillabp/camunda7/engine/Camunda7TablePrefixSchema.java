@@ -61,6 +61,10 @@ public final class Camunda7TablePrefixSchema {
   }
 
   /**
+   * Whether the engine would create its tables with that setting. Everything Camunda does
+   * not know is treated as creating, because a value nobody recognises is more likely a
+   * typo than a decision to leave the schema alone.
+   *
    * @param databaseSchemaUpdate The configured value of
    *          <code>database-schema-update</code>
    * @return Whether the engine would create tables with it. Camunda knows
@@ -77,6 +81,10 @@ public final class Camunda7TablePrefixSchema {
   }
 
   /**
+   * Whether this adapter id has its tables behind a prefix. A prefix is what lets two
+   * engines share one database, and Camunda's own schema management ignores it, which is
+   * why the two answers here belong together.
+   *
    * @param tablePrefix A configured table prefix
    * @return Whether the adapter id runs on a prefix at all
    */

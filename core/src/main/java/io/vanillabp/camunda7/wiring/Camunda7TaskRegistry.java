@@ -20,6 +20,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 })
 public class Camunda7TaskRegistry {
 
+  /**
+   * Starts out empty. One registry belongs to one engine, and the deployment of every
+   * workflow module that engine serves fills it.
+   */
+  public Camunda7TaskRegistry() {
+
+  }
+
   private record RegistryKey(
                              String workflowModuleId,
                              String bpmnProcessId) {
@@ -44,6 +52,9 @@ public class Camunda7TaskRegistry {
   private String adapterId;
 
   /**
+   * Hands over which adapter holds this engine. It arrives after construction because the
+   * registry is built with the engine configuration, before the adapter id is known there.
+   *
    * @param adapterId The id of the adapter owning this engine
    */
   public void setAdapterId(
@@ -54,6 +65,9 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * Which adapter every delivery of this engine is reported under, so the core can record
+   * where a workflow lives.
+   *
    * @return The id of the adapter owning this engine or <code>null</code>
    */
   public String getAdapterId() {
@@ -72,6 +86,9 @@ public class Camunda7TaskRegistry {
   private io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping;
 
   /**
+   * Hands over how an identifier is kept apart from the one of another workflow module. It
+   * arrives after construction for the same reason the adapter id does.
+   *
    * @param scoping The core's name-clash-avoidance model
    */
   public void setScoping(
@@ -82,6 +99,9 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * What translates between the identifiers the application wrote and the ones the engine
+   * was given. Every path out of this registry needs it, which is why it is published.
+   *
    * @return The core's name-clash-avoidance model or <code>null</code>
    */
   public io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport getScoping() {
@@ -102,6 +122,10 @@ public class Camunda7TaskRegistry {
   private boolean engineRunsOnItsOwnDataSource;
 
   /**
+   * Tells the registry whether the engine shares the application's datasource. A delivery
+   * of a shared engine commits together with the workflow aggregate, and one of a separate
+   * engine does not, which is the difference every delivery path asks about.
+   *
    * @param engineRunsOnItsOwnDataSource Whether the engine runs on a datasource of its
    *          own
    */
@@ -113,6 +137,8 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * Whether this engine has a datasource of its own, and therefore its own transaction.
+   *
    * @return Whether the engine runs on a datasource of its own
    */
   public boolean engineRunsOnItsOwnDataSource() {
@@ -122,6 +148,9 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * Hands over what the engine knows about its deployed versions, which is how a delivery
+   * finds the method serving the version it belongs to.
+   *
    * @param processVersions The versions of the engine's process definitions
    */
   public void setProcessVersions(
@@ -194,6 +223,9 @@ public class Camunda7TaskRegistry {
   private io.vanillabp.camunda7.sync.Camunda7SerializationFormats serializationFormats;
 
   /**
+   * Hands over how a nested shared value is serialized. The task path asks the registry
+   * because it has the registry at hand, not because the answer belongs here.
+   *
    * @param serializationFormats The format resolution of the platform integration
    */
   public void setSerializationFormats(
@@ -282,6 +314,12 @@ public class Camunda7TaskRegistry {
 
   }
 
+  /**
+   * Remembers one wired task. Everything is keyed by what the ENGINE reports at runtime,
+   * so a delivery is looked up without translating anything first.
+   *
+   * @param connectable The task of a model, as the wiring extracted it
+   */
   public void register(
       final Camunda7TaskConnectable connectable) {
 
@@ -374,6 +412,10 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * Which signal started a workflow, in the name the application wrote. The engine reports
+   * the start event and not the signal, so the name is remembered while the model is wired
+   * and read back here.
+   *
    * @param workflowModuleId The workflow module ID
    * @param scopedBpmnProcessId The process definition key the engine reported
    * @param startEventId The BPMN id of the start event which fired

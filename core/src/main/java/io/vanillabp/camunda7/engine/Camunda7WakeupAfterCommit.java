@@ -44,6 +44,12 @@ public class Camunda7WakeupAfterCommit extends CommandInterceptor {
 
   private final String adapterId;
 
+  /**
+   * Sits in the engine's command chain so that a transaction which wrote a job wakes the
+   * acquisition when it commits.
+   *
+   * @param adapterId The adapter id whose engine this interceptor sits in, for the log
+   */
   public Camunda7WakeupAfterCommit(
       final String adapterId) {
 

@@ -32,6 +32,15 @@ public class Camunda7JobExecutorLifecycle implements Camunda7WorkflowProcessingL
    */
   private final Set<String> startedWorkflowModules = new HashSet<>();
 
+  /**
+   * Counts the workflow modules which started processing. The job executor belongs to the
+   * engine and the modules come and go one by one, so it is started with the first and
+   * stopped with the last.
+   *
+   * @param adapterId The adapter id whose engine this executor belongs to, for the log
+   * @param jobExecutor The engine's job executor, which is engine-global while the
+   *          workflow modules start and stop one by one
+   */
   public Camunda7JobExecutorLifecycle(
       final String adapterId,
       final JobExecutor jobExecutor) {
@@ -41,6 +50,12 @@ public class Camunda7JobExecutorLifecycle implements Camunda7WorkflowProcessingL
 
   }
 
+  /**
+   * Whether the engine is working off jobs at the moment. A test asks it to know when a
+   * timer or an asynchronous continuation has been picked up.
+   *
+   * @return Whether the job executor is running
+   */
   public boolean isActive() {
 
     return jobExecutor.isActive();

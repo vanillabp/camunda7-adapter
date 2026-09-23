@@ -17,6 +17,13 @@ import jakarta.enterprise.inject.Instance;
 @ApplicationScoped
 public class Camunda7StartupObserver {
 
+  /**
+   * Quarkus builds the bean to deliver the startup event below.
+   */
+  public Camunda7StartupObserver() {
+
+  }
+
   void onStart(
       @Observes final StartupEvent event,
       final Instance<Camunda7QuarkusEngineRegistry> engineRegistry) {

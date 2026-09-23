@@ -31,6 +31,14 @@ import jakarta.inject.Singleton;
 @ApplicationScoped
 public class Camunda7AdapterProducer {
 
+  /**
+   * Quarkus builds the bean to call the producers below. It keeps no state: what they
+   * return are beans of their own and live as long as the application does.
+   */
+  public Camunda7AdapterProducer() {
+
+  }
+
   private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
       .getLogger(Camunda7AdapterProducer.class);
 
@@ -54,6 +62,24 @@ public class Camunda7AdapterProducer {
 
   }
 
+  /**
+   * One process service per configured adapter id of this type, each on the engine that id
+   * owns.
+   *
+   * @param properties The platform's own configuration, which is where the adapter ids
+   *          come from
+   * @param engineRegistry The engines built at startup, one per adapter id
+   * @param aggregateSync Which aggregate values travel to the engine
+   * @param overlay This adapter's own keys of the shared configuration tree
+   * @param scoping How an identifier is kept apart from the one of another workflow module
+   * @param preCommitRegistrar Where a phase-one check is run right before the commit
+   * @param workflowTaskRegistry What the core knows about the application's methods
+   * @param workflowEndedInvoker The core's notification of a workflow which ended, if the
+   *          application has a method for it
+   * @param bpmsInitiatedStartInvoker The core's notification of a workflow the engine
+   *          started on its own
+   * @return The process services, one per configured adapter id
+   */
   @Produces
   @Singleton
   public List<MigratableProcessService<Object>> camunda7MigratableProcessServices(
@@ -95,6 +121,24 @@ public class Camunda7AdapterProducer {
 
   }
 
+  /**
+   * One deployment service per configured adapter id of this type, as the list the platform
+   * looks the beans up as.
+   *
+   * @param properties The platform's own configuration, which is where the adapter ids
+   *          come from
+   * @param engineRegistry The engines built at startup, one per adapter id
+   * @param workflowTaskRegistry What the core knows about the application's methods
+   * @param overlay This adapter's own keys of the shared configuration tree
+   * @param aggregateSync Which aggregate values travel to the engine
+   * @param scoping How an identifier is kept apart from the one of another workflow module
+   * @param preCommitRegistrar Where a phase-one check is run right before the commit
+   * @param workflowEndedInvoker The core's notification of a workflow which ended, if the
+   *          application has a method for it
+   * @param bpmsInitiatedStartInvoker The core's notification of a workflow the engine
+   *          started on its own
+   * @return The deployment services, one per configured adapter id
+   */
   @Produces
   @Singleton
   @SuppressWarnings({

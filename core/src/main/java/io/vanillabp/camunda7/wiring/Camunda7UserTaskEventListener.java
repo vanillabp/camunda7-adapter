@@ -35,6 +35,13 @@ public class Camunda7UserTaskEventListener implements TaskListener {
 
   private final Camunda7TaskRegistry taskRegistry;
 
+  /**
+   * One listener for the whole engine, attached to every user task while the model is
+   * parsed.
+   *
+   * @param workflowTaskInvoker Where the application's method is called
+   * @param taskRegistry What the method serving the user task is looked up in
+   */
   public Camunda7UserTaskEventListener(
       final WorkflowTaskInvoker workflowTaskInvoker,
       final Camunda7TaskRegistry taskRegistry) {
