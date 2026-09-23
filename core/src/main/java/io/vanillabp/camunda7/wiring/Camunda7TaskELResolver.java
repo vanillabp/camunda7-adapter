@@ -88,6 +88,14 @@ public class Camunda7TaskELResolver extends ELResolver {
 
   private final WorkflowTaskInvoker workflowTaskInvoker;
 
+  /**
+   * One resolver for the whole engine. It sits in front of everything else the engine
+   * would resolve a name with, which is why it has to hand back what is not its own.
+   *
+   * @param taskRegistry What an EL name evaluated by the engine is looked up in
+   * @param workflowTaskInvoker Where the application's method is called, and what is asked
+   *          whether a name is an attribute of the workflow aggregate instead
+   */
   public Camunda7TaskELResolver(
       final Camunda7TaskRegistry taskRegistry,
       final WorkflowTaskInvoker workflowTaskInvoker) {

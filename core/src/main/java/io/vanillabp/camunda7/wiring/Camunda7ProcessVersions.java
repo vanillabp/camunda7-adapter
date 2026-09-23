@@ -142,7 +142,12 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   public interface HeldModelReading {
 
     /**
-     * The tasks of that model, as the wiring validation would report them.
+     * The tasks of that model, as the wiring validation would report them.     *
+     * @param workflowModuleId The workflow module the held model belongs to
+     * @param bpmnProcessId The plain BPMN process id
+     * @param version The version the engine counts this definition under
+     * @param model The model the engine still holds
+     * @return The task specifications of that old model
      */
     java.util.Collection<BpmnTaskSpec> tasksOf(
         String workflowModuleId,
@@ -152,7 +157,12 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
 
     /**
      * The start events the engine fires on its own in that model, as the start
-     * validation would report them.
+     * validation would report them.     *
+     * @param workflowModuleId The workflow module the held model belongs to
+     * @param bpmnProcessId The plain BPMN process id
+     * @param version The version the engine counts this definition under
+     * @param model The model the engine still holds
+     * @return The start events the engine fires itself
      */
     java.util.Collection<BpmsInitiatedStartSpec> startEventsOf(
         String workflowModuleId,
@@ -162,7 +172,12 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
 
     /**
      * The elements of that model which can put a second token into a running workflow,
-     * as the deployment reports them.
+     * as the deployment reports them.     *
+     * @param workflowModuleId The workflow module the held model belongs to
+     * @param bpmnProcessId The plain BPMN process id
+     * @param version The version the engine counts this definition under
+     * @param model The model the engine still holds
+     * @return The BPMN ids of those elements
      */
     java.util.Collection<String> concurrentTokenElementsOf(
         String workflowModuleId,
@@ -171,7 +186,12 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
         BpmnModelInstance model);
 
     /**
-     * The identifiers that model declares which the workflow module scopes, plain.
+     * The identifiers that model declares which the workflow module scopes, plain.     *
+     * @param workflowModuleId The workflow module the held model belongs to
+     * @param bpmnProcessId The plain BPMN process id
+     * @param version The version the engine counts this definition under
+     * @param model The model the engine still holds
+     * @return The declared identifiers, with the names the application wrote
      */
     java.util.Collection<io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier> identifiersOf(
         String workflowModuleId,
@@ -190,6 +210,19 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
    */
   private RuntimeService runtimeService;
 
+  /**
+   * Asks one engine what it still holds. Nothing is read here: the questions below reach
+   * the engine when somebody asks them.
+   *
+   * @param adapterId The adapter id whose engine is asked, for the log
+   * @param repositoryService The engine's repository, which is where the versions and the
+   *          old models come from
+   * @param scopedProcessIds Translates a workflow module and a plain process id into what
+   *          the engine knows the process as
+   * @param tenants Names the Camunda tenant a workflow module is deployed under
+   * @param heldModelReading Reads an old model the same way the deployment reads a new
+   *          one, so the two answers cannot drift apart
+   */
   public Camunda7ProcessVersions(
       final String adapterId,
       final RepositoryService repositoryService,
@@ -206,6 +239,10 @@ public class Camunda7ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
+   * Hands over what counts the workflows still running on an old version. It arrives after
+   * construction because the engine is built around this object, and without it the
+   * question is simply not asked.
+   *
    * @param runtimeService The engine's runtime service
    */
   public void setRuntimeService(

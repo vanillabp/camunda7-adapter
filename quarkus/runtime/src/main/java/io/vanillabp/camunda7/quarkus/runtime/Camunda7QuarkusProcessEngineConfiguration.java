@@ -22,6 +22,13 @@ import jakarta.transaction.TransactionManager;
  */
 public class Camunda7QuarkusProcessEngineConfiguration extends JakartaTransactionProcessEngineConfiguration {
 
+  /**
+   * Wires the engine to Narayana and hands the schema commands a transaction of their own,
+   * because Agroal has no connection outside one.
+   *
+   * @param transactionManager The Narayana transaction manager which owns every
+   *          transaction the engine takes part in
+   */
   public Camunda7QuarkusProcessEngineConfiguration(
       final TransactionManager transactionManager) {
 

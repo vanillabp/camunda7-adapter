@@ -60,6 +60,10 @@ public interface Camunda7AllowListenersResolver {
   }
 
   /**
+   * Answers for one workflow whether the execution listeners somebody modelled are served
+   * by the application's methods. The answer carries where it was configured, because a
+   * message about a listener which is ignored has to name the level somebody can change.
+   *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The PLAIN BPMN process ID
    * @return The most specific configured setting, never <code>null</code>

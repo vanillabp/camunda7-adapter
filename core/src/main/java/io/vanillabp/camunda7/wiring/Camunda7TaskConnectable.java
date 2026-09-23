@@ -28,6 +28,13 @@ public record Camunda7TaskConnectable(
 
   /**
    * Convenience constructor for an unscoped process (the engine knows the plain id).
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID, which the engine knows under the same name
+   *          here
+   * @param elementId The BPMN activity ID
+   * @param taskDefinition The unwrapped expression text
+   * @param type How the BPMN wires the task
    */
   public Camunda7TaskConnectable(
       final String workflowModuleId,
@@ -40,6 +47,10 @@ public record Camunda7TaskConnectable(
 
   }
 
+  /**
+   * How the model wires the task to the application, which decides what the engine does
+   * with the expression and therefore when the task is completed.
+   */
   public enum Type {
     /**
      * <code>camunda:expression</code>: the expression is evaluated - the handler
@@ -121,6 +132,11 @@ public record Camunda7TaskConnectable(
    * element - by NAME (the model's delegate expression is the task definition) or by
    * ELEMENT (a method wired to the activity, whatever the model calls the
    * expression).
+   *
+   * @param currentElementId The BPMN element the execution sits at while the engine
+   *          evaluates
+   * @param propertyName The EL name the engine is trying to resolve
+   * @return Whether this task is what the name means
    */
   public boolean applies(
       final String currentElementId,
@@ -133,6 +149,9 @@ public record Camunda7TaskConnectable(
   /**
    * Whether the EL name IS this connectable's task definition. Such a name means the
    * task and nothing else.
+   *
+   * @param propertyName The EL name the engine is trying to resolve
+   * @return Whether the name is this task's definition
    */
   public boolean appliesByName(
       final String propertyName) {
@@ -146,6 +165,9 @@ public record Camunda7TaskConnectable(
    * evaluated at. That alone says nothing about the NAME: every expression evaluated
    * while an execution sits at this element arrives here, including conditions
    * reading the workflow aggregate.
+   *
+   * @param currentElementId The BPMN element the execution sits at
+   * @return Whether this task is wired to that element
    */
   public boolean appliesByElement(
       final String currentElementId) {

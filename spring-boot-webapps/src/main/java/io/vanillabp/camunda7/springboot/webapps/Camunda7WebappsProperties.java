@@ -23,6 +23,13 @@ import lombok.Setter;
 @Setter
 public class Camunda7WebappsProperties {
 
+  /**
+   * Spring Boot builds one per section it finds and fills it through the setters.
+   */
+  public Camunda7WebappsProperties() {
+
+  }
+
   /** The adapter sections of the shared tree, keyed by adapter id. */
   private Map<String, AdapterSection> adapters = Map.of();
 
@@ -47,6 +54,13 @@ public class Camunda7WebappsProperties {
   @Setter
   public static class AdapterSection {
 
+    /**
+     * Spring Boot builds one per section it finds and fills it through the setters.
+     */
+    public AdapterSection() {
+
+    }
+
     private Webapps webapps;
 
   }
@@ -55,6 +69,13 @@ public class Camunda7WebappsProperties {
   @Getter
   @Setter
   public static class Webapps {
+
+    /**
+     * Spring Boot builds one per section it finds and fills it through the setters.
+     */
+    public Webapps() {
+
+    }
 
     /**
      * Whether Cockpit, Tasklist and Admin serve this engine. On by default: an
@@ -76,6 +97,13 @@ public class Camunda7WebappsProperties {
   @Getter
   @Setter
   public static class AdminUser {
+
+    /**
+     * Spring Boot builds one per section it finds and fills it through the setters.
+     */
+    public AdminUser() {
+
+    }
 
     /** The user id used to log in. */
     private String id;

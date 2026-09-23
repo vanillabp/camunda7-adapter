@@ -19,7 +19,6 @@ import io.vanillabp.spi.process.ProcessDefinition;
 import io.vanillabp.spi.process.WorkflowElementHistory;
 import io.vanillabp.spi.process.WorkflowElementType;
 import io.vanillabp.spi.process.WorkflowHistory;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -44,7 +43,6 @@ import lombok.extern.slf4j.Slf4j;
  * adapter id.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class Camunda7WorkflowViewer {
 
   private final String adapterId;
@@ -56,6 +54,28 @@ public class Camunda7WorkflowViewer {
   private final RuntimeService runtimeService;
 
   /**
+   * Reads one engine. Everything is asked when somebody asks for it, so building the
+   * viewer costs nothing.
+   *
+   * @param adapterId The adapter id the definition ids are namespaced with
+   * @param repositoryService The engine's repository, which holds the definitions
+   * @param historyService The engine's history, which is where a finished workflow is read
+   * @param runtimeService The engine's runtime, which is where a running one is read
+   */
+  public Camunda7WorkflowViewer(
+      final String adapterId,
+      final RepositoryService repositoryService,
+      final HistoryService historyService,
+      final RuntimeService runtimeService) {
+
+    this.adapterId = adapterId;
+    this.repositoryService = repositoryService;
+    this.historyService = historyService;
+    this.runtimeService = runtimeService;
+
+  }
+
+  /**
    * The process definitions of the addressed (sub-)workflow: the definition the
    * instance runs/ran on first (its {@code usedByElements} is <code>null</code>),
    * followed by the definitions its call activities WOULD call next (latest
@@ -63,6 +83,8 @@ public class Camunda7WorkflowViewer {
    *
    * @param workflowModuleId The workflow module ID (the Camunda tenant ID)
    * @param bpmnProcessId The BPMN process ID of the primary process
+   * @param tenantId The Camunda tenant the module is deployed under, or
+   *          <code>null</code> where this application uses none
    * @param workflowAggregateId The workflow aggregate ID (the business key)
    * @param historyContext <code>null</code> or a called instance's ID
    * @return The definitions or an EMPTY list if the workflow is unknown here
@@ -122,6 +144,8 @@ public class Camunda7WorkflowViewer {
    *
    * @param workflowModuleId The workflow module ID (the Camunda tenant ID)
    * @param bpmnProcessId The BPMN process ID of the primary process
+   * @param tenantId The Camunda tenant the module is deployed under, or
+   *          <code>null</code> where this application uses none
    * @param workflowAggregateId The workflow aggregate ID (the business key)
    * @param historyContext <code>null</code> or a called instance's ID
    * @return The history or <code>null</code> if the workflow is unknown here
@@ -388,6 +412,11 @@ public class Camunda7WorkflowViewer {
    * uses fine-grained names (e.g. {@code messageEndEvent},
    * {@code boundaryTimer}, {@code intermediateMessageCatch}) which the SPI groups
    * into BPMN element categories.
+   *
+   * @param activityType What Camunda calls the element, or <code>null</code> where it
+   *          reports none
+   * @return The SPI's element type, {@code UNKNOWN} for a name this mapping has no
+   *         category for
    */
   public static WorkflowElementType elementTypeOf(
       final String activityType) {

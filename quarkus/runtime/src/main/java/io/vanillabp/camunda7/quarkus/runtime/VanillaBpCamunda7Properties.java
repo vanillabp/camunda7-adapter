@@ -34,6 +34,8 @@ public interface VanillaBpCamunda7Properties {
   /**
    * The adapter sections of the shared tree, keyed by adapter ID - only the
    * Camunda 7 engine keys are modeled here.
+   *
+   * @return The configured adapter sections, keyed by adapter id
    */
   Map<String, Camunda7AdapterKeys> adapters();
 
@@ -41,6 +43,8 @@ public interface VanillaBpCamunda7Properties {
    * The workflow-module sections of the shared tree - only the Camunda 7 keys which are
    * resolvable per scope are modeled here (the serialization format, and the tenant the
    * module is deployed into).
+   *
+   * @return The configured workflow-module sections, keyed by workflow module id
    */
   Map<String, Camunda7WorkflowModuleKeys> workflowModules();
 
@@ -146,11 +150,15 @@ public interface VanillaBpCamunda7Properties {
 
     /**
      * The per-adapter-id overrides of this workflow module.
+     *
+     * @return The adapter sections of this workflow module, keyed by adapter id
      */
     Map<String, Camunda7ModuleScopedKeys> adapters();
 
     /**
      * The workflows of this workflow module, keyed by BPMN process ID.
+     *
+     * @return The workflow sections of this module, keyed by BPMN process id
      */
     Map<String, Camunda7WorkflowKeys> workflows();
 
@@ -163,6 +171,8 @@ public interface VanillaBpCamunda7Properties {
 
     /**
      * The per-adapter-id overrides of this workflow.
+     *
+     * @return The adapter sections of this workflow, keyed by adapter id
      */
     Map<String, Camunda7ScopedKeys> adapters();
 
@@ -170,6 +180,8 @@ public interface VanillaBpCamunda7Properties {
      * The tasks of this workflow. Modelled here for one reason only: a key set at this level
      * which the adapter does not resolve there has to be findable, so the boot can say where
      * the key IS read instead of leaving a line which does nothing.
+     *
+     * @return The task sections of this workflow, keyed by task definition
      */
     Map<String, Camunda7TaskKeys> tasks();
 
@@ -183,6 +195,8 @@ public interface VanillaBpCamunda7Properties {
 
     /**
      * The per-adapter-id overrides of this task.
+     *
+     * @return The adapter sections of this task, keyed by adapter id
      */
     Map<String, Camunda7ScopedKeys> adapters();
 
@@ -195,12 +209,16 @@ public interface VanillaBpCamunda7Properties {
 
     /**
      * The plugin's class, e.g. <code>org.camunda.xstream.ProcessEnginePlugin</code>.
+     *
+     * @return The class name, empty where the section names none
      */
     Optional<String> pluginClass();
 
     /**
      * The plugin's own properties in kebab-case - Camunda converts them to the types the
      * plugin declares.
+     *
+     * @return The plugin's properties, empty where it has none
      */
     Map<String, String> properties();
 
@@ -213,6 +231,8 @@ public interface VanillaBpCamunda7Properties {
 
     /**
      * The serialization format of nested shared values for this scope.
+     *
+     * @return The configured format, empty where this scope says nothing
      */
     Optional<String> serializationFormat();
 
@@ -221,6 +241,8 @@ public interface VanillaBpCamunda7Properties {
      * <code>@WorkflowTask</code> methods, for this scope. Empty rather than <code>false</code>
      * where nothing is configured, which is what lets a workflow module switch OFF what the
      * adapter switched on.
+     *
+     * @return The configured answer, empty where this scope says nothing
      */
     Optional<Boolean> allowListeners();
 
@@ -236,6 +258,8 @@ public interface VanillaBpCamunda7Properties {
     /**
      * The Camunda tenant this workflow module is deployed into, overriding the name the
      * adapter section gives every module of this application.
+     *
+     * @return The configured tenant, empty where the adapter section decides
      */
     Optional<String> tenantId();
 
@@ -251,6 +275,8 @@ public interface VanillaBpCamunda7Properties {
      * Create/upgrade the engine schema on boot (engine values, e.g.
      * <code>true</code>, <code>false</code>, <code>create-drop</code>); default
      * <code>true</code>.
+     *
+     * @return The configured value, empty for the default
      */
     Optional<String> databaseSchemaUpdate();
 
@@ -258,6 +284,8 @@ public interface VanillaBpCamunda7Properties {
      * Engine-wide default history time to live (Camunda 7.24 rejects deployments
      * of processes without one); default <code>P180D</code>, overridable per
      * process via <code>camunda:historyTimeToLive</code>.
+     *
+     * @return The configured duration, empty for the default
      */
     Optional<String> historyTimeToLive();
 
@@ -269,6 +297,8 @@ public interface VanillaBpCamunda7Properties {
      * JTA transaction). With it the engine runs on its own schema - required for
      * engine-side-by-side migrations - and starting workflows uses VanillaBP's
      * two-phase pattern (see the README's transaction caveat).
+     *
+     * @return The configured datasource name, empty for the application's default one
      */
     Optional<String> dataSourceName();
 
@@ -281,6 +311,8 @@ public interface VanillaBpCamunda7Properties {
      * <code>false</code>: Camunda's schema management ignores the prefix and would
      * create a set of unprefixed <code>ACT_*</code> tables instead (see
      * {@code Camunda7TablePrefixSchema}).
+     *
+     * @return The configured prefix, empty where the engine uses the plain table names
      */
     Optional<String> tablePrefix();
 
@@ -292,6 +324,8 @@ public interface VanillaBpCamunda7Properties {
      * overridable per workflow module and per workflow (see
      * {@link VanillaBpCamunda7Properties#workflowModules()}). The matching dataformat is
      * the application's dependency.
+     *
+     * @return The configured format, empty where the engine's own default applies
      */
     Optional<String> serializationFormat();
 
@@ -300,6 +334,8 @@ public interface VanillaBpCamunda7Properties {
      * class and carrying its own properties - which Camunda applies, exactly like the
      * <code>&lt;property&gt;</code> elements of a <code>bpm-platform.xml</code>.
      * This is how a serialization dataformat reaches the embedded engine.
+     *
+     * @return The configured plugin sections, empty where there are none
      */
     Map<String, Camunda7EnginePluginKeys> enginePlugins();
 
@@ -307,6 +343,8 @@ public interface VanillaBpCamunda7Properties {
      * OPTIONAL name of the Camunda tenant a workflow module is deployed to under the
      * name-clash-avoidance mode <code>by-adapter</code>. Without it the
      * workflow module ID names the tenant - VanillaBP 1's behavior.
+     *
+     * @return The configured tenant, empty where the workflow module id names it
      */
     Optional<String> tenantId();
 
@@ -315,6 +353,8 @@ public interface VanillaBpCamunda7Properties {
      * of its workflow modules - it silences the WARN logged while the
      * name-clash-avoidance mode <code>none</code> applies (this adapter's default
      * mode). Default <code>false</code>.
+     *
+     * @return The configured acknowledgement, empty for <code>false</code>
      */
     Optional<Boolean> acceptUnscopedIdentifiers();
 
@@ -323,6 +363,8 @@ public interface VanillaBpCamunda7Properties {
      * <code>@WorkflowTask</code> methods. Adapter-level base of a resolution over three levels
      * (workflow &gt; workflow-module &gt; adapter), default <code>false</code>, see
      * {@link io.vanillabp.camunda7.wiring.Camunda7AllowListenersResolver}.
+     *
+     * @return The configured answer, empty for <code>false</code>
      */
     Optional<Boolean> allowListeners();
 
@@ -330,6 +372,8 @@ public interface VanillaBpCamunda7Properties {
      * OPTIONAL: the job executor waits until the next job is due instead of polling every
      * 5 to 60 seconds, and a transaction which writes a job wakes it. Default
      * <code>false</code> - see {@code Camunda7JobExecutorSleep}.
+     *
+     * @return The configured answer, empty for <code>false</code>
      */
     Optional<Boolean> sleepUntilSomethingIsDue();
 
@@ -338,6 +382,8 @@ public interface VanillaBpCamunda7Properties {
      * every 900 seconds. Unset means the opposite of
      * {@link #sleepUntilSomethingIsDue()}, so an engine which is allowed to sleep is not
      * woken by its own metrics.
+     *
+     * @return The configured answer, empty to follow the setting above
      */
     Optional<Boolean> dbMetricsReporting();
 

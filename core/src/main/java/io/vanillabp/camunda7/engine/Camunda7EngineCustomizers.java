@@ -24,6 +24,10 @@ public final class Camunda7EngineCustomizers {
   }
 
   /**
+   * Lets the application have the last word on the engine configuration, and says in the
+   * log who touched it. A customizer runs after VanillaBP set everything it needs, so it
+   * can undo what the adapter relies on - which is why the line naming it matters.
+   *
    * @param adapterId The adapter id whose engine is being built
    * @param configuration The configuration, with VanillaBP's own parse listener already
    *          in its PRE list

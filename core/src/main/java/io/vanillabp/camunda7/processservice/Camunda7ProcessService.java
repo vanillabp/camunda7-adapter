@@ -50,6 +50,8 @@ import lombok.extern.slf4j.Slf4j;
  * Why every probe and the instance lookup behind aggregateChanged filter by the scope of the call
  * rather than by the business key alone is decision 8 in the repository's DECISIONS.md. Why phase
  * one only asks while phase two acts is decision 2 in the repository's DECISIONS.md.
+ *
+ * @param <A> The workflow aggregate type of the workflows this service serves
  */
 @Slf4j
 // see decision 4 in the repository's DECISIONS.md
@@ -149,6 +151,10 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private io.vanillabp.camunda7.sync.Camunda7SerializationFormats serializationFormats;
 
   /**
+   * Hands over how a nested shared value is serialized. It arrives after construction
+   * because the platform integration binds the configuration, and the service is built
+   * before that is available.
+   *
    * @param serializationFormats The format resolution of the platform integration
    */
   public void setSerializationFormats(
@@ -245,6 +251,10 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   private boolean engineRunsOnItsOwnDataSource;
 
   /**
+   * Tells the service whether the engine shares the application's datasource. It changes
+   * what an operation may assume about the caller's transaction, so it is set by whoever
+   * built the engine and by nobody else.
+   *
    * @param engineRunsOnItsOwnDataSource Whether the engine runs on a datasource of its
    *          own
    */
@@ -365,6 +375,16 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   /**
    * Convenience constructor without the sync model (tests) - no operator context
    * is written then.
+   *
+   * @param adapterId The configured adapter id this service serves
+   * @param runtimeService The engine's runtime, where a workflow is started and a message
+   *          is correlated
+   * @param taskService The engine's tasks, where a user task is completed
+   * @param repositoryService The engine's repository, asked which definition a workflow
+   *          runs on
+   * @param historyService The engine's history, which is what the viewer API reads
+   * @param collaborators Everything the platform hands over; the sync model is taken from
+   *          here where there is one
    */
   public Camunda7ProcessService(
       final String adapterId,
@@ -1300,6 +1320,10 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * <code>&lt;bpmnProcessId&gt;-&lt;messageName&gt;</code>. Applications set this
    * local variable at the receiving scope; a correlation carrying a correlation id
    * only matches executions whose variable equals it.
+   *
+   * @param bpmnProcessId The plain BPMN process id of the waiting workflow
+   * @param messageName The plain name of the message it waits for
+   * @return The name of the local variable the correlation id is compared against
    */
   public static String correlationIdVariableName(
       final String bpmnProcessId,

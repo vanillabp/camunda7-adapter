@@ -43,6 +43,26 @@ import jakarta.transaction.TransactionManager;
 @ApplicationScoped
 public class Camunda7EngineProducer {
 
+  /**
+   * Quarkus builds the bean to call the producers below. It keeps no state: what they
+   * return are beans of their own and live as long as the application does.
+   */
+  public Camunda7EngineProducer() {
+
+  }
+
+  /**
+   * Builds one engine per configured adapter id, at startup rather than on first use: a
+   * datasource nobody declared or a schema the engine cannot work with is a configuration
+   * defect, and it belongs in the boot log and not in the first workflow.
+   *
+   * @param properties The platform's own configuration, which is where the adapter ids
+   *          come from
+   * @param transactionManager The Narayana transaction manager every engine command joins
+   * @param workflowTaskRegistry What the core knows about the application's methods
+   * @param dataSources The declared Agroal datasources, which an adapter id picks one of
+   * @return The engines, keyed by adapter id
+   */
   @Produces
   @Singleton
   public Camunda7QuarkusEngineRegistry camunda7EngineRegistry(
@@ -102,6 +122,12 @@ public class Camunda7EngineProducer {
 
   }
 
+  /**
+   * Stops every engine with the application. Each holder stops its job executor before it
+   * closes its engine, so nothing is acquired while the engine is going away.
+   *
+   * @param registry The registry being disposed of
+   */
   public void close(
       @Disposes final Camunda7QuarkusEngineRegistry registry) {
 

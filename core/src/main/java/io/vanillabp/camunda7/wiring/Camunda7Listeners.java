@@ -96,6 +96,9 @@ public final class Camunda7Listeners {
     }
 
     /**
+     * How the model spells this form. A message about a listener has to name the attribute
+     * somebody wrote, not the word this enum uses for it.
+     *
      * @return The BPMN attribute a message names
      */
     public String attribute() {
@@ -105,6 +108,10 @@ public final class Camunda7Listeners {
     }
 
     /**
+     * Whether the application can serve this listener at all. Only the two expression
+     * forms reach the EL resolver; a listener naming a class is the engine's business and
+     * VanillaBP leaves it alone.
+     *
      * @return Whether a <code>@WorkflowTask</code> method can serve this form
      */
     public boolean servable() {
@@ -138,6 +145,9 @@ public final class Camunda7Listeners {
                                  String taskDefinition) {
 
     /**
+     * The listener in one line, so a message can list several of them and somebody can
+     * find each one in the model.
+     *
      * @return The listener as one line of a message
      */
     public String describe() {

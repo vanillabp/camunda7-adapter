@@ -13,6 +13,12 @@ public class Camunda7QuarkusEngineRegistry implements AutoCloseable {
 
   private final Map<String, Camunda7QuarkusEngineHolder> enginesByAdapterId;
 
+  /**
+   * Takes a copy, so nothing adds an engine after the startup which validated them.
+   *
+   * @param enginesByAdapterId The engines built at startup, one per configured adapter id
+   *          of this type
+   */
   public Camunda7QuarkusEngineRegistry(
       final Map<String, Camunda7QuarkusEngineHolder> enginesByAdapterId) {
 
@@ -21,6 +27,9 @@ public class Camunda7QuarkusEngineRegistry implements AutoCloseable {
   }
 
   /**
+   * The engine of one adapter id. Every id which is configured has one by the time anybody
+   * asks, because the engines are built at startup.
+   *
    * @param adapterId The adapter id
    * @return The adapter id's engine holder
    */

@@ -16,6 +16,10 @@ public final class Camunda7StartEvents {
   }
 
   /**
+   * Which trigger a start event carries, read from the model while the engine parses it.
+   * A none or message start event is answered with <code>null</code>: those are started by
+   * the application, so there is nothing for the core to be told about.
+   *
    * @param startEventElement The start event's XML element as the engine's parser
    *          sees it
    * @return Which kind of start event it is, or <code>null</code> if the engine does

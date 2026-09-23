@@ -52,6 +52,14 @@ public class Camunda7WebappsRegistration implements SmartLifecycle {
 
   private boolean running;
 
+  /**
+   * Remembers what it registered, so the webapps are left as they were found when the
+   * application shuts down.
+   *
+   * @param engines The engines VanillaBP built, resolved lazily because they come into
+   *          existence while the context refreshes
+   * @param properties Which adapter ids the webapps serve, and who the administrator is
+   */
   public Camunda7WebappsRegistration(
       final ObjectProvider<Camunda7EngineHolder> engines,
       final Camunda7WebappsProperties properties) {

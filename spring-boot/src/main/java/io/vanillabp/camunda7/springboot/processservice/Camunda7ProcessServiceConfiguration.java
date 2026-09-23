@@ -24,4 +24,13 @@ import io.vanillabp.camunda7.springboot.VanillaBpCamunda7Properties;
 @Import(Camunda7AdapterBeanRegistrar.class)
 public class Camunda7ProcessServiceConfiguration {
 
+  /**
+   * Spring Boot builds the class to apply the annotations above. It declares no bean
+   * method of its own: the beans of this adapter are registered per configured adapter id,
+   * which only the registrar can do.
+   */
+  public Camunda7ProcessServiceConfiguration() {
+
+  }
+
 }

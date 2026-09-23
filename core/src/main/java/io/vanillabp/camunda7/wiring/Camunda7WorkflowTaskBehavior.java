@@ -71,6 +71,13 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
    */
   private final Camunda7TaskRegistry taskRegistry;
 
+  /**
+   * Convenience constructor for a test: no scoping, so the identifiers reach the engine as
+   * the application wrote them, and no version is reported with a delivery.
+   *
+   * @param connectable The wired task this behavior serves
+   * @param workflowTaskInvoker Where the application's method is called
+   */
   public Camunda7WorkflowTaskBehavior(
       final Camunda7TaskConnectable connectable,
       final WorkflowTaskInvoker workflowTaskInvoker) {
@@ -79,6 +86,17 @@ public class Camunda7WorkflowTaskBehavior extends AbstractBpmnActivityBehavior {
 
   }
 
+  /**
+   * The constructor the wiring uses.
+   *
+   * @param connectable The wired task this behavior serves
+   * @param workflowTaskInvoker Where the application's method is called
+   * @param scoping Translates the error code of a task exception into what the engine
+   *          knows, or <code>null</code> where the identifiers are plain
+   * @param adapterId The adapter id reported with the delivery, or <code>null</code>
+   * @param taskRegistry Answers the version of the definition the execution runs on, or
+   *          <code>null</code> where no version is reported
+   */
   public Camunda7WorkflowTaskBehavior(
       final Camunda7TaskConnectable connectable,
       final WorkflowTaskInvoker workflowTaskInvoker,

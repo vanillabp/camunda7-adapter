@@ -167,6 +167,14 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
 
   }
 
+  /**
+   * Convenience constructor for an engine which reports no start the BPMS decided on. The
+   * models are parsed and the listeners are attached all the same.
+   *
+   * @param cancellationListener What is attached to an activity whose cancelation a method
+   *          wants to hear about
+   * @param userTaskEventListener What is attached to a user task
+   */
   public Camunda7AsyncBpmnParseListener(
       final Camunda7TaskCancellationListener cancellationListener,
       final Camunda7UserTaskEventListener userTaskEventListener) {
@@ -175,6 +183,17 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
 
   }
 
+  /**
+   * The constructor the platform integrations use. The factory is asked per start event
+   * the engine fires on its own, because the listener has to know which kind of trigger it
+   * sits on and that is decided while the model is parsed.
+   *
+   * @param cancellationListener What is attached to an activity whose cancelation a method
+   *          wants to hear about
+   * @param userTaskEventListener What is attached to a user task
+   * @param bpmsInitiatedStartListenerFactory Builds the listener of a start event the
+   *          engine fires itself, or <code>null</code> where no method asks for one
+   */
   public Camunda7AsyncBpmnParseListener(
       final Camunda7TaskCancellationListener cancellationListener,
       final Camunda7UserTaskEventListener userTaskEventListener,

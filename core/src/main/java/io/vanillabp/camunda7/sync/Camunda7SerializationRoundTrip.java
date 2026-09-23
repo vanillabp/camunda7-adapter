@@ -89,6 +89,14 @@ public class Camunda7SerializationRoundTrip {
                               String readBack) {
   }
 
+  /**
+   * Measures what a value becomes on its way into the engine and back, which is the only
+   * honest way to say whether a model will read what the application wrote.
+   *
+   * @param configuration The engine configuration whose serializers are measured - the
+   *          real ones, because what a value becomes depends on which dataformats the
+   *          application installed
+   */
   public Camunda7SerializationRoundTrip(
       final ProcessEngineConfigurationImpl configuration) {
 

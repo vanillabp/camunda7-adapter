@@ -64,6 +64,15 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
    */
   private final BpmsStartTrigger.Kind kind;
 
+  /**
+   * One listener per start event the engine fires on its own, built while the model is
+   * parsed.
+   *
+   * @param bpmsInitiatedStartInvoker Where the core is told that the engine started a
+   *          workflow, so it can build the aggregate
+   * @param taskRegistry What the workflow module of the reported process is looked up in
+   * @param kind Which trigger this start event carries, read while the model was parsed
+   */
   public Camunda7BpmsInitiatedStartListener(
       final BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker,
       final Camunda7TaskRegistry taskRegistry,

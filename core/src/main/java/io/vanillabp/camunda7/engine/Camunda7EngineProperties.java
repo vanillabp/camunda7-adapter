@@ -61,6 +61,14 @@ import lombok.Setter;
 @Getter
 public class Camunda7EngineProperties {
 
+  /**
+   * The platform integration builds one per configured adapter id and fills it through the
+   * setters, so a key a deployment says nothing about keeps the default written next to it.
+   */
+  public Camunda7EngineProperties() {
+
+  }
+
   @Setter
   private String databaseSchemaUpdate = "true";
 
@@ -163,6 +171,10 @@ public class Camunda7EngineProperties {
   private Boolean dbMetricsReporting;
 
   /**
+   * Whether this engine's job executor waits for the next job instead of polling for it.
+   * It is asked while the engine is built, and it decides the metrics answer below as
+   * well.
+   *
    * @return Whether the job executor of this adapter id waits until the next job is due
    */
   public boolean sleepsUntilSomethingIsDue() {
@@ -172,6 +184,10 @@ public class Camunda7EngineProperties {
   }
 
   /**
+   * Whether the metrics reporter writes its counters to the database. Unset follows the
+   * answer above: an engine which is allowed to rest should not be woken four times an
+   * hour by its own bookkeeping.
+   *
    * @return Whether the engine's metrics reporter writes to the database
    */
   public boolean reportsMetricsToTheDatabase() {
@@ -182,6 +198,12 @@ public class Camunda7EngineProperties {
 
   }
 
+  /**
+   * Keeps an empty map instead of <code>null</code>, so the engine is built the same way
+   * whether or not an application configured plugins.
+   *
+   * @param enginePlugins The configured plugin sections, may be <code>null</code>
+   */
   public void setEnginePlugins(
       final java.util.Map<String, Camunda7EnginePluginProperties> enginePlugins) {
     this.enginePlugins = enginePlugins == null
@@ -189,9 +211,6 @@ public class Camunda7EngineProperties {
         : enginePlugins;
   }
 
-  /**
-   * @return Whether an own (named) datasource is configured for the adapter id
-   */
   /**
    * The reserved value of {@code data-source-name} naming the application's
    * DEFAULT datasource explicitly. Needed because an application providing several
@@ -201,6 +220,10 @@ public class Camunda7EngineProperties {
   public static final String DEFAULT_DATA_SOURCE_NAME = "default";
 
   /**
+   * Whether a configured name means the application's own datasource. Unset and blank mean
+   * the same as the reserved word, because leaving the key out is how most applications
+   * say it.
+   *
    * @param dataSourceName A configured datasource name
    * @return Whether it names the application's DEFAULT datasource
    */
@@ -212,6 +235,13 @@ public class Camunda7EngineProperties {
 
   }
 
+  /**
+   * Whether this adapter id runs on a datasource of its own. That is what decides whether
+   * the engine can join the caller's transaction, so a good deal of behaviour hangs off
+   * this one answer.
+   *
+   * @return Whether the engine runs on a named datasource
+   */
   public boolean usesSeparateDataSource() {
     return !isDefaultDataSourceName(dataSourceName);
   }

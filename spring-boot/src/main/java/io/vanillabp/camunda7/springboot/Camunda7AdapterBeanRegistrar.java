@@ -54,6 +54,14 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
  */
 public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
 
+  /**
+   * Spring Boot builds the class when the auto-configuration imports it. It holds nothing:
+   * which adapter ids exist is read from the environment while registering.
+   */
+  public Camunda7AdapterBeanRegistrar() {
+
+  }
+
   private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
       .getLogger(Camunda7AdapterBeanRegistrar.class);
 

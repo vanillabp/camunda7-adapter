@@ -46,6 +46,9 @@ public final class Camunda7EngineFacts {
   private final Camunda7TaskRegistry taskRegistry;
 
   /**
+   * Collects what a caller outside this adapter needs to ask the engine itself. Nothing is
+   * read here: every answer below is computed when it is asked for.
+   *
    * @param adapterId The configured adapter id this engine belongs to
    * @param scoping The core's name-clash avoidance, or <code>null</code>
    * @param configuredTenants What the application configured as the tenant of a workflow
@@ -66,6 +69,9 @@ public final class Camunda7EngineFacts {
   }
 
   /**
+   * Which adapter id these facts belong to. An application may configure two engines of
+   * this type, so an answer without the id says nothing.
+   *
    * @return The configured adapter id
    */
   public String adapterId() {

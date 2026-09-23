@@ -21,6 +21,15 @@ public class Camunda7SpringExpressionManager extends SpringExpressionManager {
 
   private final WorkflowTaskInvoker workflowTaskInvoker;
 
+  /**
+   * Puts this adapter's resolver in front of the one which resolves Spring beans, so a
+   * name which is not a task still finds its bean.
+   *
+   * @param applicationContext The application's context, which is where every name this
+   *          adapter does not claim is resolved
+   * @param taskRegistry What the resolver built here looks a task up in
+   * @param workflowTaskInvoker Where the application's method is called
+   */
   public Camunda7SpringExpressionManager(
       final ApplicationContext applicationContext,
       final Camunda7TaskRegistry taskRegistry,

@@ -35,10 +35,21 @@ platforms play the documented features through a real engine rather than a doubl
 `integration-tests` and Quarkus in `quarkus/integration-tests`. A core which is correct says nothing
 about a platform's glue ever calling it.
 
-The build reads the javadoc twice. The compiler runs `-Xdoclint:all,-missing`, which covers every
-class down to the private ones, and the javadoc plugin, which this repository runs in every build,
-covers what the published documentation shows and therefore stops at protected. A broken `{@link}` or a tag HTML no
-longer knows fails the build in either place.
+Two tools read the javadoc, and each one sees a part the other misses. The compiler checks every
+class for a broken reference or broken HTML, the package private ones included. The javadoc plugin
+checks what the published documentation shows, so it starts at protected and stops there. One thing
+below protected is shown as well: the fields a serializable class carries into its serialized form,
+which is why a private field of an exception is asked for a comment too.
+
+A comment which is missing breaks the build. Everything this repository publishes has one now, and
+the plugin fails on a warning so that it stays that way. Write the sentence rather than switching
+the check off, and write the one a reader needs: what this repository publishes is read by somebody
+wiring it into an application, and `@return the value` is the same gap in a longer form. A module
+which publishes nothing sets `maven.javadoc.skip`, so a test module is never asked for comments.
+
+One thing the javadoc plugin cannot see is an accessor Lombok generates, because it reads the source
+and Lombok writes bytecode. So a published comment names a property in words rather than linking a
+getter which is not in the file.
 
 The build also measures itself. `test-coverage-report/coverage-gate` is the last module of the
 reactor and fails below 85 percent of covered instructions per platform, while the rule is 90. See
