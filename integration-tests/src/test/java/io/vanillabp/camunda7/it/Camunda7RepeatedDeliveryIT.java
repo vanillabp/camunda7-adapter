@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +18,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import io.vanillabp.camunda7.processservice.Camunda7ProcessService;
 import io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
+import io.vanillabp.integration.test.utils.delivery.TaskDeliveryLogReader;
+import io.vanillabp.integration.test.utils.delivery.TaskDeliveryLogReader.Delivery;
 
 /**
  * What an engine datasource of its own changes about the INBOUND direction, asserted
@@ -127,6 +130,19 @@ public class Camunda7RepeatedDeliveryIT {
   @Autowired
   private javax.sql.DataSource applicationDataSource;
 
+  /**
+   * What this class asks about the delivery log. The reader belongs to the platform, so
+   * this class names neither the table nor its columns.
+   */
+  private TaskDeliveryLogReader deliveryLog;
+
+  @BeforeEach
+  public void takeTheDeliveryLog() {
+
+    deliveryLog = TaskDeliveryLogReader.of(applicationDataSource);
+
+  }
+
   @AfterEach
   public void forgetWhatThisTestSteered() {
 
@@ -234,14 +250,14 @@ public class Camunda7RepeatedDeliveryIT {
             () -> recordOf(String.valueOf(aggregateId)),
             "the delivery of the asynchronous task to be recorded");
 
-    assertEquals("AP_Task", record.get("BPMN_ELEMENT_ID"), "the element id a modeller wrote");
+    assertEquals("AP_Task", record.bpmnElementId(), "the element id a modeller wrote");
     assertEquals(
         "asyncTask",
-        record.get("TASK_DEFINITION"),
+        record.taskDefinition(),
         "the task definition is the other value, and it is a different one");
     assertEquals(
         processInstance.getId(),
-        record.get("WORKFLOW_ID"),
+        record.workflowId(),
         "the engine's own id of the running instance");
 
   }
@@ -251,20 +267,18 @@ public class Camunda7RepeatedDeliveryIT {
    * Read by aggregate, because this test's process runs only once here.
    *
    * @param aggregateId The workflow aggregate's ID in the form the record carries it
-   * @return The row, or <code>null</code>
+   * @return The record, or <code>null</code>
    */
-  private java.util.Map<String, Object> recordOf(
+  private Delivery recordOf(
       final String aggregateId) {
 
-    final var rows = new org.springframework.jdbc.core.JdbcTemplate(applicationDataSource)
-        .queryForList(
-            "SELECT BPMN_ELEMENT_ID, WORKFLOW_ID, TASK_DEFINITION FROM VANILLABP_TASK_DELIVERY "
-                + "WHERE AGGREGATE_ID = ? AND BPMN_PROCESS_ID = ?",
-            aggregateId,
-            "AsyncProcess");
-    return rows.isEmpty()
-        ? null
-        : rows.getFirst();
+    return deliveryLog
+        .deliveries()
+        .stream()
+        .filter(record -> aggregateId.equals(record.aggregateId()))
+        .filter(record -> "AsyncProcess".equals(record.bpmnProcessId()))
+        .findFirst()
+        .orElse(null);
 
   }
 
@@ -381,12 +395,12 @@ public class Camunda7RepeatedDeliveryIT {
   private int recordedDeliveriesOf(
       final String adapterId) {
 
-    return new org.springframework.jdbc.core.JdbcTemplate(applicationDataSource)
-        .queryForObject(
-            "SELECT COUNT(*) FROM VANILLABP_TASK_DELIVERY WHERE BPMN_PROCESS_ID = ? AND ADAPTER_ID = ?",
-            Integer.class,
-            BPMN_PROCESS_ID,
-            adapterId);
+    return (int) deliveryLog
+        .deliveries()
+        .stream()
+        .filter(record -> BPMN_PROCESS_ID.equals(record.bpmnProcessId()))
+        .filter(record -> adapterId.equals(record.adapterId()))
+        .count();
 
   }
 
