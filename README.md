@@ -1512,6 +1512,10 @@ added to its report cannot stay unnoticed. `CoverageGateTest` is where both of t
 happen, and `TestClassConventionsTest` next to it is what keeps every test class on the output
 suppression the printed lines below depend on.
 
+`TestClassConventionsTest` also reads the main sources of this repository, for a guiding
+message whose sentence fell apart: a run of spaces between two words, or two words a line
+continuation glued into one.
+
 The gate reports what it measured on every run, green ones included, which is the one place in
 VanillaBP where a passing test prints. The angle brackets stand for the numbers of the run:
 
