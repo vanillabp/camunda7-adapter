@@ -49,7 +49,14 @@ which publishes nothing sets `maven.javadoc.skip`, so a test module is never ask
 
 One thing the javadoc plugin cannot see is an accessor Lombok generates, because it reads the source
 and Lombok writes bytecode. So a published comment names a property in words rather than linking a
-getter which is not in the file.
+getter which is not in the file. A published class which takes its constructor from Lombok writes
+that constructor out, because the documentation otherwise shows a parameterless one which does not
+exist.
+
+Two javadoc blocks in a row are the gap neither tool sees. Javadoc keeps the last block before an
+element and drops the earlier ones without a word, so a comment somebody wrote and kept up to date
+appears nowhere. `bin/check-orphaned-javadoc.sh` finds that shape. A block it reports describes
+something, usually the element next door, so hang it back there rather than delete it.
 
 The build also measures itself. `test-coverage-report/coverage-gate` is the last module of the
 reactor and fails below 85 percent of covered instructions per platform, while the rule is 90. See

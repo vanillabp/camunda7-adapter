@@ -20,7 +20,7 @@ import jakarta.transaction.TransactionManager;
 /**
  * Owns ONE embedded Camunda 7 engine per configured adapter id on Quarkus (engine
  * name <code>vanillabp-camunda7-&lt;id&gt;</code>) - the Quarkus counterpart of the
- * Spring Boot module's engine holder, wired per the analysis probe's proven recipe:
+ * Spring Boot module's engine holder. It wires:
  * <ul>
  *   <li>{@link Camunda7QuarkusProcessEngineConfiguration} on an Agroal datasource
  *       (the application's default, or the NAMED datasource configured via
@@ -28,9 +28,9 @@ import jakarta.transaction.TransactionManager;
  *       Narayana {@link TransactionManager};</li>
  *   <li>the engine classloader is pinned to the Quarkus runtime TCCL - without it
  *       the job executor's threads fail with {@code ClassNotFoundException} on
- *       delegate classes (the engine's own thread pool is kept: proven by the
- *       probe, and the C7 family is JVM-mode only anyway; a context-propagating
- *       {@code ManagedExecutor} variant is a possible later refinement);</li>
+ *       delegate classes. The engine's own thread pool is kept rather than a
+ *       context-propagating {@code ManagedExecutor}: with the classloader pinned it
+ *       does the job, and the C7 family runs in JVM mode only;</li>
  *   <li>job-executor activation is DEFERRED to the deployment pipeline's
  *       {@code startWorkflowProcessing} (the shared reference-counted
  *       {@link Camunda7JobExecutorLifecycle} - the same semantics as on Spring

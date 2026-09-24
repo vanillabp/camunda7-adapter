@@ -5,8 +5,7 @@ import org.camunda.bpm.engine.impl.cfg.JakartaTransactionProcessEngineConfigurat
 import jakarta.transaction.TransactionManager;
 
 /**
- * Engine configuration for the plain Camunda 7 engine on Quarkus, per the recipe
- * proven by the plain-engine analysis probe: the engine-shipped
+ * Engine configuration for the plain Camunda 7 engine on Quarkus: the engine-shipped
  * {@link JakartaTransactionProcessEngineConfiguration} (no
  * {@code camunda-engine-cdi-jakarta}, no Camunda Quarkus extension) with the CDI
  * {@link TransactionManager} (Narayana) - engine commands join the caller's JTA
