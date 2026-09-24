@@ -1512,6 +1512,10 @@ added to its report cannot stay unnoticed. `CoverageGateTest` is where both of t
 happen, and `TestClassConventionsTest` next to it is what keeps every test class on the output
 suppression the printed lines below depend on.
 
+`TestClassConventionsTest` also reads the main sources of this repository, for a guiding
+message whose sentence fell apart: a run of spaces between two words, or two words a line
+continuation glued into one.
+
 The gate reports what it measured on every run, green ones included, which is the one place in
 VanillaBP where a passing test prints. The angle brackets stand for the numbers of the run:
 
@@ -1519,6 +1523,10 @@ VanillaBP where a passing test prints. The angle brackets stand for the numbers 
 coverage gate | Spring Boot: <percent> % instructions (<missed> of <total> missed) | at the rule of 90 %
 coverage gate | Quarkus: <percent> % instructions (<missed> of <total> missed) | <gap> points below the rule of 90 %, build breaks below 85 %
 ```
+
+A build which stops at `package` never reaches the phase which writes the reports. The gate then
+prints a line per platform saying that the coverage was not checked, and those two tests are
+reported as skipped, instead of failing over a file the run could not have written.
 
 Both platforms run the documented features end to end against a real embedded engine: Spring Boot in
 `integration-tests`, Quarkus in `quarkus/integration-tests`. That duplication is deliberate. The
