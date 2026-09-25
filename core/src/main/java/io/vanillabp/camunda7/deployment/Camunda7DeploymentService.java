@@ -2156,8 +2156,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
               .findFirst()
               .ifPresent(definition -> startEvents
                   .add(
-                      new io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec(
-                          startEvent.getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.TIMER, null, "timer")));
+                      io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec
+                          .of(startEvent.getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.TIMER)));
           definitions
               .stream()
               .filter(org.camunda.bpm.model.bpmn.instance.SignalEventDefinition.class::isInstance)
@@ -2173,7 +2173,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
                     .add(
                         new io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec(
                             startEvent.getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.SIGNAL, plainIdentifier(
-                                workflowModuleId, scopedSignalName), "signal"));
+                                workflowModuleId, scopedSignalName)));
               });
           definitions
               .stream()
@@ -2181,9 +2181,10 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
               .findFirst()
               .ifPresent(definition -> startEvents
                   .add(
-                      new io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec(
-                          startEvent
-                              .getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.CONDITIONAL, null, "conditional")));
+                      io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec
+                          .of(
+                              startEvent.getId(),
+                              io.vanillabp.spi.service.BpmsStartTrigger.Kind.CONDITIONAL)));
         });
     return startEvents;
 

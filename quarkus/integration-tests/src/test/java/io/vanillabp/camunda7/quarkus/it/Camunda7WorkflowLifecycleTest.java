@@ -20,7 +20,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import io.quarkus.test.QuarkusProdModeTest;
 import io.restassured.RestAssured;
 import io.restassured.specification.RequestSpecification;
-import io.vanillabp.integration.test.utils.FreePortUtil;
+import io.vanillabp.integration.test.utils.OneFreePortPerJvm;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
@@ -82,7 +82,7 @@ public class Camunda7WorkflowLifecycleTest {
       .setJVMArgs(testCoverageJavaAgent(quarkusProdModeTestDefaults()))
       .setRun(true)
       .setRuntimeProperties(Map.of(
-          "quarkus.http.port", Integer.toString(FreePortUtil.getFreePort()),
+          "quarkus.http.port", Integer.toString(OneFreePortPerJvm.getPort()),
           // the application runs in a forked JVM, so its own log is the only place a
           // failure inside it can be read afterwards
           "quarkus.log.file.enable", "true",
@@ -102,7 +102,7 @@ public class Camunda7WorkflowLifecycleTest {
     return RestAssured
         .given()
         .baseUri("http://localhost")
-        .port(FreePortUtil.getFreePort());
+        .port(OneFreePortPerJvm.getPort());
 
   }
 

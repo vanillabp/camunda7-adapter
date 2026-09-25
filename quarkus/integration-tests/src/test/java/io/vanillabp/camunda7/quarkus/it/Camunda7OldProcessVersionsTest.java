@@ -19,7 +19,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 
 import io.quarkus.test.QuarkusProdModeTest;
 import io.restassured.RestAssured;
-import io.vanillabp.integration.test.utils.FreePortUtil;
+import io.vanillabp.integration.test.utils.OneFreePortPerJvm;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
@@ -51,7 +51,7 @@ public class Camunda7OldProcessVersionsTest {
 
   private static final String MODULE_ID = "c7-versions";
 
-  private static final int PORT = FreePortUtil.getFreePort();
+  private static final int PORT = OneFreePortPerJvm.getPort();
 
   /**
    * A file database rather than an in-memory one: the first application's JVM is gone before
