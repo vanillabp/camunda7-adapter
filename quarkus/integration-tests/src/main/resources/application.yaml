@@ -24,7 +24,13 @@ vanillabp:
       workflows:
         AggregateChangedProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         TaskProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         TimerStartProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'

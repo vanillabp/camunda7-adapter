@@ -22,3 +22,5 @@ vanillabp:
       workflows:
         ModelledListenerProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'

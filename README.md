@@ -1436,6 +1436,24 @@ neither an eventual-consistency lag nor an application-version boundary.
 `Camunda7ViewerApiTest` the same on Quarkus, and
 `Camunda7WorkflowVisibilityTest#embeddedEngineReportsNoVisibilityDelay` the absent lag.
 
+## What this adapter says about a value type
+
+The platform refuses to start a workflow whose values may not arrive as what they were, and it asks
+every adapter of that workflow what its BPMS does with a type
+(`MigratableProcessService#whatThisBpmsDoesWith`). `Camunda7ValueTypes` is this adapter's answer.
+
+Camunda 7 keeps a value in a variable of its own type where it HAS a type for it: the texts, the
+boolean, the numbers of the JDK, a date and a byte array. An arbitrary-precision number is not among
+them, so a `BigDecimal` is written in the serialization format configured for the workflow, and what
+an expression reads back is that format's answer. That is reported as changed in both directions,
+with the outbound and the inbound sentence saying different things: outbound the model reads what
+the format produced, inbound the number arrives as the declared type without the scale it was
+written with.
+
+Anything else is answered with "cannot say", which never ends a startup. What a format really costs
+is measured rather than guessed, by `Camunda7SerializationRoundTrip`, and the deployment reports the
+measurement.
+
 ## Decision log
 
 Decisions several places in this repository rely on live in [`DECISIONS.md`](./DECISIONS.md), the

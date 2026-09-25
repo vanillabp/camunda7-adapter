@@ -21,9 +21,17 @@ vanillabp:
       workflows:
         CallingProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         EndedProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         QTaskProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         TestProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'

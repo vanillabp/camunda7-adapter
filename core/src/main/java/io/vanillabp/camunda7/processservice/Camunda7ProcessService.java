@@ -373,6 +373,23 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
+   * What Camunda 7 does with that type, so the startup check can say what happens to a value
+   * which travels between the application and this BPMS.
+   *
+   * @param valueType The declared type of the value
+   * @param direction Which way the value travels
+   * @return The verdict of this adapter
+   */
+  @Override
+  public io.vanillabp.integration.adapter.spi.values.ValueTypeVerdict whatThisBpmsDoesWith(
+      final Class<?> valueType,
+      final io.vanillabp.integration.adapter.spi.values.ValueDirection direction) {
+
+    return io.vanillabp.camunda7.sync.Camunda7ValueTypes.verdictFor(valueType, direction);
+
+  }
+
+  /**
    * Convenience constructor without the sync model (tests) - no operator context
    * is written then.
    *
