@@ -36,6 +36,18 @@ vanillabp:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
             - '*'
+        ExprConditions:
+          declared-aggregate-values:
+            - '*'
+        ExprEventSub:
+          declared-aggregate-values:
+            - '*'
+        ExprEventSubQuiet:
+          declared-aggregate-values:
+            - '*'
+        ExprPlacements:
+          declared-aggregate-values:
+            - '*'
         ForeignConditionProcess:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
@@ -68,6 +80,10 @@ vanillabp:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
             - '*'
+          tasks:
+            totalIntoBigDecimal:
+              declared-task-params:
+                - total
         RenamedProcessNew:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:

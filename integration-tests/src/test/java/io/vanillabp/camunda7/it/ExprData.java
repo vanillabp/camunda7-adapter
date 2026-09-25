@@ -27,6 +27,12 @@ import jakarta.persistence.Transient;
  * The flat state has no public getters on purpose. The sync model reads readable
  * JavaBean properties, so a private field without a getter is invisible to it and the
  * variables the engine gets are exactly the ones these tests are about.
+ * <p>
+ * Dates, a decimal, an enum and a list are among them, and none of those means the same
+ * in every expression language. The four processes of these tests therefore declare
+ * every value they share ({@code declared-aggregate-values: '*'} in the test
+ * application's configuration), because what is measured here is where an expression may
+ * stand and what it reads, not what a type does on its way to the engine.
  */
 @MappedSuperclass
 public abstract class ExprData {

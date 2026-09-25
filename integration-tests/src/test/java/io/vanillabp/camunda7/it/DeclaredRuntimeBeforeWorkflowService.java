@@ -21,13 +21,23 @@ import io.vanillabp.spi.service.WorkflowTask;
     bpmnProcess = @BpmnProcess(bpmnProcessId = "DeclaredRuntimeOld"))
 public class DeclaredRuntimeBeforeWorkflowService {
 
+  /**
+   * Builds the workflow aggregate of a workflow the engine started under this id.
+   *
+   * @param trigger What the engine fired
+   * @return The workflow aggregate of the started workflow
+   */
   @WorkflowStartedByBpms
-  public void startedByBpms(
-      final DeclaredRuntimeAggregate aggregate,
+  public DeclaredRuntimeAggregate startedByBpms(
       final BpmsStartTrigger trigger) {
 
+    final var aggregate = new DeclaredRuntimeAggregate();
+    // the trigger time as the id, which is what the test reads back to tell the
+    // workflows of the two generations apart
+    aggregate.setId(trigger.time().toString());
     aggregate.setStartedAs(trigger.kind().name());
     aggregate.setSignalName(trigger.signalName());
+    return aggregate;
 
   }
 

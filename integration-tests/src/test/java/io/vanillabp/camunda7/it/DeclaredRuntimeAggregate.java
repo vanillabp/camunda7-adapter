@@ -8,9 +8,9 @@ import lombok.Setter;
 
 /**
  * The JPA workflow aggregate of the declared-id runtime integration test. Its ID is a
- * String and carries no <code>@GeneratedValue</code>: VanillaBP assigns it for a
- * workflow the ENGINE started - a timer's trigger time, or the engine's own instance
- * id for a signal.
+ * String and carries no <code>@GeneratedValue</code>: the
+ * <code>@WorkflowStartedByBpms</code> method writes the trigger time into it, which is
+ * how the test tells the workflows of the two generations apart.
  */
 @Entity
 @Table(name = "C7_DECLARED_RUNTIME_AGGREGATE")

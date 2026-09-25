@@ -9,8 +9,8 @@ import lombok.Setter;
 /**
  * The JPA workflow aggregate of the timer-start integration test. Its ID is a
  * String, so the timer's trigger time can be its identity - and no
- * <code>@GeneratedValue</code> is involved, which proves VanillaBP assigns the ID
- * itself for a workflow nobody started through the {@code ProcessService}.
+ * <code>@GeneratedValue</code> is involved, which is what lets the
+ * <code>@WorkflowStartedByBpms</code> method name the workflow itself.
  */
 @Entity
 @Table(name = "C7_TIMER_START_AGGREGATE")
