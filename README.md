@@ -1135,6 +1135,15 @@ together and a failure rolls both back for the engine to retry. The engine does 
 a listener the timer's scheduled time, so the aggregate's ID is derived from the moment the
 instance is created, which costs nothing when both are written in one transaction.
 
+An event subprocess is left out of this, although its start event can carry a timer, a
+signal or a condition too. It fires inside a workflow which is already running and already
+has its aggregate, so nothing is started there and no method has to build anything. Only
+the start events the process itself holds count, in the deployment which tells the core
+about them and in the parse listener which attaches the execution listener. The engine draws
+the same line while it parses: a start event whose scope is no process definition becomes a
+scope start event. `Camunda7EventSubprocessStartsNoWorkflowTest` holds both places, and it
+lets an event subprocess take a running workflow over to show that nothing else changed.
+
 An instance which already carries a business key does not end the listener's work. On
 Camunda 7 the key IS the aggregate's ID, so it names an aggregate rather than saying who
 started the workflow, and anybody with access to the engine can start such a process with a

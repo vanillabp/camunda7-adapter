@@ -214,6 +214,11 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
     if (bpmsInitiatedStartListenerFactory == null) {
       return;
     }
+    // a start event of an event subprocess fires inside a workflow which is already
+    // running and already has its aggregate, so nothing has to be built for it
+    if (!Camunda7StartEvents.startsTheWorkflow(scope)) {
+      return;
+    }
     // only the start events the ENGINE fires on its own need an aggregate built for
     // them; a none start event is the application's business, a message start event
     // arrives through ProcessService#startWorkflowByMessage carrying its aggregate

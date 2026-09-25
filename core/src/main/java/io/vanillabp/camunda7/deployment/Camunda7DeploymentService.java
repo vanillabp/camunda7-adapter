@@ -2132,6 +2132,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * the two cannot disagree about what a start event is. A signal name is reported PLAIN,
    * because name-clash avoidance is nothing the application above this boundary knows
    * about.
+   * <p>
+   * Only the start events the process itself holds are read. An event subprocess starts no
+   * workflow, which
+   * {@link io.vanillabp.camunda7.wiring.Camunda7StartEvents#startsTheWorkflow(org.camunda.bpm.model.bpmn.instance.StartEvent)}
+   * says more about.
    *
    * @param workflowModuleId The workflow module ID
    * @param scopedBpmnProcessId The process definition key the engine knows
@@ -2148,6 +2153,7 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.StartEvent.class)
         .stream()
         .filter(startEvent -> scopedBpmnProcessId.equals(owningProcessId(startEvent)))
+        .filter(io.vanillabp.camunda7.wiring.Camunda7StartEvents::startsTheWorkflow)
         .forEach(startEvent -> {
           final var definitions = startEvent.getEventDefinitions();
           definitions
