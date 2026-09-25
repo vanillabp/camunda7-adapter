@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.Collection;
 import java.util.List;
@@ -180,10 +179,13 @@ public class Camunda7EventSubprocessStartsNoWorkflowTest {
       """;
 
   @Test
-  @DisplayName("The event subprocess still takes the running workflow over, and VanillaBP is not told a workflow started")
+  @DisplayName("The event subprocess still takes the running workflow over, and its start event tells VanillaBP nothing")
   public void theEventSubprocessStillFires() {
 
-    final var startListener = mock(ExecutionListener.class);
+    // which start events the listener was notified at: the plain one of the process is
+    // among them since story 653, the one of the event subprocess is not
+    final var notifiedAt = new java.util.ArrayList<String>();
+    final ExecutionListener startListener = execution -> notifiedAt.add(execution.getCurrentActivityId());
     engine = anEngineParsingWith(new Camunda7AsyncBpmnParseListener(null, null, kind -> startListener));
     engine
         .getRepositoryService()
@@ -212,7 +214,12 @@ public class Camunda7EventSubprocessStartsNoWorkflowTest {
             .processInstanceId(workflow.getId())
             .singleResult(),
         "it interrupts, so the workflow it took over is done");
-    verifyNoInteractions(startListener);
+    assertEquals(
+        List.of("Event_started"),
+        notifiedAt,
+        () -> "the plain start event of the process reports its start, the one of the event "
+            + "subprocess reports none: "
+            + notifiedAt);
 
   }
 

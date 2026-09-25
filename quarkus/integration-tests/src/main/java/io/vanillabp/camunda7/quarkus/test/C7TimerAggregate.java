@@ -7,9 +7,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The workflow aggregate of the workflow the ENGINE starts on its own. Its
- * id is a String, so the timer's trigger time can be its identity - and no
- * <code>&#64;GeneratedValue</code> is involved, which is what lets the
+ * The workflow aggregate of the workflow the ENGINE starts on its own. Its id is a String
+ * and no <code>&#64;GeneratedValue</code> is involved, which is what lets the
  * <code>&#64;WorkflowStartedByBpms</code> method name the workflow itself.
  */
 @Entity
@@ -22,6 +21,11 @@ public class C7TimerAggregate {
   private String id;
 
   private String processedBy;
+
+  /**
+   * Which kind of start event began this workflow, as the trigger reported it.
+   */
+  private String startedBy;
 
   /**
    * Set by the <code>&#64;WorkflowEnded</code> method.

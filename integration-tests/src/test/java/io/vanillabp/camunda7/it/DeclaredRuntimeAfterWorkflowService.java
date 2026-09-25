@@ -56,9 +56,11 @@ public class DeclaredRuntimeAfterWorkflowService {
       final BpmsStartTrigger trigger) {
 
     final var aggregate = new DeclaredRuntimeAggregate();
-    // the trigger time as the id, which is what the test reads back to tell the
-    // workflows of the two generations apart
-    aggregate.setId(trigger.time().toString());
+    // a name of the application's own, which the engine holds as the business key. The
+    // generation is part of it, which is how the test tells the workflows this
+    // application started apart from the ones its predecessor started
+    aggregate.setId("declared-runtime-after-"
+        + java.util.UUID.randomUUID());
     aggregate.setStartedAs(trigger.kind().name());
     aggregate.setSignalName(trigger.signalName());
     return aggregate;

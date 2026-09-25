@@ -39,10 +39,10 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
   private final Camunda7UserTaskEventListener userTaskEventListener;
 
   /**
-   * Builds the workflow aggregate of a workflow the engine started on its own -
-   * attached to timer, signal and conditional start events. May be
-   * <code>null</code>: an engine built without it simply does not serve such
-   * processes.
+   * Decides what a start of a workflow means and lets the application build the workflow
+   * aggregate where nobody started it through VanillaBP - attached to every start event the
+   * process itself holds. May be <code>null</code>: an engine built without it simply does
+   * not serve such processes.
    */
   private final java.util.function.Function<io.vanillabp.spi.service.BpmsStartTrigger.Kind, org.camunda.bpm.engine.delegate.ExecutionListener> bpmsInitiatedStartListenerFactory;
 
@@ -219,13 +219,10 @@ public class Camunda7AsyncBpmnParseListener extends AbstractBpmnParseListener {
     if (!Camunda7StartEvents.startsTheWorkflow(scope)) {
       return;
     }
-    // only the start events the ENGINE fires on its own need an aggregate built for
-    // them; a none start event is the application's business, a message start event
-    // arrives through ProcessService#startWorkflowByMessage carrying its aggregate
+    // EVERY start event of the process carries the listener, the plain one included: what
+    // a start means is read from the state of the workflow and not from the kind of its
+    // start event, see DECISIONS.pending/653.md
     final var kind = Camunda7StartEvents.kindOf(startEventElement);
-    if (kind == null) {
-      return;
-    }
     activity
         .addListener(
             org.camunda.bpm.engine.delegate.ExecutionListener.EVENTNAME_START,

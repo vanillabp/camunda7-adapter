@@ -705,7 +705,13 @@ through a bean of the engine and not by asking the engine, because every questio
 embedded engine is a command whose commit wakes the acquisition - a test polling the engine wakes
 the sleep it measures.
 
-### 24. A start is the application's own where the ID already has an aggregate
+### 24. A start is the application's own where the ID already has an aggregate - superseded by `DECISIONS.pending/653.md`
+
+> Superseded. A workflow started past VanillaBP no longer keeps the business key it was started
+> with: the id of a workflow is the id of its workflow aggregate, the application assigns it, and
+> a key VanillaBP did not write is refused. `DECISIONS.pending/653.md` says why and what replaced
+> the parts of this entry which still hold. The entry stays because code and messages pointed at
+> it.
 
 On Camunda 7 the business key IS the workflow aggregate's ID. `Camunda7ProcessService` writes the ID
 into the key when the application starts a workflow, and every other part of this adapter reads the
@@ -750,7 +756,7 @@ BPMS-initiated start of the same ID.
 
 `Camunda7ForeignStartIT` starts all three kinds from outside, holds the application's own start
 against them, and reads the message of the refused one. See
-[Workflows the engine starts itself](./README.md#workflows-the-engine-starts-itself-and-workflows-which-ended).
+[The start of a workflow](./README.md#the-start-of-a-workflow-and-workflows-which-ended).
 
 ### 25. The migration fallback names no version for its removal
 

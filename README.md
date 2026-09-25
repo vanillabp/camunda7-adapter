@@ -1124,38 +1124,45 @@ that transaction and broadcasts after the commit through the outbox, like a remo
 `Camunda7SendSignalIT#broadcastContinuesTheWaitingWorkflow` and
 `#rollbackTakesTheBroadcastWithIt` hold both halves.
 
-## Workflows the engine starts itself and workflows which ended
+## The start of a workflow, and workflows which ended
 
-A process with a timer, signal or conditional start event runs without anybody calling
-`startWorkflow`. The adapter attaches an execution listener to such a start event; it
-builds the workflow aggregate and stores the aggregate's ID as the process instance's
-business key, which is how this adapter addresses workflows everywhere else. The listener
-runs inside the engine's own transaction, so aggregate and process instance commit
-together and a failure rolls both back for the engine to retry. The engine does not tell
-a listener the timer's scheduled time, so the aggregate's ID is derived from the moment the
-instance is created, which costs nothing when both are written in one transaction.
+The adapter attaches an execution listener to EVERY start event a process itself holds,
+the plain and the message one included. It reports the start to the core, and the core
+decides what that start is. The listener runs inside the engine's own transaction, so the
+workflow aggregate and the process instance commit together and a failure rolls both back
+for the engine to retry.
 
-An event subprocess is left out of this, although its start event can carry a timer, a
-signal or a condition too. It fires inside a workflow which is already running and already
-has its aggregate, so nothing is started there and no method has to build anything. Only
+A workflow is named by its workflow aggregate, and that name is the instance's business
+key. Where the instance already carries a key whose workflow aggregate exists, the workflow
+is already ours and nothing is built - that is the application's own start. Where it
+carries no key, somebody started it past VanillaBP: the application's
+`@WorkflowStartedByBpms` method builds the aggregate and names it, the adapter writes that
+name into the business key, and one INFO line says so. Where it carries a key no workflow
+aggregate has, the start is refused, because VanillaBP names a workflow and nobody else.
+
+An event subprocess is left out of this. Its start event fires inside a workflow which is
+already running and already has its aggregate, so nothing is started there. Only
 the start events the process itself holds count, in the deployment which tells the core
 about them and in the parse listener which attaches the execution listener. The engine draws
 the same line while it parses: a start event whose scope is no process definition becomes a
 scope start event. `Camunda7EventSubprocessStartsNoWorkflowTest` holds both places, and it
 lets an event subprocess take a running workflow over to show that nothing else changed.
 
-An instance which already carries a business key does not end the listener's work. On
-Camunda 7 the key IS the aggregate's ID, so it names an aggregate rather than saying who
-started the workflow, and anybody with access to the engine can start such a process with a
-key of their own. The key is handed to the core as the name the workflow already goes by:
-where an aggregate of that ID exists the start was the application's own (or a workflow
-taken over from version 1, which carries its ID in the key and nowhere else), and where
-none exists the workflow was started past VanillaBP and gets its aggregate under that key,
-reported with one INFO line. A key which cannot be an ID of that aggregate is refused,
-because VanillaBP would otherwise have to name the workflow something else and overwrite a
-key somebody chose. The reasoning is
-[decision 24](./DECISIONS.md#24-a-start-is-the-applications-own-where-the-id-already-has-an-aggregate),
+The kind of the start event decides none of this, and it cannot: anybody with access to
+the engine can start any of these processes, with a key or without one, so a timer start
+event says nothing about who started this instance. The state of the workflow says it. A
+process whose engine fires a start event by itself - a timer, a signal, a condition - and
+which has no `@WorkflowStartedByBpms` method ends the boot; a process with only plain or
+message start events needs none until somebody starts it past VanillaBP, and that start is
+refused with the method to write in its message. The reasoning is
+`DECISIONS.pending/653.md`, which supersedes
+[decision 24](./DECISIONS.md#24-a-start-is-the-applications-own-where-the-id-already-has-an-aggregate-superseded-by-decisionspending653md),
 and `Camunda7ForeignStartIT` walks every case against the engine.
+
+What it costs is one execution listener per start event in the parsed process definition
+and one load of the workflow aggregate per start of a workflow. The listener runs in the
+engine's own transaction, so that load hits the persistence context the start already uses,
+and the first task of the workflow reads the same aggregate a moment later anyway.
 
 Where a workflow service declares a `@WorkflowEnded` method, the adapter attaches an END
 execution listener to the PROCESS scope, again inside the engine's transaction. Camunda 7

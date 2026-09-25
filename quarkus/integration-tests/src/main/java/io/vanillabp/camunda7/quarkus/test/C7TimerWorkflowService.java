@@ -10,9 +10,9 @@ import io.vanillabp.spi.service.WorkflowTask;
 import jakarta.enterprise.context.ApplicationScoped;
 
 /**
- * The workflow service of the timer-started workflow. The engine starts it, so the
- * aggregate is built here and nowhere else, and the task following the start event has
- * to find it.
+ * The workflow service of the timer-started workflow. Nobody starts it through VanillaBP,
+ * so the aggregate is built here and nowhere else, and the name it gets is what the engine
+ * holds as the business key.
  */
 @ApplicationScoped
 @WorkflowService(
@@ -31,9 +31,11 @@ public class C7TimerWorkflowService {
       final BpmsStartTrigger trigger) {
 
     final var aggregate = new C7TimerAggregate();
-    // the trigger time as the id: the same firing reported twice finds this aggregate
-    // instead of building a second one
-    aggregate.setId(trigger.time().toString());
+    // the name of the workflow is the application's choice, and the engine holds it as
+    // the business key from here on
+    aggregate.setId("timer-"
+        + java.util.UUID.randomUUID());
+    aggregate.setStartedBy(trigger.kind().name());
     return aggregate;
 
   }

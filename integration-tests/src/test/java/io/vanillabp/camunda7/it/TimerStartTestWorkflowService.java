@@ -32,9 +32,11 @@ public class TimerStartTestWorkflowService {
       final BpmsStartTrigger trigger) {
 
     final var aggregate = new TimerStartTestAggregate();
-    // the trigger time as the id: the same firing reported twice finds this aggregate
-    // instead of building a second one
-    aggregate.setId(trigger.time().toString());
+    // a name of the application's own, which the engine holds as the business key from
+    // here on - a second delivery of the same start finds the workflow under it
+    aggregate.setId("timer-start-"
+        + java.util.UUID.randomUUID());
+    aggregate.setStartedBy(trigger.kind().name());
     return aggregate;
 
   }

@@ -1,6 +1,5 @@
 package io.vanillabp.camunda7.wiring;
 
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -15,40 +14,32 @@ import io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvo
 import io.vanillabp.spi.service.BpmsStartTrigger;
 
 /**
- * Attached to the start events the engine fires on its own (timer, signal,
- * conditional - see {@link Camunda7AsyncBpmnParseListener}), this listener gives the
- * new workflow its workflow aggregate: it asks the core to build one and stores the
- * aggregate's ID as the instance's BUSINESS KEY, which is how everything else in
- * this adapter finds a workflow again.
+ * Attached to EVERY start event the process itself holds (see
+ * {@link Camunda7AsyncBpmnParseListener}), this listener reports the start of a workflow to
+ * the core and writes the name that workflow gets into the instance's BUSINESS KEY, which
+ * is how everything else in this adapter finds a workflow again.
  * <p>
  * It runs inside the engine's own transaction (the timer job's, respectively the
  * command's), so aggregate and process instance commit together.
  * <p>
- * A business key the instance already carries does not end this listener's work, and
- * that is the point of it. On Camunda 7 the business key IS the workflow aggregate's id,
- * so a key names an aggregate rather than telling who started the workflow: anybody with
- * access to the engine can start one of these processes and choose the key. The only
- * reliable sign of a start the application made is that the id already has an aggregate,
- * which is the rule this listener applies. So the key is handed to the core as the name
- * the workflow already goes by, and what comes back says which case it was: an aggregate
- * which existed is the application's own start (or a workflow taken over from version 1,
- * which carries its id in the key and nowhere else), while one which was created belongs
- * to a workflow somebody started past VanillaBP.
+ * What a start means is not read from the kind of its start event. On Camunda 7 anybody
+ * with access to the engine can start any of these processes, with a business key or
+ * without one, so the kind of the event says nothing about who started the workflow. The
+ * state of the workflow does, and the core reads it: an instance carrying a key whose
+ * workflow aggregate exists is the application's own start (or the second delivery of this
+ * very listener), an instance carrying no key was started past VanillaBP and its aggregate
+ * is built by the application, and an instance carrying a key nothing carries is refused,
+ * because VanillaBP names a workflow and nobody else. All of that is
+ * {@code DECISIONS.pending/653.md}, which supersedes decision 24 in the repository's
+ * DECISIONS.md.
  * <p>
- * The one case the adapter refuses is a key which cannot be an id of that aggregate at
- * all - a text where the id attribute is a number or a UUID. VanillaBP would then have to
- * give the workflow an id of its own and overwrite a name somebody else chose, so it
- * builds nothing and says why.
+ * One thing stays invisible, with open eyes: a key somebody chose which happens to be the
+ * id of an existing workflow aggregate attaches that instance to it without a word. Nothing
+ * on Camunda 7 can catch that, because catching it needs two values naming the instance and
+ * Camunda 7 keeps one.
  * <p>
- * Two things this cannot see, both of them on purpose. A key somebody chose which looks
- * like the id of an existing aggregate attaches that workflow to it without a word, and
- * nothing on Camunda 7 can catch that, because catching it needs two values and there is
- * one. And an application which deletes its aggregate while the workflow still runs looks
- * like a foreign start at the next BPMS-initiated start of the same id. All of this is
- * decision 24 in the repository's DECISIONS.md.
- * <p>
- * Why a listener is added to the deployed model, and only where a handler exists, is decision 5 in
- * the repository's DECISIONS.md.
+ * Why a listener is added to the deployed model at all is decision 5 in the repository's
+ * DECISIONS.md.
  */
 public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
 
@@ -60,13 +51,21 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
   private final Camunda7TaskRegistry taskRegistry;
 
   /**
-   * Which kind of start event this listener sits on, decided at parse time.
+   * Whether a workflow service of this application serves the given (workflow module, BPMN
+   * process). The engine holds the definitions of whatever was deployed against its
+   * database, this application's unclaimed processes included, and a start of one of those
+   * is none of VanillaBP's business - the core has no workflow service to answer for it.
+   */
+  private final java.util.function.BiPredicate<String, String> servedByThisApplication;
+
+  /**
+   * Which kind of start event this listener sits on, decided at parse time. It is reported
+   * to the application and decides nothing here.
    */
   private final BpmsStartTrigger.Kind kind;
 
   /**
-   * One listener per start event the engine fires on its own, built while the model is
-   * parsed.
+   * One listener per start event of the process, built while the model is parsed.
    *
    * @param bpmsInitiatedStartInvoker Where the core is told that the engine started a
    *          workflow, so it can build the aggregate
@@ -78,9 +77,30 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
       final Camunda7TaskRegistry taskRegistry,
       final BpmsStartTrigger.Kind kind) {
 
+    this(bpmsInitiatedStartInvoker, taskRegistry, kind, (
+        workflowModuleId,
+        bpmnProcessId) -> true);
+
+  }
+
+  /**
+   * The same listener, told which processes this application serves.
+   *
+   * @param bpmsInitiatedStartInvoker Where the core is told that a workflow started
+   * @param taskRegistry What the workflow module of the reported process is looked up in
+   * @param kind Which trigger this start event carries, read while the model was parsed
+   * @param servedByThisApplication Whether a workflow service serves that process
+   */
+  public Camunda7BpmsInitiatedStartListener(
+      final BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker,
+      final Camunda7TaskRegistry taskRegistry,
+      final BpmsStartTrigger.Kind kind,
+      final java.util.function.BiPredicate<String, String> servedByThisApplication) {
+
     this.bpmsInitiatedStartInvoker = bpmsInitiatedStartInvoker;
     this.taskRegistry = taskRegistry;
     this.kind = kind;
+    this.servedByThisApplication = servedByThisApplication;
 
   }
 
@@ -108,6 +128,16 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
       return;
     }
     final var bpmnProcessId = taskRegistry.plainBpmnProcessId(workflowModuleId, processDefinitionKey);
+    if (!servedByThisApplication.test(workflowModuleId, bpmnProcessId)) {
+      log
+          .debug(
+              "Camunda7: no workflow service of this application serves BPMN process '{}' of "
+                  + "workflow module '{}' - the start of instance '{}' is none of VanillaBP's business",
+              bpmnProcessId,
+              workflowModuleId,
+              execution.getProcessInstanceId());
+      return;
+    }
 
     final var signalName = taskRegistry
         .signalNameOfStartEvent(workflowModuleId, processDefinitionKey, execution.getCurrentActivityId());
@@ -118,67 +148,36 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
             bpmnProcessId,
             contextOf(execution, signalName, processVersion, businessKey));
 
-    if (businessKey == null) {
-      // the aggregate's ID is this adapter's handle on the workflow (business key) -
-      // set within the same transaction which created the instance
-      ((PvmExecutionImpl) execution).setProcessBusinessKey(result.workflowAggregateId());
-
+    if (businessKey != null) {
+      // the instance already carries the name of a workflow aggregate which exists - the
+      // core refuses every other case, so there is nothing to write and nothing to say
       log
           .debug(
-              "Camunda7: the BPMS started '{}' of workflow module '{}' by start event '{}' - workflow "
-                  + "aggregate '{}' {}",
+              "Camunda7: the start of '{}' of workflow module '{}' at start event '{}' names workflow "
+                  + "aggregate '{}', which exists - this workflow is already ours",
               bpmnProcessId,
               workflowModuleId,
-              execution.getCurrentActivityId(),
-              result.workflowAggregateId(),
-              result.created()
-                  ? "created"
-                  : "existed already");
-      return;
-    }
-
-    if (!businessKey.equals(result.workflowAggregateId())) {
-      throw new IllegalStateException(
-          ("The start of BPMN process '%s' of workflow module '%s' at start event '%s' is refused: the "
-              + "Camunda 7 process instance '%s' was started with business key '%s', and that key "
-              + "cannot be an id of the workflow aggregate this process uses (VanillaBP would have to "
-              + "name the workflow '%s' instead and overwrite the key). On Camunda 7 the business key "
-              + "IS the workflow aggregate's id. So either start this workflow through ProcessService, "
-              + "which writes the id into the key, or start it with a business key which is a valid id "
-              + "of that workflow aggregate. Nothing was written - what follows is what Camunda 7 does "
-              + "with any failing start.")
-              .formatted(
-                  bpmnProcessId,
-                  workflowModuleId,
-                  execution.getCurrentActivityId(),
-                  execution.getProcessInstanceId(),
-                  businessKey,
-                  result.workflowAggregateId()));
-    }
-
-    if (result.created()) {
-      // worth a line of its own: nobody asked VanillaBP for this workflow, and the
-      // application learns about it from here on. INFO rather than WARN because the
-      // workflow is in order once it has its aggregate, and once per workflow rather
-      // than once per delivery
-      log
-          .info(
-              "Camunda7: '{}' of workflow module '{}' was started past VanillaBP (instance '{}', start "
-                  + "event '{}') - the workflow aggregate '{}' was created for it",
-              bpmnProcessId,
-              workflowModuleId,
-              execution.getProcessInstanceId(),
               execution.getCurrentActivityId(),
               result.workflowAggregateId());
       return;
     }
 
+    // nobody named this workflow, so the application just did, and the name becomes this
+    // adapter's handle on it (the business key) - set within the same transaction which
+    // created the instance
+    ((PvmExecutionImpl) execution).setProcessBusinessKey(result.workflowAggregateId());
+
+    // worth a line of its own: nobody asked VanillaBP for this workflow, and the
+    // application learns about it from here on. INFO rather than WARN because the
+    // workflow is in order once it has its aggregate, and once per workflow rather
+    // than once per delivery
     log
-        .debug(
-            "Camunda7: the start of '{}' of workflow module '{}' at start event '{}' names workflow "
-                + "aggregate '{}', which exists - the workflow was started by the application",
+        .info(
+            "Camunda7: '{}' of workflow module '{}' was started past VanillaBP (instance '{}', start "
+                + "event '{}') - the application named it '{}' and built its workflow aggregate",
             bpmnProcessId,
             workflowModuleId,
+            execution.getProcessInstanceId(),
             execution.getCurrentActivityId(),
             result.workflowAggregateId());
 
@@ -218,22 +217,10 @@ public class Camunda7BpmsInitiatedStartListener implements ExecutionListener {
       }
 
       @Override
-      public Instant getStartInstant() {
-        // the engine does not hand a listener the timer's scheduled time, so this
-        // is the moment the instance is created. Nothing is lost by that: this
-        // listener runs in the transaction which creates the process instance, so a
-        // failed attempt takes the aggregate with it and a retry starts from
-        // nothing. The repetition guard of the core matters where a BPMS reports a
-        // start it already committed - which cannot happen on an embedded engine.
-        return Instant.now();
-      }
-
-      @Override
-      public String getNaturalIdentity() {
-        // the name this instance already goes by, which on Camunda 7 is an aggregate's
-        // id: the core looks for that aggregate and takes the key over as the id of the
-        // one it builds. Where the instance carries no key there is nothing to report,
-        // and the id is derived from the trigger as before
+      public String getBusinessKey() {
+        // the name this instance already goes by, which on Camunda 7 is a workflow
+        // aggregate's id and nothing else. The core reads it and decides from it what
+        // this start is
         return businessKey;
       }
 
