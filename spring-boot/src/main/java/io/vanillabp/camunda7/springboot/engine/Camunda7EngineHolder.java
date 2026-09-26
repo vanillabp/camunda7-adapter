@@ -154,8 +154,8 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   }
 
   /**
-   * Builds the listener attached to every start event the engine fires on its own -
-   * <code>null</code> where the core's entry point was not handed over (tests).
+   * Builds the listener attached to every start event of a process - <code>null</code>
+   * where the core's entry point was not handed over (tests).
    *
    * @return The factory or <code>null</code>
    */
@@ -165,7 +165,32 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       return null;
     }
     return kind -> new io.vanillabp.camunda7.wiring.Camunda7BpmsInitiatedStartListener(
-        bpmsInitiatedStartInvoker, taskRegistry, kind);
+        bpmsInitiatedStartInvoker, taskRegistry, kind, this::servesTheProcess);
+
+  }
+
+  /**
+   * Whether a workflow service of this application serves that BPMN process. The engine
+   * holds every definition deployed against its database, so a start of a process this
+   * application does not claim reaches the listener as well - and the core has no workflow
+   * service to answer for it.
+   *
+   * @param workflowModuleId The workflow module
+   * @param bpmnProcessId The plain BPMN process id
+   * @return Whether the core knows a workflow service for it
+   */
+  private boolean servesTheProcess(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    if (workflowTaskInvoker == null) {
+      return true;
+    }
+    try {
+      return workflowTaskInvoker.resolveWorkflowAggregateIdName(workflowModuleId, bpmnProcessId) != null;
+    } catch (final RuntimeException e) {
+      return false;
+    }
 
   }
 

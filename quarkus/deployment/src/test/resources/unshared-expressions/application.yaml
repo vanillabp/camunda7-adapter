@@ -18,3 +18,7 @@ vanillabp:
       adapters:
         c7:
           resources-location: classpath:c7-expressions/processes
+      workflows:
+        ExprCheckProcess:
+          declared-aggregate-values:
+            - '*'

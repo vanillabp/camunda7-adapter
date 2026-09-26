@@ -2,7 +2,6 @@ package io.vanillabp.camunda7.deployment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import java.util.Collection;
@@ -76,7 +75,7 @@ public class Camunda7StartEventsOfHeldVersionsTest {
       """;
 
   /**
-   * The version nothing but the application starts.
+   * The version with nothing but a plain start event.
    */
   private static final String A_VERSION_THE_APPLICATION_STARTS = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -126,7 +125,7 @@ public class Camunda7StartEventsOfHeldVersionsTest {
   }
 
   @Test
-  @DisplayName("A version nothing but the application starts is an empty answer, not 'cannot say'")
+  @DisplayName("A version with a plain start event answers that one, not 'cannot say'")
   public void aVersionWithoutSuchAStartEventIsAnEmptyAnswer() {
 
     final var startEvents = startEventsOfHeldVersion(A_VERSION_THE_APPLICATION_STARTS);
@@ -135,10 +134,17 @@ public class Camunda7StartEventsOfHeldVersionsTest {
         startEvents,
         "this adapter can read the model, so null would switch the core's judgement off "
             + "although the answer is known");
-    assertTrue(
-        startEvents.isEmpty(),
-        () -> "nothing in that model fires on its own: "
+    assertEquals(
+        1,
+        startEvents.size(),
+        () -> "every start event of the model is reported, the plain one included: "
             + startEvents);
+    final var plain = startEvents.iterator().next();
+    assertEquals("Event_started", plain.elementId());
+    assertEquals(
+        BpmsStartTrigger.Kind.NONE,
+        plain.kind(),
+        "the kind is what tells the core it may not demand a method for this one");
 
   }
 

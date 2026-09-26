@@ -418,25 +418,56 @@ public class C7E2eIntrospectionController {
   }
 
   /**
-   * Starts a process which the ENGINE starts on its own the way a system past VanillaBP
-   * does it: through the engine's API, with a business key of its own choosing. Nobody
-   * hands VanillaBP a workflow aggregate here, and the key is not the id of one.
+   * Starts a process the way a system past VanillaBP does it: through the engine's API,
+   * with a business key of its own choosing. VanillaBP names a workflow and nobody else,
+   * so the start is refused and the message comes back for the test to read.
    *
    * @param businessKey The key the starter chose
-   * @return The key, so the test can address the workflow by it
+   * @return What the refusal said, or the key where the engine let the start through
    */
   @POST
   @Path("/started-past-vanillabp/{businessKey}")
-  @Transactional
   public Map<String, Object> startPastVanillaBp(
       @PathParam("businessKey") final String businessKey) {
+
+    // no transaction of this method's own: the engine's command opens one, and a start
+    // which fails must not take this response with it
+    try {
+      runtimeService()
+          .createProcessInstanceByKey("TimerStartProcess")
+          .processDefinitionTenantId(MODULE_ID)
+          .businessKey(businessKey)
+          .execute();
+      return Map.of("businessKey", businessKey);
+    } catch (final RuntimeException e) {
+      final var message = new StringBuilder();
+      Throwable cause = e;
+      while (cause != null) {
+        message.append(cause.getMessage());
+        cause = cause.getCause();
+      }
+      return Map.of("refused", message.toString());
+    }
+
+  }
+
+  /**
+   * Starts the same process past VanillaBP WITHOUT a name. Nothing names this workflow,
+   * so the application's <code>&#64;WorkflowStartedByBpms</code> method does, and the
+   * engine holds that name as the business key from then on.
+   *
+   * @return Nothing but an acknowledgement - the name is the application's to give
+   */
+  @POST
+  @Path("/started-past-vanillabp-unnamed")
+  @Transactional
+  public Map<String, Object> startPastVanillaBpWithoutAName() {
 
     runtimeService()
         .createProcessInstanceByKey("TimerStartProcess")
         .processDefinitionTenantId(MODULE_ID)
-        .businessKey(businessKey)
         .execute();
-    return Map.of("businessKey", businessKey);
+    return Map.of("started", Boolean.TRUE);
 
   }
 

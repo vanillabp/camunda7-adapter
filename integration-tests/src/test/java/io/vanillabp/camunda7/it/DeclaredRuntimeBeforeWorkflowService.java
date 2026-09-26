@@ -21,13 +21,25 @@ import io.vanillabp.spi.service.WorkflowTask;
     bpmnProcess = @BpmnProcess(bpmnProcessId = "DeclaredRuntimeOld"))
 public class DeclaredRuntimeBeforeWorkflowService {
 
+  /**
+   * Builds the workflow aggregate of a workflow the engine started under this id.
+   *
+   * @param trigger What the engine fired
+   * @return The workflow aggregate of the started workflow
+   */
   @WorkflowStartedByBpms
-  public void startedByBpms(
-      final DeclaredRuntimeAggregate aggregate,
+  public DeclaredRuntimeAggregate startedByBpms(
       final BpmsStartTrigger trigger) {
 
+    final var aggregate = new DeclaredRuntimeAggregate();
+    // a name of the application's own, which the engine holds as the business key. The
+    // generation is part of it, which is how the test tells the workflows this
+    // application started apart from the ones its predecessor started
+    aggregate.setId("declared-runtime-before-"
+        + java.util.UUID.randomUUID());
     aggregate.setStartedAs(trigger.kind().name());
     aggregate.setSignalName(trigger.signalName());
+    return aggregate;
 
   }
 

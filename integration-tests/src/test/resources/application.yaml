@@ -22,47 +22,113 @@ vanillabp:
       workflows:
         AggregateChangedMultiInstanceProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         AggregateChangedProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         DeclaredRuntimeNew:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         DeclaredRuntimeOld:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        ExprConditions:
+          declared-aggregate-values:
+            - '*'
+        ExprEventSub:
+          declared-aggregate-values:
+            - '*'
+        ExprEventSubQuiet:
+          declared-aggregate-values:
+            - '*'
+        ExprPlacements:
+          declared-aggregate-values:
+            - '*'
         ForeignConditionProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         ForeignNumericIdProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        ForeignPlainProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         ForeignSignalProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         ForeignTimerProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         LossyFormat:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         ModelledListenerProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         OldProcessVersionsProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         ParamTypes:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+          tasks:
+            totalIntoBigDecimal:
+              declared-task-params:
+                - total
         RenamedProcessNew:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         RenamedProcessOld:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         RepeatedDeliveryProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         SignalCatchProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         SyncDecisionProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         TaskProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         TestProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         TimerStartProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         VersionedProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         ViewerParentProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         WiredByElementIdProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'

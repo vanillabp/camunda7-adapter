@@ -1,17 +1,21 @@
 package io.vanillabp.camunda7.it;
 
+import java.util.UUID;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vanillabp.spi.process.ProcessService;
 import io.vanillabp.spi.service.BpmnProcess;
+import io.vanillabp.spi.service.BpmsStartTrigger;
 import io.vanillabp.spi.service.WorkflowService;
+import io.vanillabp.spi.service.WorkflowStartedByBpms;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * The workflow service of the timer-started process of the foreign-start integration
- * test. It has no <code>@WorkflowStartedByBpms</code> method: the aggregate of a workflow
- * the application did not start comes into existence without application code.
+ * test. It starts the workflow itself, and it names a workflow which reached the
+ * application without VanillaBP starting it.
  */
 @Service
 @WorkflowService(
@@ -43,6 +47,26 @@ public class ForeignTimerWorkflowService {
     aggregate.setId(id);
     aggregate.setStartedBy("the application");
     processService.startWorkflow(aggregate);
+
+  }
+
+  /**
+   * Names a workflow nobody started through VanillaBP, which is what the engine's timer
+   * does here and what anybody starting this process without a business key does.
+   *
+   * @param trigger Which start event fired
+   * @return The workflow aggregate of the started workflow
+   */
+  @WorkflowStartedByBpms
+  public ForeignTimerAggregate nameTheStartedWorkflow(
+      final BpmsStartTrigger trigger) {
+
+    final var aggregate = new ForeignTimerAggregate();
+    aggregate.setId("timer-"
+        + UUID.randomUUID());
+    aggregate.setStartedBy("the engine at "
+        + trigger.startEventId());
+    return aggregate;
 
   }
 

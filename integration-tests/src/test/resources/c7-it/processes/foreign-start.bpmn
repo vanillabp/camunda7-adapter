@@ -70,5 +70,19 @@
       <bpmn:incoming>Flow_Numeric_ToEnd</bpmn:incoming>
     </bpmn:endEvent>
   </bpmn:process>
+  <bpmn:process id="ForeignPlainProcess" isExecutable="true">
+    <bpmn:startEvent id="PlainStart">
+      <bpmn:outgoing>Flow_Plain_ToRecord</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_Plain_ToRecord" sourceRef="PlainStart" targetRef="Activity_Plain_Record" />
+    <bpmn:serviceTask id="Activity_Plain_Record" camunda:expression="${recordForeignPlainStart}">
+      <bpmn:incoming>Flow_Plain_ToRecord</bpmn:incoming>
+      <bpmn:outgoing>Flow_Plain_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_Plain_ToEnd" sourceRef="Activity_Plain_Record" targetRef="Event_Plain_End" />
+    <bpmn:endEvent id="Event_Plain_End">
+      <bpmn:incoming>Flow_Plain_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
   <bpmn:signal id="Signal_ForeignStart" name="ForeignStartSignal" />
 </bpmn:definitions>

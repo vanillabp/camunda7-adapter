@@ -70,13 +70,14 @@ public class Camunda7BpmsInitiatedStartIT {
     assertEquals(1, aggregates.size(), "one workflow, one aggregate");
     final var aggregate = aggregates.getFirst();
 
-    // the ID is the trigger time in its ISO-8601 form, which is what makes a
-    // repeated notification for the same firing recognizable
+    // the application named the workflow, and the engine holds that name as the
+    // business key from here on
     assertNotNull(aggregate.getId());
     assertTrue(
-        aggregate.getId().endsWith("Z"),
-        "the aggregate's ID is the trigger time: "
+        aggregate.getId().startsWith("timer-start-"),
+        "the aggregate carries the name the application gave it: "
             + aggregate.getId());
+    assertEquals("TIMER", aggregate.getStartedBy(), "the trigger says which start event fired");
 
     // the task after the start event ran against exactly that aggregate, which
     // proves the business key was set from it

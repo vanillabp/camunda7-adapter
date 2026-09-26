@@ -2122,9 +2122,14 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * The start events of one BPMN process which the engine fires on its own - a timer, a
-   * signal or a condition - read from a model, whether this boot brings it or the engine
-   * holds it.
+   * The start events of one BPMN process, read from a model, whether this boot brings it or
+   * the engine holds it.
+   * <p>
+   * EVERY start event of the process is reported, the plain one included: what a start of a
+   * workflow means is read from the state of that workflow and not from the kind of its
+   * start event, see {@code DECISIONS.pending/653.md}. The kind travels along, because the
+   * core demands a <code>&#64;WorkflowStartedByBpms</code> method only where the engine
+   * fires the event by itself.
    * <p>
    * One walk for both directions: the core validates the
    * <code>&#64;WorkflowStartedByBpms</code> methods of a deployed process against it, and
@@ -2132,6 +2137,11 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
    * the two cannot disagree about what a start event is. A signal name is reported PLAIN,
    * because name-clash avoidance is nothing the application above this boundary knows
    * about.
+   * <p>
+   * Only the start events the process itself holds are read. An event subprocess starts no
+   * workflow, which
+   * {@link io.vanillabp.camunda7.wiring.Camunda7StartEvents#startsTheWorkflow(org.camunda.bpm.model.bpmn.instance.StartEvent)}
+   * says more about.
    *
    * @param workflowModuleId The workflow module ID
    * @param scopedBpmnProcessId The process definition key the engine knows
@@ -2148,43 +2158,32 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
         .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.StartEvent.class)
         .stream()
         .filter(startEvent -> scopedBpmnProcessId.equals(owningProcessId(startEvent)))
+        .filter(io.vanillabp.camunda7.wiring.Camunda7StartEvents::startsTheWorkflow)
         .forEach(startEvent -> {
-          final var definitions = startEvent.getEventDefinitions();
-          definitions
-              .stream()
-              .filter(org.camunda.bpm.model.bpmn.instance.TimerEventDefinition.class::isInstance)
-              .findFirst()
-              .ifPresent(definition -> startEvents
-                  .add(
-                      io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec
-                          .of(startEvent.getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.TIMER)));
-          definitions
+          final var kind = io.vanillabp.camunda7.wiring.Camunda7StartEvents.kindOf(startEvent);
+          if (kind != io.vanillabp.spi.service.BpmsStartTrigger.Kind.SIGNAL) {
+            startEvents
+                .add(
+                    io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec
+                        .of(startEvent.getId(), kind));
+            return;
+          }
+          // the model carries the SCOPED signal name where identifiers are prefixed -
+          // the application is told the plain one
+          final var scopedSignalName = startEvent
+              .getEventDefinitions()
               .stream()
               .filter(org.camunda.bpm.model.bpmn.instance.SignalEventDefinition.class::isInstance)
               .map(org.camunda.bpm.model.bpmn.instance.SignalEventDefinition.class::cast)
               .findFirst()
-              .ifPresent(definition -> {
-                // the model carries the SCOPED signal name where identifiers are
-                // prefixed - the application is told the plain one
-                final var scopedSignalName = definition.getSignal() == null
-                    ? null
-                    : definition.getSignal().getName();
-                startEvents
-                    .add(
-                        new io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec(
-                            startEvent.getId(), io.vanillabp.spi.service.BpmsStartTrigger.Kind.SIGNAL, plainIdentifier(
-                                workflowModuleId, scopedSignalName)));
-              });
-          definitions
-              .stream()
-              .filter(org.camunda.bpm.model.bpmn.instance.ConditionalEventDefinition.class::isInstance)
-              .findFirst()
-              .ifPresent(definition -> startEvents
-                  .add(
-                      io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec
-                          .of(
-                              startEvent.getId(),
-                              io.vanillabp.spi.service.BpmsStartTrigger.Kind.CONDITIONAL)));
+              .map(definition -> definition.getSignal() == null
+                  ? null
+                  : definition.getSignal().getName())
+              .orElse(null);
+          startEvents
+              .add(
+                  new io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartSpec(
+                      startEvent.getId(), kind, plainIdentifier(workflowModuleId, scopedSignalName)));
         });
     return startEvents;
 

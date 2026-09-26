@@ -128,8 +128,8 @@ public class Camunda7DeclaredIdRuntimeIT {
   }
 
   /**
-   * A workflow the timer started AFTER the given moment: its aggregate's id is the
-   * trigger time in ISO-8601 form.
+   * A workflow the timer started while THIS generation of the application runs: the
+   * @WorkflowStartedByBpms method of each generation writes its own name into the id.
    */
   private static Optional<DeclaredRuntimeAggregate> aTimerWorkflowOfThisGeneration(
       final DeclaredRuntimeRepository repository,
@@ -139,7 +139,7 @@ public class Camunda7DeclaredIdRuntimeIT {
         .findAll()
         .stream()
         .filter(aggregate -> "TIMER".equals(aggregate.getStartedAs()))
-        .filter(aggregate -> Instant.parse(aggregate.getId()).isAfter(beforeTheBoot))
+        .filter(aggregate -> aggregate.getId().startsWith("declared-runtime-after-"))
         .findFirst();
 
   }

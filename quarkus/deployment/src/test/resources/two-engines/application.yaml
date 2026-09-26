@@ -33,3 +33,5 @@ vanillabp:
       workflows:
         TestProcess:
           allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'

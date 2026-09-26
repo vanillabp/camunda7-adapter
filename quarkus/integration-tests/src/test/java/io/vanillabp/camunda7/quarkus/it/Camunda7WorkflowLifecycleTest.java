@@ -4,6 +4,7 @@ import static io.vanillabp.integration.test.utils.TestCoverageUtils.testCoverage
 import static io.vanillabp.integration.test.utils.TestJvmArgs.quarkusProdModeTestDefaults;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -850,32 +851,63 @@ public class Camunda7WorkflowLifecycleTest {
         "the task following the timer start event to run and the end to be reported, but got: "
             + strings("introspect/timer-aggregates"));
 
-    // the id is the trigger time in its ISO-8601 form, which is what makes a repeated
-    // notification for the same firing recognizable. The table holds the workflow of the
-    // test below as well, which was started with a name of its own, so the one the timer
-    // started is the one carrying that shape
+    // the name of the workflow is the one the application gave in its
+    // @WorkflowStartedByBpms method, and the engine holds it as the business key
     assertTrue(
         strings("introspect/timer-aggregates")
             .stream()
-            .anyMatch(reported -> reported.startsWith("2") && reported.contains("Z|")),
-        "the aggregate's id is the trigger time: "
+            .anyMatch(reported -> reported.startsWith("timer-")),
+        "the workflow carries the name the application gave it: "
             + strings("introspect/timer-aggregates"));
 
   }
 
   @Test
-  @DisplayName("A workflow started past VanillaBP gets its aggregate under the key it was started with")
-  public void aWorkflowStartedPastVanillaBp() throws Exception {
+  @DisplayName("A start carrying a business key of its own is refused, and the message says why")
+  public void aWorkflowStartedPastVanillaBpUnderItsOwnName() throws Exception {
 
     // the same process, started through the engine by somebody who never asked
     // VanillaBP - which is what anybody with access to the engine can do
-    post("introspect/started-past-vanillabp/started-past-vanillabp");
+    final var refused = post("introspect/started-past-vanillabp/started-past-vanillabp")
+        .get("refused");
 
+    assertNotNull(refused, "the start had to be refused");
+    final var message = String.valueOf(refused);
+    assertTrue(message.contains("started-past-vanillabp"), "the key is named: "
+        + message);
+    assertTrue(
+        message.contains("VanillaBP names a workflow and nobody else"),
+        "the rule is said out loud: "
+            + message);
+    assertTrue(message.contains("its business key"), "where the name is kept is named: "
+        + message);
+
+    assertTrue(
+        strings("introspect/timer-aggregates")
+            .stream()
+            .noneMatch(reported -> reported.startsWith("started-past-vanillabp|")),
+        "a refused start leaves no workflow aggregate behind: "
+            + strings("introspect/timer-aggregates"));
+
+  }
+
+  @Test
+  @DisplayName("A start which brings no name is named by the application and runs to its end")
+  public void aWorkflowStartedPastVanillaBpWithoutAName() throws Exception {
+
+    final var before = strings("introspect/timer-aggregates").size();
+
+    post("introspect/started-past-vanillabp-unnamed");
+
+    await(
+        () -> strings("introspect/timer-aggregates").size() > before,
+        "the workflow started past VanillaBP to get its workflow aggregate");
     await(
         () -> strings("introspect/timer-aggregates")
             .stream()
-            .anyMatch(reported -> reported.startsWith("started-past-vanillabp|recordStart|COMPLETED/")),
-        "the workflow started past VanillaBP to get its aggregate and run to its end, but got: "
+            .filter(reported -> reported.startsWith("timer-"))
+            .anyMatch(reported -> reported.contains("|recordStart|COMPLETED/")),
+        "the workflow the application named to run to its end, but got: "
             + strings("introspect/timer-aggregates"));
 
   }
