@@ -53,12 +53,13 @@ public class Camunda7AdapterProducer {
       final io.vanillabp.integration.adapter.spi.WorkflowAggregateSync aggregateSync,
       final io.vanillabp.integration.adapter.spi.PreCommitRegistrar preCommitRegistrar,
       final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker> workflowEndedInvoker,
-      final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker) {
+      final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker,
+      final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.SuspendedWorkflowReporter> suspendedWorkflowReporter) {
 
     return io.vanillabp.integration.runtime.support.AdapterCollaboratorsSupport
         .collaborators(
             adapterId, workflowTaskRegistry, workflowTaskRegistry, scoping, aggregateSync, preCommitRegistrar,
-            workflowEndedInvoker, bpmsInitiatedStartInvoker);
+            workflowEndedInvoker, bpmsInitiatedStartInvoker, suspendedWorkflowReporter);
 
   }
 
@@ -78,6 +79,8 @@ public class Camunda7AdapterProducer {
    *          application has a method for it
    * @param bpmsInitiatedStartInvoker The core's notification of a workflow the engine
    *          started on its own
+   * @param suspendedWorkflowReporter Where a workflow found suspended is reported, so that the
+   *          extensions hear about it
    * @return The process services, one per configured adapter id
    */
   @Produces
@@ -91,7 +94,8 @@ public class Camunda7AdapterProducer {
       final io.vanillabp.integration.adapter.spi.PreCommitRegistrar preCommitRegistrar,
       final io.vanillabp.integration.adapter.migration.workflowtask.WorkflowTaskRegistry workflowTaskRegistry,
       @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker> workflowEndedInvoker,
-      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker) {
+      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker,
+      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.SuspendedWorkflowReporter> suspendedWorkflowReporter) {
 
     return camunda7AdapterIds(properties)
         .stream()
@@ -101,7 +105,7 @@ public class Camunda7AdapterProducer {
               adapterId, engine.getRuntimeService(), engine.getTaskService(), engine.getRepositoryService(), engine
                   .getHistoryService(), collaboratorsOf(
                       adapterId, workflowTaskRegistry, scoping, aggregateSync, preCommitRegistrar,
-                      workflowEndedInvoker, bpmsInitiatedStartInvoker));
+                      workflowEndedInvoker, bpmsInitiatedStartInvoker, suspendedWorkflowReporter));
           // an engine on a datasource of its own commits apart from the application.
           // That makes its deliveries repeatable
           processService.setEngineRunsOnItsOwnDataSource(engine.usesSeparateDataSource());
@@ -118,6 +122,13 @@ public class Camunda7AdapterProducer {
           engine
               .getTaskRegistry()
               .setSerializationFormats(formats);
+          // how long a correlation waits for a subscription. The platform resolves it per
+          // message with a fallback to the workflow and the module, the same for every
+          // adapter. A negative
+          // value is refused here, at the start, and not when the first message is correlated
+          Camunda7ProcessService
+              .refuseNegativeMessageTimesToLive(adapterId, properties.messageTimesToLiveWrittenFor(adapterId));
+          processService.setMessageTimeToLiveResolver(properties.messageTimeToLiveResolver());
           return processService;
         })
         .toList();
@@ -140,6 +151,8 @@ public class Camunda7AdapterProducer {
    *          application has a method for it
    * @param bpmsInitiatedStartInvoker The core's notification of a workflow the engine
    *          started on its own
+   * @param suspendedWorkflowReporter Where a workflow found suspended is reported, so that the
+   *          extensions hear about it
    * @return The deployment services, one per configured adapter id
    */
   @Produces
@@ -156,7 +169,8 @@ public class Camunda7AdapterProducer {
       final io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport scoping,
       final io.vanillabp.integration.adapter.spi.PreCommitRegistrar preCommitRegistrar,
       @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker> workflowEndedInvoker,
-      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker) {
+      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker,
+      @jakarta.enterprise.inject.Any final jakarta.enterprise.inject.Instance<io.vanillabp.integration.adapter.spi.SuspendedWorkflowReporter> suspendedWorkflowReporter) {
 
     return (List) camunda7AdapterIds(properties)
         .stream()
@@ -165,7 +179,8 @@ public class Camunda7AdapterProducer {
           final var deploymentService = new Camunda7DeploymentService(
               adapterId, engine.getRepositoryService(), engine, collaboratorsOf(
                   adapterId, workflowTaskRegistry, scoping, aggregateSync, preCommitRegistrar, workflowEndedInvoker,
-                  bpmsInitiatedStartInvoker), engine.getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
+                  bpmsInitiatedStartInvoker,
+                  suspendedWorkflowReporter), engine.getTaskRegistry(), id -> instanceIdentityOf(overlay, id));
           deploymentService.setEngineDeliversWorkflowEnded(engine.deliversWorkflowEnded());
           deploymentService.setConfiguredTenants(configuredTenantsOf(overlay, adapterId));
           deploymentService.setIdentityService(
