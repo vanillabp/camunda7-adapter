@@ -672,8 +672,9 @@ scoped push are `Camunda7AwarenessScopeTest#aPushReachesTheOwnWorkflowOnly`,
 **Message correlation:** `correlateMessage` is two-phase like every other
 progressing operation (tenant = workflow module, business key = aggregate ID). Phase
 one asks whether a subscription is waiting. If none is, it fails the caller's transaction,
-so "nothing matched" stays a synchronous answer. Phase two correlates after
-the commit, through the outbox. It tolerates a subscription which is gone by then. So a
+so "nothing matched" stays a synchronous answer. A message time-to-live changes that, see
+below. Phase two correlates after the commit, through the outbox. Without a time-to-live it
+tolerates a subscription which is gone by then, which is a repeated dispatch. So a
 rollback leaves the instance waiting. A correlation id matches through the V1
 local-variable convention `<primary-bpmn-process-id>-<message-name>` at the receiving
 scope. The name keeps the primary process even where the message is caught in a called
@@ -685,6 +686,63 @@ same way, with a check whether the workflow already started. No variables are ev
 is the payload doctrine. `Camunda7TaskProcessingIT#correlateMessageResumesProcess`,
 `#correlateMessageWithCorrelationId`, `#rolledBackCorrelationLeavesInstanceWaiting` and
 `#startWorkflowByMessageStartsInstance` test this.
+
+**A message which comes before the workflow waits for it.** This adapter continues after
+every user task in a job of its own (`Camunda7AsyncBpmnParseListener`). So completing a user
+task and correlating the message the workflow waits for next are two operations which the
+engine does not finish in the order they were asked for. The completion only writes the job,
+and the job executor reaches the catch event a moment later. `message-time-to-live` gives
+this adapter the meaning it has on Camunda 8, with the same keys and the same three levels
+(workflow module, workflow, message). The keys name no adapter:
+
+```yaml
+vanillabp:
+  workflow-modules:
+    loan-approval:
+      # OPTIONAL: how long a correlated message waits for the workflow to reach the
+      # event which waits for it. Not set, or zero, refuses a correlation nothing
+      # waits for, as in version 1.
+      message-time-to-live: 10m
+      workflows:
+        LoanApproval:
+          messages:
+            ContractSigned:
+              message-time-to-live: 1h
+```
+
+Not set, or zero, keeps the refusal in phase one. That is what version 1 did. A value above zero
+changes both phases:
+
+- Phase one checks only that a deployed model of the workflow module waits for the message: a
+  catch event, a boundary event, an event subprocess or a receive task which names it, in any
+  version the engine holds. Where a model names a message by an expression, the check stays
+  silent, because the name is unknown, not absent.
+- Phase two asks the engine whether a subscription waits, with the correlation id where there
+  is one. If none does, it throws `PhaseTwoRetryLater`. Nothing has reached the engine at that
+  point. The wait grows with the time already waited, from 100 milliseconds up to 30 seconds,
+  and never goes past the time-to-live. The time-to-live counts from
+  `PhaseTwoRequest#plannedAt()`, so a repeated attempt does not make it longer, and the
+  deadline it gives replaces `vanillabp.outbox.wait-for-visibility-at-most` for this entry.
+  Once it has passed, phase two throws a `PhaseTwoPermanentFailure` which names the message,
+  the aggregate, the time-to-live and the time waited, and the outbox blocks the entry.
+
+An entry which is not due yet is passed by the later entries of the same workflow, so a waiting
+correlation holds up nothing. The time-to-live is read for the process whose model waits for
+the message, the way the Camunda 8 adapter reads it: the process of the call
+if its own model waits, otherwise the one other process of the workflow module whose model
+does. The models are only read where the processes of the module would answer differently.
+There is no deduplication window, unlike on Camunda 8, because the outbox dispatches every
+entry once. See `DECISIONS.pending/2060.md`.
+The three levels and the choice of the process are resolved by the platform, the same for every
+adapter (`MigrationAdapterProperties#messageTimeToLive` and `MessageTimeToLiveResolver` there).
+A line for the whole application, below `adapters.<adapter-id>` or at a task ends the startup
+there, with a message naming the three keys. This adapter adds what its engine makes of a value: nothing
+configured is zero, and a value below zero ends the boot. It checks only the workflow modules it
+serves, the ones whose prioritized adapters name it. See `DECISIONS.pending/2062.md`.
+`Camunda7MessageTimeToLiveIT` (Spring Boot) and the time-to-live tests in
+`Camunda7WorkflowLifecycleTest` (Quarkus) run it on a real engine.
+`MessageTimeToLiveResolutionTest` holds the refusal of a negative value,
+`Camunda7WaitForASubscriptionTest` the growing wait.
 
 **A message starts only the process of its own process service.** While it wires a model,
 the adapter reports the plain names of the message start events of each process
@@ -915,7 +973,8 @@ one entry in that map and nothing else.
 The embedded engine can answer phase one for free and in the same transaction. That is
 why this adapter asks more there than a remote one can. A task which is gone, a message
 nothing waits for, a correlation id no execution expects, a message start event which is
-not deployed: all of them fail where the application made the call.
+not deployed: all of them fail where the application made the call. A message with a
+time-to-live is the exception: there phase one checks only the model.
 `Camunda7PhaseOneChecksTest` tests that.
 
 A check which finds the task gone throws `io.vanillabp.spi.process.TaskNotFoundException`.
@@ -980,6 +1039,26 @@ workflow between the two meets a running workflow here and a blocked outbox
 entry there.
 
 Everything else is repeatable. When in doubt, the platform asks an adapter to repeat.
+
+A suspended workflow is not in the table, although the engine reports it with a subclass of
+`BadUserRequestException`, `SuspendedEntityInteractionException`. The same answer goes through once
+somebody activates the instance again. So the adapter asks for the suspension before it acts:
+
+- Phase one reads the suspension state from the query it runs anyway, the execution of a parked
+  task or the user task. A suspended one throws `io.vanillabp.spi.process.WorkflowSuspendedException`
+  in the caller's transaction, so that transaction rolls back and the task stays open.
+- Phase two asks the same before it signals the execution or completes the user task. A suspended one
+  is answered with `PhaseTwoRetryLater`, 30 seconds. The entry waits without using an attempt, for as
+  long as the workflow is suspended. Each answer names a deadline just behind its own window, so
+  `vanillabp.outbox.wait-for-visibility-at-most` does not block it. An engine exception which slips
+  past the question, because somebody suspended the instance in between, is turned into the same
+  answer. `isPhaseTwoFailureRepeatable` answers `true` for it, as the net under that question.
+
+Only the instance whose own executions are suspended refuses. A called process instance has an id
+of its own and is not suspended with its caller. A process definition suspended without
+`includeProcessInstances(true)` leaves its running instances alone. `Camunda7SuspendedWorkflowIT`
+holds all three paths on a real engine, and `Camunda7AwarenessTest#aSuspensionIsRepeated` the
+classification. The reasoning is in `DECISIONS.pending/2070.md`.
 
 ## Decision tables
 
