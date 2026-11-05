@@ -94,7 +94,7 @@ because all processes of one file share a model.
 All of this happens only to a process which a `@WorkflowService` class of this application claims
 (decision 43). The parse listener and `wireBpmn` leave a process nobody claims, and a process
 somebody else deployed, exactly as modelled, flags included. The wiki lists what the adapter adds in
-[What the adapter changes in the BPMN it deploys](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Home#what-the-adapter-changes-in-the-bpmn-it-deploys).
+[What the adapter changes in the BPMN it deploys](https://github.com/vanillabp/camunda7-adapter/wiki/Home#what-the-adapter-changes-in-the-bpmn-it-deploys).
 
 ### 6. A task handler runs inside the engine's own job transaction
 
@@ -743,7 +743,7 @@ every called process in a BPMN file of its own. With the calling and the called 
 file, the walk finds the enclosing element by chance. That is how the missing model of the caller
 stayed hidden from version 1 until this entry was written.
 
-See [The iteration a called process runs in](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Configuration#the-iteration-a-called-process-runs-in).
+See [The iteration a called process runs in](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#the-iteration-a-called-process-runs-in).
 
 ### 23. A wake-up which arrives while the next wait is decided still ends that wait
 
@@ -1446,7 +1446,7 @@ application which boots today. That is why it comes with 2.0.
 at, the multi-instance element which must deploy, and the WARN about a held version with and
 without workflows on it.
 
-See [A standard loop is refused while deploying](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Deviations#a-standard-loop-is-refused-while-deploying).
+See [A standard loop is refused while deploying](https://github.com/vanillabp/camunda7-adapter/wiki/Deviations#a-standard-loop-is-refused-while-deploying).
 
 ### 42. A user task needs a method or a line, and an external task may pass with the line
 

@@ -2,7 +2,7 @@
 
 This page is for contributors. It describes the core of the VanillaBP Camunda 7 adapter, the part
 which works on every platform. Users find their documentation in
-[this adapter's wiki](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki).
+[this adapter's wiki](https://github.com/vanillabp/camunda7-adapter/wiki).
 The `README.md` at the repository root describes the repository for contributors.
 
 ## What lives here

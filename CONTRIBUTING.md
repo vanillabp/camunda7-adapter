@@ -6,7 +6,7 @@ provider interface) of the
 embedded in the application, in the application's own transaction. Business code never sees the
 adapter. An application is written against
 [`spi-for-java`](https://github.com/vanillabp/spi-for-java). The
-[wiki](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki) describes
+[wiki](https://github.com/vanillabp/camunda7-adapter/wiki) describes
 everything this adapter does for its users.
 
 Where the rules are: [`README.md`](./README.md) explains how the adapter works, module by module
@@ -31,7 +31,7 @@ named in `.github/workflows`, currently 25. Use that one if you want to see what
 The class files stay at Java 21 either way, because the property `version.java` in the root
 `pom.xml` says so. Two repositories come first, in this order: `spi-for-java`, then
 `adapter-platform-integration`. Build and install them in the workspace, see [Getting
-started](#getting-started), or read their [published snapshots](#snapshots-on-maven-central-and-in-github-packages).
+started](#getting-started), or read their [published snapshots](#snapshots).
 Then, here:
 
 ```bash
@@ -76,21 +76,17 @@ reactor. It fails below 85 percent of covered instructions per platform, while t
 [Test coverage](./README.md#test-coverage) for what the gate prints and why the threshold is not
 the target.
 
-## Snapshots on Maven Central and in GitHub Packages
+## Snapshots
 
 If you clone only this repository, Maven takes `spi-for-java` and `adapter-platform-integration`
 from the snapshot repository of Maven Central, `https://central.sonatype.com/repository/maven-snapshots/`.
-Every push to `main` of those two repositories publishes a snapshot there. The root `pom.xml` names
-that repository, and reading it needs no login and no token.
+The parent POM `io.vanillabp:release-parent` names that repository, and reading it needs no login.
+Every push to `main` of this repository publishes its snapshots there, too, as `io.vanillabp`.
 
-The snapshots of this adapter stay in GitHub Packages, because the namespace
-`org.camunda.community.vanillabp` belongs to the Camunda Community Hub. Every push to `main`
-publishes one to `https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda7-adapter`.
-Reading it takes a personal access token (classic) with `read:packages` and a few entries in your
-`~/.m2/settings.xml`. [Using the published
-snapshots](https://github.com/vanillabp/development-workspace#using-the-published-snapshots) shows
-both. The old URL `https://maven.pkg.github.com/vanillabp/camunda7-adapter` still answers, but with
-an old snapshot which no longer changes.
+Older snapshots of version 2 are in two GitHub Packages registries, under the groupId
+`org.camunda.community.vanillabp`: `https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda7-adapter`
+and `https://maven.pkg.github.com/vanillabp/camunda7-adapter`. Both still answer, but nothing new
+goes there.
 
 ## What a POM hands an application
 
@@ -117,7 +113,7 @@ time it turns up, and write an abbreviation out once. If a sentence trips you up
 aloud, rewrite it.
 
 This holds for every English text here, the javadoc and comments in the main code and in the
-tests, the commit message and the pull request included, and for the [wiki](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki)
+tests, the commit message and the pull request included, and for the [wiki](https://github.com/vanillabp/camunda7-adapter/wiki)
 as well. The section `How we write` in [`AGENTS.md`](./AGENTS.md) shows a few sentences before and
 after. Nothing a program reads is renamed for the sake of language: type and method names,
 configuration keys and artifact coordinates stay as they are, because code in other repositories
@@ -152,7 +148,7 @@ After you corrected a number, `bin/check-decision-citations.sh` says whether eve
 decision still points at an entry of `DECISIONS.md`. The *Checks* workflow runs it on every pull
 request.
 
-The *Publish to GitHub Packages* workflow builds and tests every pull request. It publishes nothing
+The *Build and publish snapshots* workflow builds and tests every pull request. It publishes nothing
 from a branch. A red check is a finding about your change. When the build fails, the workflow
 uploads the log as a test report. Read it and fix what it says. Do not push again just to see
 whether the error goes away.
@@ -163,13 +159,6 @@ snapshots it needs without a login. It cannot publish anything, because GitHub g
 of this repository. [What the build of a pull request can
 do](https://github.com/vanillabp/development-workspace#what-the-build-of-a-pull-request-can-do) says
 more.
-
-This repository lives in the Camunda Community Hub, which asks every contributor to sign its
-[contributor license agreement](https://cla-assistant.io/camunda-community-hub/community). On your
-first pull request here, the check `license/cla` asks you to sign it. [The license agreement of the
-Camunda Community
-Hub](https://github.com/vanillabp/development-workspace#the-license-agreement-of-the-camunda-community-hub)
-says how.
 
 `main` has a ruleset which requires two green checks before a merge. `publish` is the build of
 that workflow. `orphaned-javadoc-check` is the *Checks* workflow, which runs the script named above. While one of them is red, GitHub does not offer the merge.

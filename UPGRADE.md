@@ -6,9 +6,36 @@ holds the development history. These entries feed the
 [migration guide](https://github.com/vanillabp/adapter-platform-integration/wiki/Migrating-from-version-1)
 for users. The same file exists for
 [VanillaBP itself](https://github.com/vanillabp/adapter-platform-integration/blob/main/UPGRADE.md)
-and for the [Camunda 8 adapter](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/blob/main/UPGRADE.md).
+and for the [Camunda 8 adapter](https://github.com/vanillabp/camunda8-adapter/blob/main/UPGRADE.md).
 
 ## 2.0
+
+### The groupId is `io.vanillabp`, and the artifacts have new names
+
+Version 1 was published as `org.camunda.community.vanillabp`. Version 2 is published as
+`io.vanillabp`, like VanillaBP itself. The artifact names change as well. The Spring Boot adapter
+was `camunda7-spring-boot-adapter` and is `camunda7-adapter-spring-boot` now. The Quarkus extension
+is new.
+
+```xml
+<!-- version 1 -->
+<dependency>
+  <groupId>org.camunda.community.vanillabp</groupId>
+  <artifactId>camunda7-spring-boot-adapter</artifactId>
+  <version>1.6.0</version>
+</dependency>
+
+<!-- version 2 -->
+<dependency>
+  <groupId>io.vanillabp</groupId>
+  <artifactId>camunda7-adapter-spring-boot</artifactId>
+  <version>2.0.0</version>
+</dependency>
+```
+
+On Quarkus the artifact is `io.vanillabp:camunda7-adapter-quarkus`. Version 1 stays where it was.
+Nothing is published under the old groupId for version 2, so there is no relocation: a build which
+still names the old groupId with a version 2 number finds nothing.
 
 ### A message starts only the process of its own `ProcessService`
 
@@ -76,7 +103,7 @@ string, and EL treats `'A'` and `"A"` the same when it compares it. A number the
 for keeps its class. Version 1 widened it to a double. `${total > 100}` compares numbers either
 way, and `${total}` shows the value your code holds, not one that somebody converted on the way in.
 
-The [page about a shared value](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/What-becomes-of-a-shared-value)
+The [page about a shared value](https://github.com/vanillabp/camunda7-adapter/wiki/What-becomes-of-a-shared-value)
 of the wiki tells the same in more detail. Decision 9 in the repository's
 [`DECISIONS.md`](./DECISIONS.md) says why such a value travels in the engine's own format and not
 as a JSON string. Decision 16 says why a number keeps its class.
@@ -109,7 +136,7 @@ Camunda 8 or the Process-Engine-API. Those adapters flatten values the same way,
 expressions miss the same keys there. But neither adapter gets a parsed model of this kind, and
 FEEL is not JUEL. The gap is known and not closed here.
 
-The [configuration page](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Configuration#migrating-from-an-adapter-which-read-the-aggregate-live)
+The [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#migrating-from-an-adapter-which-read-the-aggregate-live)
 of the wiki tells the same in more detail.
 
 ### A renamed BPMN process no longer needs its old model deployed
@@ -227,8 +254,8 @@ writing, because otherwise it would wake a waiting engine four times an hour. Se
 There is also no Quarkus caveat any more. Version 1 had no Quarkus artifact at all, so the feature
 was Spring-only by accident. Now it works on both platforms.
 
-The [README section](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/blob/main/README.md#an-idle-engine-lets-go-of-its-database)
-and the [configuration page](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Configuration#letting-an-idle-engine-go-quiet)
+The [README section](https://github.com/vanillabp/camunda7-adapter/blob/main/README.md#an-idle-engine-lets-go-of-its-database)
+and the [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#letting-an-idle-engine-go-quiet)
 of the wiki have the details.
 
 ### One tenant for every workflow module refuses two modules sharing a BPMN process id
@@ -264,7 +291,7 @@ Setting the name per workflow module is new. Before, you could only set it for t
 The second way is `name-clash-avoidance: use-prefix`. It drops the tenant and puts the workflow
 module id in front of the identifiers instead. The third way is to rename one of the two BPMN
 processes. Which one fits depends on what the engine's running workflows are deployed under. So
-read [what the mode changes](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Configuration#keeping-workflow-modules-apart)
+read [what the mode changes](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#keeping-workflow-modules-apart)
 before you change an application which boots.
 
 An application which configures no `tenant-id` at all is not affected. Every workflow module has a
@@ -348,8 +375,8 @@ So `${auditTheOrder}`, naming one of your own beans which implements Camunda's
 and does not mention it. The key above is only about a listener whose expression names a method
 you wrote. That is exactly the version 1 case.
 
-The [README section](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/blob/main/README.md#listeners-somebody-modelled)
-and the [configuration page](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Configuration#listeners-somebody-modelled)
+The [README section](https://github.com/vanillabp/camunda7-adapter/blob/main/README.md#listeners-somebody-modelled)
+and the [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#listeners-somebody-modelled)
 of the wiki have the details.
 
 ### A called process is told about the iteration of its caller, unless it has a workflow aggregate of its own
