@@ -4,7 +4,7 @@ The VanillaBP adapter for the embedded Camunda 7 engine, on Spring Boot and on Q
 
 Read [`README.md`](./README.md) first. It says what the adapter changes in the BPMN it deploys,
 how it runs what it delivers, and how to build. The README is for people who work on the code. The
-[wiki](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki) is for people who
+[wiki](https://github.com/vanillabp/camunda7-adapter/wiki) is for people who
 use the adapter.
 
 [`ADAPTER-AUTHORS.md`](https://github.com/vanillabp/adapter-platform-integration/blob/main/migration-adapter/ADAPTER-AUTHORS.md)
@@ -70,7 +70,7 @@ abbreviation out once. If a sentence trips you up when you read it aloud, rewrit
 
 This holds for every English text here: the README files, `DECISIONS.md`, this file, the
 Javadoc and comments which explain something, in the main code and in the tests, and the texts
-of commits and pull requests. It holds for the [wiki](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki) as
+of commits and pull requests. It holds for the [wiki](https://github.com/vanillabp/camunda7-adapter/wiki) as
 well, because the wiki clone has no `AGENTS.md` of its own.
 
 Nothing a program reads is renamed for the sake of language. Class and method names,

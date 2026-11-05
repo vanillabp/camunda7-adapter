@@ -2,16 +2,14 @@
 
 # VanillaBP adapter for Camunda 7
 
-[![](https://img.shields.io/badge/Community%20Extension-An%20open%20source%20community%20maintained%20project-FF4700)](https://github.com/camunda-community-hub/community)
 ![Compatible with: Camunda Platform 7](https://img.shields.io/badge/Compatible%20with-Camunda%20Platform%207-26d07c)
-[![](https://img.shields.io/badge/Lifecycle-Incubating-blue)](https://github.com/Camunda-Community-Hub/community/blob/main/extension-lifecycle.md#incubating-)
 [![Apache License V.2](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 This is the [VanillaBP](https://www.vanillabp.io) Version 2 adapter for
 [Camunda 7](https://camunda.com/), the embedded workflow engine.
 
 If you want to **use** this adapter, read the
-[Wiki](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki). The VanillaBP concepts it builds
+[Wiki](https://github.com/vanillabp/camunda7-adapter/wiki). The VanillaBP concepts it builds
 on are explained in the [VanillaBP Wiki](https://github.com/vanillabp/adapter-platform-integration/wiki). This
 `README.md` is for contributors.
 
@@ -29,8 +27,8 @@ on are explained in the [VanillaBP Wiki](https://github.com/vanillabp/adapter-pl
 
 This adapter runs on both platforms VanillaBP supports:
 
-1. **Spring Boot**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fcamunda-community-hub.github.io%2Fvanillabp-camunda7-adapter%2Fspring-boot-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://camunda-community-hub.github.io/vanillabp-camunda7-adapter/spring-boot-report)
-2. **Quarkus**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fcamunda-community-hub.github.io%2Fvanillabp-camunda7-adapter%2Fquarkus-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://camunda-community-hub.github.io/vanillabp-camunda7-adapter/quarkus-report)
+1. **Spring Boot**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fvanillabp.github.io%2Fcamunda7-adapter%2Fspring-boot-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://vanillabp.github.io/camunda7-adapter/spring-boot-report)
+2. **Quarkus**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fvanillabp.github.io%2Fcamunda7-adapter%2Fquarkus-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://vanillabp.github.io/camunda7-adapter/quarkus-report)
 
 Coverage is measured separately per platform. The tests of one platform never cover the code
 of the other. Click a badge to open its report.
@@ -46,7 +44,7 @@ Process-Engine-API. This repository cannot draw that comparison on its own.
 
 ```xml
 <dependency>
-  <groupId>org.camunda.community.vanillabp</groupId>
+  <groupId>io.vanillabp</groupId>
   <artifactId>camunda7-adapter-spring-boot</artifactId>
   <version>2.0.0-SNAPSHOT</version>
 </dependency>
@@ -507,7 +505,7 @@ mistake shows up before something runs. VanillaBP would have to carry that renam
 engine components, six dialects and every engine upgrade. That would make it the owner of a
 schema whose version bookkeeping (`ACT_GE_SCHEMA_LOG`) stays Camunda's anyway. So the rename
 belongs to whoever owns the schema. They apply it with Liquibase or Flyway, as the wiki page
-[Creating the engine tables yourself](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Configuration#creating-the-engine-tables-yourself)
+[Creating the engine tables yourself](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#creating-the-engine-tables-yourself)
 describes. If nobody wants to own it, `data-source-name` gives the adapter id a
 database of its own. There the engine creates and upgrades its schema as usual.
 
@@ -1592,7 +1590,7 @@ starts. It asks for handlers which may run twice. And it asks to keep work the e
 back out of them. It is a warning, not a refusal: the model is correct, and no flag of this adapter
 changes what the engine does. `Camunda7CompensationTransactionReportTest` tests the message,
 `Camunda7CompensationTokensTest` the measurement. The
-[Deviations page](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Deviations#a-compensation-runs-in-one-transaction)
+[Deviations page](https://github.com/vanillabp/camunda7-adapter/wiki/Deviations#a-compensation-runs-in-one-transaction)
 lists it among the gaps.
 
 ### A process id which is only declared
@@ -1721,7 +1719,7 @@ support). The Camunda 7 community edition is **end-of-life**. No further communi
 expected. This adapter pins Camunda `7.24.x`.
 
 The pin is fixed, and this adapter has no release lines. The
-[Camunda 8 adapter](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter#release-lines)
+[Camunda 8 adapter](https://github.com/vanillabp/camunda8-adapter#release-lines)
 is different: its artifacts carry the cluster minor in their version. Camunda 8 needs lines,
 because a new minor arrives every six months. And the client a build was compiled against is the
 lowest cluster version it accepts. Camunda 7 has no next minor. What is still coming are enterprise
@@ -1750,7 +1748,7 @@ explicitly:
   <artifactId>vanillabp-quarkus-integration</artifactId>
 </dependency>
 <dependency>
-  <groupId>org.camunda.community.vanillabp</groupId>
+  <groupId>io.vanillabp</groupId>
   <artifactId>camunda7-adapter-quarkus</artifactId>
 </dependency>
 ```
@@ -1882,7 +1880,7 @@ a citation written today still resolves in a year.
 ## Known deviations
 
 This section lists what this adapter does not deliver. The wiki's
-[Deviations](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/wiki/Deviations)
+[Deviations](https://github.com/vanillabp/camunda7-adapter/wiki/Deviations)
 page repeats each in one sentence. An engine on its own datasource is NOT one of them. It is the
 documented mode described under [Behaviour](#behaviour) above.
 
@@ -1939,13 +1937,20 @@ a half later inside somebody's pull request. The night writes down which platfor
 resolved, with the timestamp and the build number. So a red night tells whether the platform broke
 or this repository did.
 
-Every push to `main` publishes a snapshot to the GitHub Packages registry of this repository,
-`https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda7-adapter`. A release works
-like for every Camunda Community Hub extension: publish a GitHub Release whose tag is the version, for
-example `2.0.0`. The workflow `.github/workflows/deploy.yaml` then runs
-`community-action-maven-release`. It deploys through the profiles of `community-hub-release-parent`
-to Camunda's Artifactory and to Maven Central, and it commits the next development version to `main`.
-Version 1 is maintained on the branch `maintenance/1.x` and releases from there the same way.
+Every push to `main` publishes a snapshot to the snapshot repository of Maven Central,
+`https://central.sonatype.com/repository/maven-snapshots/`, with the profile `central-portal` of
+`io.vanillabp:release-parent`. Reading it needs no login. A release is started by hand: the workflow
+*Release* (`.github/workflows/release.yaml`) takes the version, for example `2.0.0`. Without a train
+it uploads to Maven Central itself. With a train it keeps the bundle, and `release-train.yaml` in
+[`maven-release-parent`](https://github.com/vanillabp/maven-release-parent) uploads the bundles of
+all repositories of the train as one deployment. Either way it leaves a tag and a draft GitHub
+Release behind, and opens the pull request which carries the next development version into `main`.
+
+Version 2 is published as `io.vanillabp`. Version 1 was published as
+`org.camunda.community.vanillabp` by the Camunda Community Hub, and it stays there. It is maintained
+on the branch `maintenance/1.x` of
+[`camunda-community-hub/vanillabp-camunda7-adapter`](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter)
+and releases from there.
 
 ## Test coverage
 
@@ -1956,7 +1961,7 @@ lifecycles per module and reports every compiler warning twice.
 1. **Spring Boot** (core + Spring Boot integration) - into `test-coverage-report/spring-boot/report`
 2. **Quarkus** (core + Quarkus extension) - into `test-coverage-report/quarkus/report`
 
-On every push to the default branch, the *Publish to GitHub Packages* workflow publishes both to
+On every push to the default branch, the *Build and publish snapshots* workflow publishes both to
 GitHub Pages. Click the [platform's badge](#documentation-and-supported-platforms) to open
 its report.
 
