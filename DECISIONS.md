@@ -1828,3 +1828,252 @@ run is synchronous, isolated and has no outbox. This entry says what this adapte
 entry, against a real embedded engine.
 
 **Where it is cited.** javadoc of `Camunda7SuspendedWorkflow`, the wiki page `A-suspended-workflow`.
+
+### 53. A correlated message waits for its workflow for the message time-to-live, as on Camunda 8
+
+Proposed by story 2060. Decided by the maintainer on 2026-10-30 and 2026-10-31.
+
+**Why.** This adapter continues after every user task in a job of its own. So completing a user task
+does not mean that the engine waits at the next event when the call returns. A correlation planned
+right after the completion was dispatched a few milliseconds later, found no subscription, and was
+skipped with a WARN. The message was lost. Camunda 8 does not have this gap, because the cluster
+keeps a published message for its time-to-live. The question "is the next wait state reached yet?"
+cannot be answered by looking at jobs either. A job before the event covers `asyncAfter` only, not
+an `asyncBefore` at the catch event, a parallel branch or a timer before it.
+
+**What holds.** `message-time-to-live` exists here with the key, the meaning and the four levels of
+the Camunda 8 adapter: adapter, workflow module, workflow, message. The message level is a map of
+its own under `workflows.<bpmn-process-id>.messages.<message-name>`, not the task level. The value
+is read for the process whose model waits for the message, the way the Camunda 8 adapter reads it:
+the process of the call if its own model waits, otherwise the one other process of the workflow
+module whose model does, otherwise the process of the call. The resolution lives in the overlay of
+this adapter, on both platforms.
+
+- **Not set, or zero:** phase one refuses a correlation nothing waits for, where the application
+  made the call. That is what version 1 did, and it stays the default. Zero at a more specific level
+  switches the waiting off again. A value below zero ends the boot with a message which names every
+  such key.
+- **Above zero:** phase one checks only the model. A message which no deployed model of the
+  workflow module waits for fails at the call. A model which names a message by an expression keeps
+  the check silent, because the name is unknown, not absent.
+- **Phase two without a subscription, time-to-live not over:** `PhaseTwoRetryLater`. Nothing has
+  reached the engine at that point. The wait grows with the time already waited, from 100
+  milliseconds to 30 seconds, and never goes past the time-to-live. The time-to-live counts from
+  the moment the correlation was planned (`PhaseTwoRequest#plannedAt()`), and it is the deadline of
+  the entry, which replaces `vanillabp.outbox.wait-for-visibility-at-most`. The platform adds both
+  in its own decision 135, as an addendum to its decision 49.
+- **Time-to-live over:** `PhaseTwoPermanentFailure`. Its message names the message, the aggregate,
+  the time-to-live and the time waited. The outbox blocks the entry and keeps that reason.
+
+A time-to-live is a value somebody configures, not an implicit retry.
+
+**A new map key name.** The message level adds the map key `message-name` to the shared names of
+decision 49, the name the Camunda 8 adapter uses for the same level.
+
+**Order.** An entry which is not due yet is passed by the later entries of the same workflow. So a
+waiting correlation holds up nothing, and a later operation of the workflow may reach the engine
+before it. That is the meaning the buffer of a Camunda 8 cluster has, and it is wanted.
+
+**No deduplication window.** On Camunda 8 the time-to-live is also the window in which a message id
+removes duplicates. Here the outbox dispatches every entry once, so nothing has to be deduplicated.
+
+**What it costs.** On an engine with a datasource of its own, a crash between the correlation and
+the outbox marking the entry as done dispatches it again. With a time-to-live, that repetition finds
+nothing waiting, waits out the time-to-live and ends blocked, although the message was delivered.
+On the application's datasource the correlation and the mark commit together, so this cannot
+happen there.
+
+**Tests.** `Camunda7MessageTimeToLiveIT` (Spring Boot) and the time-to-live tests of
+`Camunda7WorkflowLifecycleTest` (Quarkus) run on a real engine: a completion and a correlation
+right after it, a waiting correlation which holds up no later completion, a time-to-live which runs
+out, a time-to-live of zero which refuses at the call, and (Spring Boot) a message no model waits
+for. `MessageTimeToLiveResolutionTest` holds the four levels and the refusal of a negative value,
+`Camunda7WaitForASubscriptionTest` the growing wait.
+
+**Where it is cited.**
+
+- javadoc of `Camunda7ProcessService` (class, `checkCorrelation`, `correlateMessage`) and of
+  `Camunda7MessageTimeToLiveResolver`
+- `README.md`, section "A message which comes before the workflow waits for it"
+- wiki pages `Configuration` and `Transactional-behavior`
+- the Operaton adapter and, through the sync, the CIB seven adapter carry the same entry
+
+### 54. Addendum to decision 53: the platform resolves the message time-to-live
+
+Proposed by story 2062.
+
+This is an addendum to the entry of story 2060. That entry stays as it is, except for one sentence: "The
+resolution lives in the overlay of this adapter, on both platforms." That is no longer true.
+
+**What changed.** The four levels of `message-time-to-live` and the choice of the process whose model
+waits are the same on Camunda 8 and in the Camunda 7 family. So the platform resolves them for every
+adapter (`MigrationAdapterProperties#messageTimeToLive` and `MessageTimeToLiveResolver` in the adapter
+SPI). This adapter hands it the processes whose deployed model waits for the message, and reads the
+answer. The overlays of both platforms do not bind the key any more.
+
+**What stays here.** What the engine makes of a value:
+
+- Nothing configured is zero. Phase one refuses a correlation nothing waits for, as in version 1.
+- Zero at a more specific level switches the waiting off again.
+- A value below zero ends the boot. `Camunda7ProcessService#refuseNegativeMessageTimesToLive` names every
+  such key, from the list the platform gives it. The message is the same as before.
+
+**What an application sees.** The keys, the levels and the messages are the same. One thing is new: a
+`message-time-to-live` written at a task ends the boot, with a message which says where it belongs.
+Before, the line did nothing.
+
+**Tests.** `MessageTimeToLiveResolutionTest` holds the refusal of a negative value and zero as "off".
+`Camunda7MessageTimeToLiveIT` (Spring Boot) and the time-to-live tests of `Camunda7WorkflowLifecycleTest`
+(Quarkus) still run on a real engine. The levels are tested in the platform.
+
+**Where it is cited.**
+
+- `README.md`, section "A message which comes before the workflow waits for it"
+- wiki page `Configuration`
+- the Operaton adapter and, through the sync, the CIB seven adapter carry the same entry
+
+**Addendum: the key names no adapter, and its widest level is the workflow module.**
+
+Added by story 2062 after the platform moved the key. Everything above stays, except the levels.
+`message-time-to-live` is written without an adapter ID at three levels:
+
+```text
+vanillabp.workflow-modules.<m>.message-time-to-live
+vanillabp.workflow-modules.<m>.workflows.<w>.message-time-to-live
+vanillabp.workflow-modules.<m>.workflows.<w>.messages.<message-name>.message-time-to-live
+```
+
+The platform ends the boot for a line at the application, below `adapters.<id>` at any level, or at a
+task, and names these keys. Nothing configured is still zero here, and a value below zero still ends the
+boot. `refuseNegativeMessageTimesToLive` now reads every written value, because no value belongs to one
+adapter any more. The old keys were never in a release, so there is no transition.
+
+**Second addendum: only the workflow modules this adapter serves.** Since the key names no adapter, a
+value would reach every adapter of the application. So `refuseNegativeMessageTimesToLive` reads
+`messageTimesToLiveWrittenFor(adapterId)`: the values of the modules whose prioritized adapters, or those
+of one of their workflows, name this adapter. A module which migrates to another BPMS is checked by both
+adapters. `MessageTimeToLiveResolutionTest#aModuleOfAnotherAdapterIsNotChecked` holds it.
+
+### 55. A task of a suspended workflow is asked about before the engine is, and a suspension waits
+
+Proposed by story 2070.
+
+**Why.** The engine refuses every answer to a task of a suspended process instance. It throws
+`SuspendedEntityInteractionException` from `TaskService#complete`, from a BPMN error and from the signal
+of a parked execution. That type extends `BadUserRequestException`. So before this entry two things went
+wrong:
+
+- Phase one checked only that the task exists. A task of a suspended instance passed, and the caller's
+  transaction committed.
+- Phase two then met the engine's exception, and `isPhaseTwoFailureRepeatable` called it permanent, like
+  every `BadUserRequestException`. The outbox blocked the entry after one attempt, although the same
+  answer would go through once the instance is activated again.
+
+Version 1 threw the engine's exception at the call of the application. Its successor is the exception of
+the SPI, `io.vanillabp.spi.process.WorkflowSuspendedException`, which every adapter of a BPMS that can
+suspend throws for the same case.
+
+**What holds.**
+
+- **Phase one** reads the suspension state from the query it runs anyway: the execution a `@TaskId`
+  task is parked at, or the user task. `Execution#isSuspended` and `Task#isSuspended` answer it, so the
+  check costs nothing extra. A suspended one throws `WorkflowSuspendedException` in the caller's
+  transaction. That covers `completeTask`, `cancelTask`, `completeUserTask` and `cancelUserTask`.
+- **Phase two** asks the same before it touches the engine, for the same reason it asks whether the task
+  is still there: a failing engine command marks the dispatcher's transaction rollback-only. A suspended
+  one is answered with `PhaseTwoRetryLater`, with a window of 30 seconds. Nothing has reached the engine
+  at that point. The entry waits as long as the instance is suspended. Each answer names a deadline just
+  behind its own window, so `vanillabp.outbox.wait-for-visibility-at-most` does not block the entry of
+  an instance which is suspended for a long time. Deleting the instance ends the wait as well: the next
+  attempt finds the task gone.
+- **An engine exception which slips past the question**, because somebody suspended the instance
+  between the query and the command, is turned into the same `PhaseTwoRetryLater`. And
+  `isPhaseTwoFailureRepeatable` answers `true` for a cause chain which carries the exception, before it
+  looks for `BadUserRequestException`. The type is matched by its simple name, so the code stays the
+  same in the forks of the engine.
+- **What is suspended** is decided by the engine, per execution. A called process instance has an id of
+  its own and is not suspended with its caller. A process definition suspended without
+  `includeProcessInstances(true)` leaves its running instances alone. The adapter reads the state of the
+  task it is asked about and adds no rule of its own.
+
+**Tests.** `Camunda7SuspendedWorkflowIT` on a real engine: a task and a user task of a suspended
+instance are refused with the SPI exception and go through after the activation, and a completion whose
+suspension committed together with it waits in the outbox with no attempt used, then goes through after
+the activation. `Camunda7AwarenessTest#aSuspensionIsRepeated` holds the classification.
+
+### 56. Version 2 is published as `io.vanillabp`, version 1 stays `org.camunda.community.vanillabp`
+
+Proposed by story 2083.
+
+**Why.** Until now this adapter was built and released from the Camunda Community Hub. Its groupId
+was `org.camunda.community.vanillabp`, and the release went out through the release parent and the
+secrets of the hub. Two things made that path a dead end for version 2:
+
+- The namespace `org.camunda.community` on Maven Central belongs to Camunda. Only the hub holds the
+  login for it, and a repository of the vanillabp organisation cannot read the secrets of the hub.
+  Publishing under that groupId from here needs Camunda, and a question to Camunda about it has had
+  no answer for weeks.
+- VanillaBP releases all its repositories together, through the release train of
+  `maven-release-parent`. A train is one deployment to Maven Central with the login of the vanillabp
+  organisation, which owns `io.vanillabp`. It cannot carry an artifact under `org.camunda.community`.
+
+Changing the groupId costs users nothing now. Under the old groupId Maven Central holds only version
+1 (up to 1.6.0). Version 2 renames the artifacts anyway (`camunda7-spring-boot-adapter` becomes
+`camunda7-adapter-spring-boot`), so every user edits the dependency at the step to version 2 in any
+case. After the release of 2.0 the same change would break every user, so it happens before it.
+
+**What holds.**
+
+- Every artifact of this repository has the groupId `io.vanillabp`. The artifactIds do not change.
+- The root POM inherits `io.vanillabp:release-parent`, like the forks of this adapter. Snapshots go
+  from `main` to the snapshot repository of Maven Central with the profile `central-portal`. A
+  release runs `release.yaml` and, with a train, hands its bundle to `release-train.yaml` of
+  `maven-release-parent`.
+- Version 1 stays `org.camunda.community.vanillabp`. It lives on the branch `maintenance/1.x` of
+  `camunda-community-hub/vanillabp-camunda7-adapter` and, if ever needed, releases from there
+  through the hub.
+- There are no relocation POMs. A version 1 coordinate points at version 1 code, and nothing of
+  version 2 was ever published under the old groupId on Maven Central. Snapshots of version 2 under
+  the old groupId exist only in two GitHub Packages registries, and nothing new goes there.
+
+### 57. A release raises its VanillaBP dependencies on the release branch
+
+Proposed by story 2088. Asked for by the maintainer on 2026-11-05.
+
+**Why.** `main` depends on SNAPSHOTs of spi-for-java, the platform and the other VanillaBP
+repositories until those are on Maven Central. Raising them on `main` before a release does not
+work: a pull request with `2.0.0` cannot get green checks before `2.0.0` is uploaded, and the
+rulesets need green checks.
+
+**What holds.**
+
+- Every release workflow of a repository which depends on another VanillaBP repository runs
+  `release-versions.sh raise` of `vanillabp/maven-release-parent` on its release branch, after its
+  own version is set and after the bundles of the train are read, before the build. Each
+  `x-SNAPSHOT` of an artifact of a group `io.vanillabp*` which the repository does not build becomes
+  `x`, in a literal version or a property. The Business Cockpit's adapters get the cockpit version
+  the same way. Nothing outside `io.vanillabp*` changes, and the own version does not change.
+- `x` comes from the bundles of the train, which the script reads from the zips that
+  `release-train.sh prepare` downloaded, not from `~/.m2/repository`: that may come from the cache
+  of an older run. Without a train, or if the train does not have it, `x` must be on Maven Central.
+  The rule is `x-SNAPSHOT` to `x`, never "the newest release".
+- If one version is missing, nothing changes and the release stops before any tag, branch, pull
+  request or bundle. The message names the artifact and the repository which builds it.
+- The script edits the POMs as text. The versions plugin is not used: the bundles of a train hold no
+  `maven-metadata.xml`, so the plugin does not see their versions, and `update-properties` takes the
+  newest release (`2.0.0-8.10` for `2.0.0-8.8-SNAPSHOT`).
+- Before that, `release-versions.sh unpublished` stops a release whose version Maven Central has
+  already. Below that line every release, with a train or without, moves an existing tag of the same
+  version, replaces `release/<version>` and reuses its open pull request.
+- The workflows download the script at a fixed commit of `maven-release-parent`, in the workflow
+  variable `RELEASE_VERSIONS_SH`, not from `main`. It is a commit and not a tag: no tag of
+  `maven-release-parent` holds the script yet, and a tag like `2.0.1` would be the tag the next
+  release of the parent writes itself. When a release of the parent holds the script, its tag may
+  replace the commit.
+
+**Where it is referred to.** `.github/workflows/release.yaml` (camunda7-adapter, cibseven-adapter,
+operaton-adapter, hazelcast-shared-election-cache, adapter-platform-integration, the cockpit
+adapters), `.github/workflows/release.yml` (business-cockpit), `.github/workflows/deploy.yaml`
+(camunda8-adapter) and the release workflow of businesscockpit-camunda8-adapter; README of
+maven-release-parent, section "Versions in a release"; `RELEASE-2-0-GATE.md`, "Ablauf am
+Release-Tag", step 2.
