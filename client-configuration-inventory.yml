@@ -1,0 +1,646 @@
+# Which settings of the Camunda 7 engine this adapter passes on to its users, and which it does
+# not.
+#
+# The adapter builds the engine itself and reads only its own keys, 'vanillabp.adapters.<id>.*'.
+# So a setting which a new engine version adds reaches a user only when the adapter gets a key for
+# it. The script .github/client-configuration/check.py reads the settings out of the engine jars.
+# The job 'client-configuration' of .github/workflows/checks.yaml runs it on every pull request.
+# When a pull request changes 'camunda.version', it compares the two versions and opens an issue
+# labelled 'client-configuration' for each new setting which this file does not list yet.
+#
+# Every setting is listed once, under one of four answers:
+#
+#   supported       the adapter has a key which sets it ('key')
+#   set-by-adapter  the adapter sets it itself ('reason')
+#   not-supported   why a user of the adapter does not need it ('reason')
+#   open            the issue which decides it ('issue')
+#
+# The file ends in '.yml' on purpose. Spotless formats every '*.yaml' file through Jackson, which
+# drops the comments, and the comments here are half of the answers.
+#
+# A group shares one answer, but it names each of its settings. So a new setting never falls into
+# a group without somebody writing its name down here.
+#
+# Many answers name a ProcessEnginePlugin. That is the way an application reaches any setting of
+# the engine which has no key, see the wiki page Configuration.
+client:
+  name: Camunda
+  # where the pull request finds the engine version, in the root pom.xml
+  version-properties:
+    - camunda.version
+  # https://github.com/orgs/vanillabp/projects/3, where the issues belong
+  project: 3
+  # what an issue suggests as the key of a new setting
+  suggested-key-prefix: vanillabp.adapters.<id>.
+# A comparison whose result is known. The job runs it first, so that a check which reads nothing
+# cannot look like a version without news.
+self-test:
+  old: 7.23.0
+  new: 7.24.0
+  new-settings:
+    engine:
+      - legacyJobRetryBehaviorEnabled
+    starter:
+      - camunda.bpm.rest-api.fetch-and-lock.queue-capacity
+# What the script reads.
+surfaces:
+  # The public setters of the classes the adapter builds the engine from, on Spring Boot and on
+  # Quarkus, together with every superclass: ProcessEngineConfigurationImpl and
+  # ProcessEngineConfiguration.
+  - id: engine
+    title: engine setting
+    read: setters
+    artifacts:
+      - org.camunda.bpm:camunda-engine
+      - org.camunda.bpm:camunda-engine-spring-6
+    classes:
+      - org.camunda.bpm.engine.spring.SpringProcessEngineConfiguration
+      - org.camunda.bpm.engine.impl.cfg.JakartaTransactionProcessEngineConfiguration
+  # The properties of Camunda's Spring Boot starter, from its Spring configuration metadata. The
+  # adapter does not build its engine with the starter. But the starter is the best list of what
+  # Camunda thinks a user wants to set.
+  - id: starter
+    title: Spring Boot starter property
+    read: spring-metadata
+    artifacts:
+      - org.camunda.bpm.springboot:camunda-bpm-spring-boot-starter
+    prefix: camunda.bpm.
+settings:
+  engine:
+    supported:
+      - names: [databaseSchemaUpdate]
+        key: vanillabp.adapters.<id>.database-schema-update
+      - names: [historyTimeToLive]
+        key: vanillabp.adapters.<id>.history-time-to-live
+      - names: [dataSource]
+        key: vanillabp.adapters.<id>.data-source-name
+      - names: [databaseTablePrefix]
+        key: vanillabp.adapters.<id>.table-prefix
+      - names: [defaultSerializationFormat]
+        key: vanillabp.adapters.<id>.serialization-format
+      - names: [processEnginePlugins]
+        key: vanillabp.adapters.<id>.engine-plugins
+      - names: [dbMetricsReporterActivate]
+        key: vanillabp.adapters.<id>.db-metrics-reporting
+      - names: [dmnFeelEnableLegacyBehavior]
+        key: vanillabp.adapters.<id>.dmn-feel-legacy-behavior
+      - names: [jobExecutorAcquireByDueDate]
+        key: vanillabp.adapters.<id>.sleep-until-something-is-due
+    set-by-adapter:
+      - names:
+          - applicationContext
+          - classLoader
+          - processEngineName
+          - transactionManager
+          - transactionsExternallyManaged
+        reason: >-
+          The adapter connects the engine to the application: to the Spring context or the class
+          loader of Quarkus, and to the transaction manager of the platform. It names the engine after
+          the adapter type and the adapter id, so that the engines of several adapter ids stay apart.
+      - names:
+          - customPostBPMNParseListeners
+          - customPreBPMNParseListeners
+          - expressionManager
+          - historyEventHandler
+        reason: >-
+          This is how the adapter connects a BPMN model to the workflow task methods, and how an
+          extension adds its parse listeners and history event handlers through an engine customizer
+          bean. A value set from outside would cut these connections.
+      - names:
+          - customPostCommandInterceptorsTxRequired
+          - customPostCommandInterceptorsTxRequiresNew
+          - jobExecutor
+          - jobExecutorActivate
+        reason: >-
+          The adapter brings its own job executor and starts it when workflow processing starts, not
+          when the engine is built. The command interceptors wake that job executor after a commit,
+          see 'sleep-until-something-is-due'.
+    not-supported:
+      - names:
+          - artifactFactory
+          - authorizationService
+          - batchHandlers
+          - batchWindowManager
+          - beans
+          - bpmnParseFactory
+          - businessCalendarManager
+          - cacheFactory
+          - caseService
+          - cmmnHistoryEventProducer
+          - commandCheckers
+          - commandContextFactory
+          - commandExecutorSchemaOperations
+          - commandExecutorTxRequired
+          - commandExecutorTxRequiresNew
+          - commandInterceptorsTxRequired
+          - commandInterceptorsTxRequiresNew
+          - conditionHandler
+          - correlationHandler
+          - dbMetricsReporter
+          - dbSchemaOperationsCommandContextFactory
+          - dbSqlSessionFactory
+          - decisionService
+          - deployers
+          - deploymentCache
+          - deploymentHandlerFactory
+          - diagnosticsCollector
+          - diagnosticsRegistry
+          - dmnEngine
+          - dmnEngineConfiguration
+          - dmnHistoryEventProducer
+          - eventHandlers
+          - externalTaskService
+          - filterService
+          - formEngines
+          - formService
+          - formTypes
+          - formValidators
+          - historyEventProducer
+          - historyLevelCommand
+          - historyService
+          - idGenerator
+          - identityProviderSessionFactory
+          - identityService
+          - incidentHandlers
+          - jobHandlers
+          - managementService
+          - metricsRegistry
+          - migratingActivityInstanceValidators
+          - migrationActivityMatcher
+          - migrationInstructionGenerator
+          - migrationInstructionValidators
+          - postParseListeners
+          - preParseListeners
+          - processApplicationManager
+          - processEngineBootstrapCommand
+          - registeredDeployments
+          - repositoryService
+          - runtimeService
+          - schemaOperationsCommand
+          - scriptFactory
+          - scriptingEngines
+          - scriptingEnvironment
+          - sessionFactories
+          - sqlSessionFactory
+          - taskService
+          - telemetryData
+          - transactionContextFactory
+          - transactionFactory
+          - useSharedSqlSessionFactory
+          - valueTypeResolver
+          - variableTypes
+        reason: >-
+          Parts which the engine builds for itself: services, command executors and interceptors,
+          session factories, caches, the DMN engine, the lists of handlers it fills at start.
+          Replacing one changes how the engine works inside. That is work for a ProcessEnginePlugin,
+          not configuration, so a key would help nobody.
+      - names:
+          - builtinExceptionCodeProvider
+          - customBatchJobHandlers
+          - customEventHandlers
+          - customExceptionCodeProvider
+          - customFormEngines
+          - customFormFieldValidators
+          - customFormTypes
+          - customHistoryEventHandlers
+          - customHistoryLevels
+          - customIncidentHandlers
+          - customJobHandlers
+          - customPasswordChecker
+          - customPostCmmnTransformListeners
+          - customPostDeployers
+          - customPostMigratingActivityInstanceValidators
+          - customPostMigrationActivityValidators
+          - customPostMigrationInstructionValidators
+          - customPostVariableSerializers
+          - customPreCmmnTransformListeners
+          - customPreCommandInterceptorsTxRequired
+          - customPreCommandInterceptorsTxRequiresNew
+          - customPreDeployers
+          - customPreMigratingActivityInstanceValidators
+          - customPreMigrationActivityValidators
+          - customPreMigrationInstructionValidators
+          - customPreVariableSerializers
+          - customRejectedJobsHandler
+          - customSessionFactories
+          - delegateInterceptor
+          - deserializationTypeValidator
+          - dmnElProvider
+          - dmnFeelCustomFunctionProviders
+          - envScriptResolvers
+          - externalTaskPriorityProvider
+          - failedJobCommandFactory
+          - fallbackSerializerFactory
+          - historyRemovalTimeProvider
+          - hostnameProvider
+          - jobPriorityProvider
+          - metricsReporterIdProvider
+          - passwordEncryptor
+          - passwordManager
+          - passwordPolicy
+          - permissionProvider
+          - resolverFactories
+          - resourceAuthorizationProvider
+          - saltGenerator
+          - scriptEngineResolver
+          - tenantIdProvider
+        reason: >-
+          These take Java objects, not values: handlers, providers, validators, listeners and
+          serializers. A configuration key cannot carry an object. An application which needs another
+          value sets it with a ProcessEnginePlugin: as a bean on Spring Boot, or as a class under
+          'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - dataSourceJndiName
+          - databaseType
+          - databaseVendor
+          - databaseVersion
+          - forceCloseMybatisConnectionPool
+          - idGeneratorDataSource
+          - idGeneratorDataSourceJndiName
+          - jdbcDriver
+          - jdbcMaxActiveConnections
+          - jdbcMaxCheckoutTime
+          - jdbcMaxIdleConnections
+          - jdbcMaxWaitTime
+          - jdbcPassword
+          - jdbcPingConnectionNotUsedFor
+          - jdbcPingEnabled
+          - jdbcPingQuery
+          - jdbcUrl
+          - jdbcUsername
+          - transactionManagerJndiName
+        reason: >-
+          The engine runs on a datasource which the application or the runtime provides, see
+          'vanillabp.adapters.<id>.data-source-name'. The connection and the pool belong to that
+          datasource, and the engine finds out the type of the database from it.
+      - names:
+          - adminGroups
+          - adminUsers
+          - authorizationCheckRevokes
+          - authorizationEnabled
+          - authorizationEnabledForCustomCode
+          - dbIdentityUsed
+          - defaultUserPermissionForTask
+          - defaultUserPermissionNameForTask
+          - disabledPermissions
+          - enableHistoricInstancePermissions
+          - enablePasswordPolicy
+          - enforceSpecificVariablePermission
+          - generalResourceWhitelistPattern
+          - groupResourceWhitelistPattern
+          - loginDelayBase
+          - loginDelayFactor
+          - loginDelayMaxTime
+          - loginMaxAttempts
+          - restrictUserOperationLogToAuthenticatedUsers
+          - tenantCheckEnabled
+          - tenantResourceWhitelistPattern
+          - userResourceWhitelistPattern
+          - webappsAuthenticationLoggingEnabled
+        reason: >-
+          Authorizations, users, passwords and logins protect the APIs of the engine against a logged-
+          in user, as in the web applications. The adapter calls the engine without a logged-in user,
+          so these do not change what it does. An application which needs another value sets it with a
+          ProcessEnginePlugin: as a bean on Spring Boot, or as a class under
+          'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - batchOperationHistoryTimeToLive
+          - batchOperationsForHistoryCleanup
+          - dbHistoryUsed
+          - enableDefaultDbHistoryEventHandler
+          - enforceHistoryTimeToLive
+          - fridayHistoryCleanupBatchWindowEndTime
+          - fridayHistoryCleanupBatchWindowStartTime
+          - history
+          - historyCleanupBatchSize
+          - historyCleanupBatchThreshold
+          - historyCleanupBatchWindowEndTime
+          - historyCleanupBatchWindowEndTimeAsDate
+          - historyCleanupBatchWindowStartTime
+          - historyCleanupBatchWindowStartTimeAsDate
+          - historyCleanupBatchWindows
+          - historyCleanupDefaultNumberOfRetries
+          - historyCleanupDegreeOfParallelism
+          - historyCleanupEnabled
+          - historyCleanupJobLogTimeToLive
+          - historyCleanupJobPriority
+          - historyCleanupMetricsEnabled
+          - historyCleanupStrategy
+          - historyLevel
+          - historyRemovalTimeStrategy
+          - mondayHistoryCleanupBatchWindowEndTime
+          - mondayHistoryCleanupBatchWindowStartTime
+          - parsedBatchOperationsForHistoryCleanup
+          - parsedTaskMetricsTimeToLive
+          - removalTimeUpdateChunkSize
+          - saturdayHistoryCleanupBatchWindowEndTime
+          - saturdayHistoryCleanupBatchWindowStartTime
+          - skipHistoryOptimisticLockingExceptions
+          - sundayHistoryCleanupBatchWindowEndTime
+          - sundayHistoryCleanupBatchWindowStartTime
+          - taskMetricsTimeToLive
+          - thursdayHistoryCleanupBatchWindowEndTime
+          - thursdayHistoryCleanupBatchWindowStartTime
+          - tuesdayHistoryCleanupBatchWindowEndTime
+          - tuesdayHistoryCleanupBatchWindowStartTime
+          - wednesdayHistoryCleanupBatchWindowEndTime
+          - wednesdayHistoryCleanupBatchWindowStartTime
+        reason: >-
+          How much history the engine writes and when it removes it again. The adapter works with the
+          defaults of the engine. Only 'history-time-to-live' has a key, because the engine refuses a
+          model without one. An application which needs another value sets it with a
+          ProcessEnginePlugin: as a bean on Spring Boot, or as a class under
+          'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - batchJobPriority
+          - batchJobsPerSeed
+          - batchPollTime
+          - compositeIncidentHandlersEnabled
+          - createIncidentOnFailedJobEnabled
+          - defaultNumberOfRetries
+          - ensureJobDueDateNotNull
+          - failedJobListenerMaxRetries
+          - failedJobRetryTimeCycle
+          - hintJobExecutor
+          - invocationsPerBatchJob
+          - invocationsPerBatchJobByBatchType
+          - jobExecutorAcquireByPriority
+          - jobExecutorAcquireExclusiveOverProcessHierarchies
+          - jobExecutorDeploymentAware
+          - jobExecutorPreferTimerJobs
+          - jobExecutorPriorityRangeMax
+          - jobExecutorPriorityRangeMin
+          - legacyJobRetryBehaviorEnabled
+          - producePrioritizedExternalTasks
+          - producePrioritizedJobs
+          - reevaluateTimeCycleWhenDue
+        reason: >-
+          How the engine picks, orders and retries its jobs and batches. The adapter is built and
+          tested with the defaults of the engine. An application which needs another value sets it
+          with a ProcessEnginePlugin: as a bean on Spring Boot, or as a class under
+          'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - autoStoreScriptVariables
+          - configureScriptEngineHostAccess
+          - enableExpressionsInAdhocQueries
+          - enableExpressionsInStoredQueries
+          - enableFetchScriptEngineFromProcessApplication
+          - enableScriptCompilation
+          - enableScriptEngineCaching
+          - enableScriptEngineLoadExternalResources
+          - enableScriptEngineNashornCompatibility
+          - scriptEngineNameJavaScript
+        reason: >-
+          Scripts and expressions inside a model or a query. VanillaBP binds a task to a Java method
+          and needs none of these, so the defaults of the engine apply. An application which needs
+          another value sets it with a ProcessEnginePlugin: as a bean on Spring Boot, or as a class
+          under 'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - bpmnStacktraceVerbose
+          - enableCmdExceptionLogging
+          - enableReducedJobExceptionLogging
+          - hostname
+          - installationId
+          - logEntriesPerSyncOperationLimit
+          - logLevelBpmnStackTrace
+          - loggingContextActivityId
+          - loggingContextActivityName
+          - loggingContextApplicationName
+          - loggingContextBusinessKey
+          - loggingContextEngineName
+          - loggingContextProcessDefinitionId
+          - loggingContextProcessDefinitionKey
+          - loggingContextProcessInstanceId
+          - loggingContextTenantId
+          - metricsEnabled
+          - taskMetricsEnabled
+        reason: >-
+          What the engine logs, which names it puts into the logging context, and what it counts as
+          metrics. The adapter logs on its own, and the defaults of the engine apply. An application
+          which needs another value sets it with a ProcessEnginePlugin: as a bean on Spring Boot, or
+          as a class under 'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - cmmnEnabled
+          - disableStrictCamundaFormParsing
+          - dmnEnabled
+          - enableFetchProcessDefinitionDescription
+          - mailServerDefaultFrom
+          - mailServerHost
+          - mailServerPassword
+          - mailServerPort
+          - mailServerUseTLS
+          - mailServerUsername
+          - standaloneTasksEnabled
+          - wsSyncFactoryClassName
+        reason: >-
+          Switches for parts of the engine which VanillaBP does not change: CMMN, DMN, tasks without a
+          process, the mail service, forms and web services. VanillaBP uses BPMN and DMN with the
+          defaults of the engine. An application which needs another value sets it with a
+          ProcessEnginePlugin: as a bean on Spring Boot, or as a class under
+          'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - createDiagramOnDeploy
+          - deployChangedOnly
+          - deploymentLockUsed
+          - deploymentName
+          - deploymentResources
+          - deploymentSynchronized
+          - deploymentTenantId
+        reason: >-
+          How the engine deploys models, and the automatic deployment of Spring. VanillaBP deploys the
+          models of each workflow module itself and decides on its own what changed, so it needs none
+          of these.
+      - names:
+          - cacheCapacity
+          - databaseSchema
+          - dbEntityCacheKeyMapping
+          - dbEntityCacheReuseEnabled
+          - defaultCharset
+          - defaultCharsetName
+          - deserializationAllowedClasses
+          - deserializationAllowedPackages
+          - deserializationTypeValidationEnabled
+          - disableBuiltinExceptionCodeProvider
+          - disableExceptionCode
+          - disableStrictCallActivityValidation
+          - dmnReturnBlankTableOutputAsNull
+          - enableExceptionsAfterUnhandledBpmnError
+          - enableGracefulDegradationOnContextSwitchFailure
+          - enableOptimisticLockingOnForeignKeyViolation
+          - enableXxeProcessing
+          - executionTreePrefetchEnabled
+          - idBlockSize
+          - implicitVariableUpdateDetectionEnabled
+          - invokeCustomVariableListeners
+          - javaSerializationFormatEnabled
+          - jdbcBatchProcessing
+          - jdbcStatementTimeout
+          - queryMaxResultsLimit
+          - skipIsolationLevelCheck
+          - skipOutputMappingOnCanceledActivities
+        reason: >-
+          How the engine behaves inside and how fast it is: caches, blocks of ids, JDBC statements,
+          limits of serialization and XML parsing, and similar. The adapter is built and tested with
+          the defaults of the engine. An application which needs another value sets it with a
+          ProcessEnginePlugin: as a bean on Spring Boot, or as a class under
+          'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+  starter:
+    supported:
+      - names: [camunda.bpm.database.schema-update]
+        key: vanillabp.adapters.<id>.database-schema-update
+      - names: [camunda.bpm.database.table-prefix]
+        key: vanillabp.adapters.<id>.table-prefix
+      - names: [camunda.bpm.default-serialization-format]
+        key: vanillabp.adapters.<id>.serialization-format
+      - names: [camunda.bpm.metrics.db-reporter-activate]
+        key: vanillabp.adapters.<id>.db-metrics-reporting
+      - names: [camunda.bpm.admin-user.id]
+        key: vanillabp.adapters.<id>.webapps.admin-user.id (module spring-boot-webapps)
+      - names: [camunda.bpm.admin-user.password]
+        key: vanillabp.adapters.<id>.webapps.admin-user.password (module spring-boot-webapps)
+      - names: [camunda.bpm.admin-user.first-name]
+        key: vanillabp.adapters.<id>.webapps.admin-user.first-name (module spring-boot-webapps)
+      - names: [camunda.bpm.admin-user.last-name]
+        key: vanillabp.adapters.<id>.webapps.admin-user.last-name (module spring-boot-webapps)
+      - names: [camunda.bpm.admin-user.email]
+        key: vanillabp.adapters.<id>.webapps.admin-user.email (module spring-boot-webapps)
+      - names:
+          - camunda.bpm.webapp.application-path
+          - camunda.bpm.webapp.auth.cache.time-to-live
+          - camunda.bpm.webapp.auth.cache.ttl-enabled
+          - camunda.bpm.webapp.csrf.cookie-name
+          - camunda.bpm.webapp.csrf.deny-status
+          - camunda.bpm.webapp.csrf.enable-same-site-cookie
+          - camunda.bpm.webapp.csrf.enable-secure-cookie
+          - camunda.bpm.webapp.csrf.entry-points
+          - camunda.bpm.webapp.csrf.init-params
+          - camunda.bpm.webapp.csrf.random-class
+          - camunda.bpm.webapp.csrf.same-site-cookie-option
+          - camunda.bpm.webapp.csrf.same-site-cookie-value
+          - camunda.bpm.webapp.csrf.target-origin
+          - camunda.bpm.webapp.header-security.content-security-policy-disabled
+          - camunda.bpm.webapp.header-security.content-security-policy-value
+          - camunda.bpm.webapp.header-security.content-type-options-disabled
+          - camunda.bpm.webapp.header-security.content-type-options-value
+          - camunda.bpm.webapp.header-security.hsts-disabled
+          - camunda.bpm.webapp.header-security.hsts-include-subdomains-disabled
+          - camunda.bpm.webapp.header-security.hsts-max-age
+          - camunda.bpm.webapp.header-security.hsts-value
+          - camunda.bpm.webapp.header-security.init-params
+          - camunda.bpm.webapp.header-security.xss-protection-disabled
+          - camunda.bpm.webapp.header-security.xss-protection-option
+          - camunda.bpm.webapp.header-security.xss-protection-value
+          - camunda.bpm.webapp.index-redirect-enabled
+          - camunda.bpm.webapp.security-config-file
+          - camunda.bpm.webapp.session-cookie.cookie-name
+          - camunda.bpm.webapp.session-cookie.enable-same-site-cookie
+          - camunda.bpm.webapp.session-cookie.enable-secure-cookie
+          - camunda.bpm.webapp.session-cookie.init-params
+          - camunda.bpm.webapp.session-cookie.same-site-cookie-option
+          - camunda.bpm.webapp.session-cookie.same-site-cookie-value
+          - camunda.bpm.webapp.webjar-classpath
+        key: >-
+          camunda.bpm.webapp.*, the key itself. The module spring-boot-webapps binds the properties of
+          the starter, so the webapp auto-configuration of Camunda reads these keys as they are.
+          Spring Boot only.
+    set-by-adapter:
+      - names: [camunda.bpm.enabled]
+        reason: >-
+          The module spring-boot-webapps sets it to false, because VanillaBP builds the engines. The
+          auto-configuration of the starter would build a second engine on the same datasource.
+      - names:
+          - camunda.bpm.generate-unique-process-engine-name
+          - camunda.bpm.process-engine-name
+        reason: >-
+          The adapter names the engine after the adapter type and the adapter id, so that the engines
+          of several adapter ids stay apart.
+      - names:
+          - camunda.bpm.job-execution.core-pool-size
+          - camunda.bpm.job-execution.enabled
+          - camunda.bpm.job-execution.keep-alive-seconds
+          - camunda.bpm.job-execution.max-pool-size
+          - camunda.bpm.job-execution.queue-capacity
+        reason: >-
+          The adapter brings its own job executor with its own thread pool, and starts it when
+          workflow processing starts.
+      - names:
+          - camunda.bpm.auto-deployment-enabled
+          - camunda.bpm.deployment-resource-pattern
+        reason: VanillaBP deploys the models of each workflow module itself.
+    not-supported:
+      - names:
+          - camunda.bpm.generic-properties.ignore-unknown-fields
+          - camunda.bpm.generic-properties.properties
+        reason: >-
+          The starter's way to set any setting of the engine by its name. The adapter does not use the
+          starter to build its engine. An application which needs another value sets it with a
+          ProcessEnginePlugin: as a bean on Spring Boot, or as a class under
+          'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - camunda.bpm.authorization.authorization-check-revokes
+          - camunda.bpm.authorization.enabled
+          - camunda.bpm.authorization.enabled-for-custom-code
+          - camunda.bpm.authorization.tenant-check-enabled
+        reason: >-
+          Authorizations protect the APIs of the engine against a logged-in user, as in the web
+          applications. The adapter calls the engine without a logged-in user. An application which
+          needs another value sets it with a ProcessEnginePlugin: as a bean on Spring Boot, or as a
+          class under 'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - camunda.bpm.history-level
+          - camunda.bpm.history-level-default
+        reason: >-
+          The adapter works with the history level the engine has by default. An application which
+          needs another value sets it with a ProcessEnginePlugin: as a bean on Spring Boot, or as a
+          class under 'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - camunda.bpm.database.jdbc-batch-processing
+          - camunda.bpm.database.schema-name
+          - camunda.bpm.database.type
+          - camunda.bpm.default-number-of-retries
+          - camunda.bpm.id-generator
+          - camunda.bpm.job-executor-acquire-by-priority
+          - camunda.bpm.metrics.enabled
+        reason: >-
+          Settings of the engine which keep their defaults; the engine surface of this file says why
+          for each of them. An application which needs another value sets it with a
+          ProcessEnginePlugin: as a bean on Spring Boot, or as a class under
+          'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - camunda.bpm.job-execution.backoff-decrease-threshold
+          - camunda.bpm.job-execution.backoff-time-in-millis
+          - camunda.bpm.job-execution.deployment-aware
+          - camunda.bpm.job-execution.lock-time-in-millis
+          - camunda.bpm.job-execution.max-backoff
+          - camunda.bpm.job-execution.max-jobs-per-acquisition
+          - camunda.bpm.job-execution.max-wait
+          - camunda.bpm.job-execution.wait-increase-factor
+          - camunda.bpm.job-execution.wait-time-in-millis
+        reason: >-
+          How the job executor acquires and locks jobs. The adapter's job executor works with the
+          defaults of the engine. An application which needs another value sets it with a
+          ProcessEnginePlugin: as a bean on Spring Boot, or as a class under
+          'vanillabp.adapters.<id>.engine-plugins' on both platforms.
+      - names:
+          - camunda.bpm.eventing.execution
+          - camunda.bpm.eventing.history
+          - camunda.bpm.eventing.skippable
+          - camunda.bpm.eventing.task
+        reason: >-
+          The starter publishes engine events as Spring events. The adapter does not use the starter,
+          and VanillaBP reports what happens in a workflow through its own listeners.
+      - names: [camunda.bpm.filter.create]
+        reason: >-
+          Creates a filter for the tasklist on the first start. The adapter does not use the starter,
+          and an application creates its filters in the tasklist.
+      - names: [camunda.bpm.license-file]
+        reason: >-
+          Only for the enterprise edition of the web applications, and the adapter does not use the
+          starter.
+      - names: [camunda.bpm.generate-unique-process-application-name]
+        reason: VanillaBP does not use process applications.
+      - names:
+          - camunda.bpm.rest-api.fetch-and-lock.init-params
+          - camunda.bpm.rest-api.fetch-and-lock.queue-capacity
+          - camunda.bpm.rest-api.fetch-and-lock.unique-worker-request
+        reason: Settings of the REST API of the engine, which is not part of the adapter.
