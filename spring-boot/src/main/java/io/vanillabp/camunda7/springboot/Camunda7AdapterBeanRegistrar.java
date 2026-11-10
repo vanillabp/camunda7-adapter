@@ -80,6 +80,15 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
         Camunda7AdapterConfiguration.ADAPTER_TYPE,
         camunda7AdapterIds::add);
 
+    // a key of Camunda's Spring Boot starter which nobody reads any more would change
+    // nothing, and nobody would notice. So it ends the start, with what to write instead
+    if (!camunda7AdapterIds.isEmpty()) {
+      Camunda7VersionOneKeys.endTheStartOnKeysOfVersionOne(
+          camunda7AdapterIds,
+          propertyNames(environment),
+          Camunda7VersionOneKeys.webappsModuleIsPresent(Camunda7AdapterBeanRegistrar.class.getClassLoader()));
+    }
+
     camunda7AdapterIds
         .forEach(adapterId -> {
 
@@ -95,9 +104,9 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 return new Camunda7EngineHolder(
                     adapterId, engineProperties, usesNamedDataSource
                         ? null
-                        : applicationBean(supplierContext, DataSource.class, adapterId), usesNamedDataSource
+                        : () -> applicationBean(supplierContext, DataSource.class, adapterId), usesNamedDataSource
                             ? null
-                            : applicationBean(supplierContext, PlatformTransactionManager.class,
+                            : () -> applicationBean(supplierContext, PlatformTransactionManager.class,
                                 adapterId), supplierContext
                                     .bean(WorkflowTaskInvoker.class), supplierContext
                                         .beanProvider(
@@ -273,11 +282,32 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
   }
 
   /**
+   * The names of every property a configuration file or a property source with a list of
+   * names holds. A source which cannot list its names is skipped.
+   */
+  private static List<String> propertyNames(
+      final Environment environment) {
+
+    if (!(environment instanceof org.springframework.core.env.ConfigurableEnvironment configurable)) {
+      return List.of();
+    }
+    return configurable
+        .getPropertySources()
+        .stream()
+        .filter(org.springframework.core.env.EnumerablePropertySource.class::isInstance)
+        .flatMap(source -> java.util.Arrays
+            .stream(((org.springframework.core.env.EnumerablePropertySource<?>) source).getPropertyNames()))
+        .toList();
+
+  }
+
+  /**
    * Resolves a bean the application provides. If that fails, it fails with a GUIDING
    * message, not with a bean-wiring error. The embedded engine needs a {@code DataSource}
    * and a {@code PlatformTransactionManager}. A configured adapter without a database is a
    * configuration defect. The developer has to learn about it with the remedy named, not
-   * through a {@code NoSuchBeanDefinitionException}.
+   * through a {@code NoSuchBeanDefinitionException}. Several datasources are refused before
+   * this is asked, see {@link io.vanillabp.camunda7.springboot.engine.Camunda7EngineDatabase#choose}.
    *
    * @param <S> The bean type
    * @param supplierContext The bean supplier context
@@ -289,23 +319,6 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
       final BeanRegistry.SupplierContext supplierContext,
       final Class<S> beanType,
       final String adapterId) {
-
-    // several datasources available: VanillaBP does not guess which one the engine runs
-    // on. Not even a @Primary bean decides it, because an embedded engine writes its
-    // ACT_* tables into whatever database it gets
-    final var availableBeanNames = availableBeanNames(supplierContext, beanType);
-    if ((availableBeanNames.size() > 1) && DataSource.class.equals(beanType)) {
-      throw new IllegalStateException(
-          """
-              Camunda 7 adapter '%s' runs embedded and needs a database, but the application \
-              provides SEVERAL DataSource beans: '%s'. Name the one this adapter id runs on:
-                vanillabp.adapters.%s.data-source-name: <bean name>
-              Use the reserved value 'default' for the application's default (primary) datasource. \
-              (Two adapter ids may also share one datasource if each uses its own \
-              'vanillabp.adapters.<id>.table-prefix' - Camunda does not create prefixed tables, so \
-              those have to exist beforehand.)"""
-              .formatted(adapterId, String.join("', '", availableBeanNames), adapterId));
-    }
 
     final var bean = supplierContext
         .beanProvider(beanType)
@@ -351,27 +364,6 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
             "vanillabp.adapters.%s.%s".formatted(adapterId, key),
             Bindable.of(String.class))
         .orElse(null);
-
-  }
-
-
-  /**
-   * The NAMES of all beans of the given type. The lookup reads bean types only and creates
-   * no bean. The list is empty if the bean factory cannot be reached. Then the ambiguity
-   * check does not fire.
-   */
-  private static List<String> availableBeanNames(
-      final BeanRegistry.SupplierContext supplierContext,
-      final Class<?> beanType) {
-
-    try {
-      return List.of(
-          supplierContext
-              .bean(org.springframework.context.ApplicationContext.class)
-              .getBeanNamesForType(beanType, true, false));
-    } catch (final RuntimeException e) {
-      return List.of();
-    }
 
   }
 

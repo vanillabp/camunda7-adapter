@@ -298,7 +298,11 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   application-provided `DataSource` bean. Then the engine runs on that bean's datasource
   with an adapter-internal transaction manager (see the transaction caveat above). The
   adapter never builds a pool. If the bean is missing, the boot fails and lists the
-  available `DataSource` beans,
+  available `DataSource` beans. Without `data-source-name`, a bean `camundaBpmDataSource`
+  and a bean `camundaBpmTransactionManager` take the place of the application's beans, as
+  they did in version 1. `Camunda7EngineDatabase#choose` says what differs from version 1
+  and why, and `Camunda7VersionOneDataSourceTest` holds each case. Whether the engine joins
+  the caller's transaction follows the datasource it really gets, not the key,
 - creates or upgrades its schema on boot (`database-schema-update`, default `true`),
 - loads the classes a model names, Java-serialized values and scripts through the class
   loader of the application context, as version 1 did. Otherwise the engine would fall back
@@ -326,6 +330,18 @@ id brings its own datasource. A Camunda 7 application always needs a database.
 `Camunda7AdapterBootTest#configuredAdapterWithoutDataSourceFailsWithGuidingMessage`
 tests that message. `Camunda7UnknownDataSourceNameTest` tests the message for a
 `data-source-name` which names nothing.
+
+A key of Camunda's Spring Boot starter (`camunda.bpm.*`) ends the start, and the message says
+for each key what to write instead. Version 1 let the starter build the engine, so an upgraded
+application may still have such keys, and they would change nothing. `Camunda7VersionOneKeys`
+holds the table of keys. A rule whose text says that version 2 has no key yet gets the new key
+written in when a story adds one. The keys which the module `spring-boot-webapps` really
+reads are left alone: `camunda.bpm.webapp.*` and `camunda.bpm.enabled`. That list was measured
+from the bytecode of `camunda-bpm-spring-boot-starter-webapp-core` 7.24: its auto-configuration
+calls only `CamundaBpmProperties#getWebapp`, and its condition reads
+`camunda.bpm.webapp.enabled`. The starter's `PropertiesListener` also writes
+`camunda.bpm.version`, `camunda.bpm.is-enterprise` and `camunda.bpm.formatted-version` into
+the environment, so these are never the application's.
 
 ### What an extension may add to the engine
 
