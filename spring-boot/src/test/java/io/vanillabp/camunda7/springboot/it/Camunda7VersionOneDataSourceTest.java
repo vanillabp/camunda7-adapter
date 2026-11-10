@@ -281,6 +281,69 @@ public class Camunda7VersionOneDataSourceTest {
 
   }
 
+  /**
+   * The deployment pipeline compares two adapter ids for the database they share. It has to
+   * compare the datasource the engine really gets. Here the key of 'c7' names nothing, and
+   * still its engine runs on <code>camundaBpmDataSource</code>, like the engine of 'c7-two'.
+   */
+  @Test
+  @DisplayName("An id on camundaBpmDataSource without a key and an id which names it share one database")
+  public void anIdOnCamundaBpmDataSourceAndAnIdNamingItShareOneDatabase() {
+
+    final var engine = h2("v1-ds-shared-engine");
+    this.contextRunner
+        .withConfiguration(AutoConfigurations.of(io.vanillabp.integration.deployment.DeploymentAutoConfiguration.class))
+        .withBean("dataSource", DataSource.class, () -> h2("v1-ds-shared-app"), definition -> definition
+            .setPrimary(true))
+        .withBean("camundaBpmDataSource", DataSource.class, () -> engine)
+        .withPropertyValues(twoAdapterIds("camundaBpmDataSource"))
+        .run(context -> {
+
+          final var message = rootCauseMessage(context.getStartupFailure());
+          Assertions.assertTrue(message.contains("The Camunda 7 adapters 'c7', 'c7-two' would run on the SAME engine "
+              + "database (datasource camundaBpmDataSource, table prefix <no table prefix>)"), () -> message);
+
+        });
+
+  }
+
+  /**
+   * The application's default datasource has a bean name, too. An id which names it runs on
+   * the same database as an id which names no datasource.
+   */
+  @Test
+  @DisplayName("An id which names the default datasource by its bean name shares it with an id without a key")
+  public void anIdNamingTheDefaultDataSourceSharesIt() {
+
+    this.contextRunner
+        .withConfiguration(AutoConfigurations.of(io.vanillabp.integration.deployment.DeploymentAutoConfiguration.class))
+        .withPropertyValues(twoAdapterIds("dataSource"))
+        .withPropertyValues("spring.datasource.url=jdbc:h2:mem:v1-ds-shared-default;DB_CLOSE_DELAY=-1")
+        .run(context -> {
+
+          final var message = rootCauseMessage(context.getStartupFailure());
+          Assertions.assertTrue(message.contains("The Camunda 7 adapters 'c7', 'c7-two' would run on the SAME engine "
+              + "database (datasource <the application's default datasource>, table prefix <no table prefix>)"),
+              () -> message);
+
+        });
+
+  }
+
+  /**
+   * The id 'c7' of application.yaml names no datasource. A second id 'c7-two' names the
+   * given one.
+   */
+  private static String[] twoAdapterIds(
+      final String dataSourceNameOfTheSecondId) {
+
+    return new String[]{
+        "spring.config.location=classpath:application.yaml", "vanillabp.prioritized-adapters=c7,c7-two", "vanillabp.adapters.c7-two.type=camunda7", "vanillabp.adapters.c7-two.data-source-name="
+            + dataSourceNameOfTheSecondId, "vanillabp.workflow-modules.c7-smoke-test.adapters.c7-two.resources-location=classpath*:c7-smoke-test/processes-two"
+    };
+
+  }
+
   private static String rootCauseMessage(
       final Throwable startupFailure) {
 

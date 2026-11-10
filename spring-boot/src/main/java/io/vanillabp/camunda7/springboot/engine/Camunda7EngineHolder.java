@@ -94,6 +94,16 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   private boolean ownDataSource;
 
   /**
+   * What makes this engine a different one from the engine of another adapter id: the
+   * datasource it really runs on and its table prefix. It is built from the datasource the
+   * engine gets, not from the key. An id without <code>data-source-name</code> may run on
+   * a bean <code>camundaBpmDataSource</code>, and an id may name the application's default
+   * datasource by its bean name. Both share a database with another id without the key
+   * saying so. It is known once {@link #afterPropertiesSet()} chose the datasource.
+   */
+  private io.vanillabp.camunda7.engine.Camunda7InstanceIdentity instanceIdentity;
+
+  /**
    * {@code SpringProcessEngineConfiguration} needs it to resolve Spring beans in scripts
    * and expressions. A named datasource bean is resolved through it, too. It is injected
    * through {@link ApplicationContextAware}. The engine is built in
@@ -281,6 +291,8 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     // every listener building an invocation context has to know whose transaction it
     // delivers in, and the datasource this engine really runs on is what decides it
     this.taskRegistry.setEngineRunsOnItsOwnDataSource(ownDataSource);
+    this.instanceIdentity = new io.vanillabp.camunda7.engine.Camunda7InstanceIdentity(
+        nameOfTheDataSource(dataSource), properties.getTablePrefix());
 
     // an adapter id which runs on a table prefix needs its tables to exist. Camunda's
     // schema management ignores the prefix and would create a set of unprefixed ACT_*
@@ -456,6 +468,53 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
                   adapterId,
                   String.join(", ", applicationContext.getBeanNamesForType(DataSource.class))), e);
     }
+
+  }
+
+  /**
+   * The bean name of the datasource the engine runs on, so that two adapter ids on one
+   * datasource compare equal whatever their keys say. The application's default datasource
+   * has no name here. It is the one Spring injects by type, and an id without a
+   * <code>data-source-name</code> on it, or with the bean name of it, is the same engine.
+   *
+   * @param dataSource The datasource the engine gets
+   * @return The bean name, or <code>null</code> for the application's default datasource
+   */
+  private String nameOfTheDataSource(
+      final DataSource dataSource) {
+
+    if (applicationContext
+        .getBeanProvider(DataSource.class)
+        .getIfUnique() == dataSource) {
+      return null;
+    }
+    for (final var name : applicationContext.getBeanNamesForType(DataSource.class)) {
+      try {
+        if (applicationContext.getBean(name, DataSource.class) == dataSource) {
+          return name;
+        }
+      } catch (final BeansException e) {
+        // a datasource which cannot be created is not the one the engine got
+      }
+    }
+    // only a datasource which is no bean of this context gets here, and it is the one the
+    // key names
+    return properties.usesSeparateDataSource()
+        ? properties.getDataSourceName()
+        : Camunda7EngineDatabase.VERSION_ONE_DATA_SOURCE;
+
+  }
+
+  /**
+   * What makes this engine a different one from the engines of other adapter ids. The
+   * deployment service compares it at startup (see
+   * {@link io.vanillabp.camunda7.engine.Camunda7InstanceIdentity}).
+   *
+   * @return The datasource the engine really runs on and its table prefix
+   */
+  public io.vanillabp.camunda7.engine.Camunda7InstanceIdentity getInstanceIdentity() {
+
+    return instanceIdentity;
 
   }
 

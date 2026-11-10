@@ -10,7 +10,6 @@ import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.beans.factory.BeanRegistrar;
 import org.springframework.beans.factory.BeanRegistry;
-import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -170,8 +169,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 final var engine = engineHolder(supplierContext, adapterId);
                 final var deploymentService = new Camunda7DeploymentService(
                     adapterId, engine.getRepositoryService(), engine, AdapterBeanRegistrarSupport
-                        .collaborators(supplierContext, adapterId), engine.getTaskRegistry(), id -> instanceIdentityOf(
-                            environment, id));
+                        .collaborators(supplierContext,
+                            adapterId), engine.getTaskRegistry(), instanceIdentities(supplierContext));
                 deploymentService.setEngineDeliversWorkflowEnded(engine.deliversWorkflowEnded());
                 deploymentService.setConfiguredTenants(
                     configuredTenantsOf(supplierContext.bean(VanillaBpCamunda7Properties.class), adapterId));
@@ -339,34 +338,28 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
   }
 
   /**
-   * What makes an adapter id a distinct engine: its datasource and table prefix (see
-   * {@link Camunda7InstanceIdentity}). It is read from the environment, because the check
-   * runs before the engine beans exist and does not depend on them.
+   * What makes an adapter id a distinct engine: the datasource its engine really runs on,
+   * and its table prefix (see {@link Camunda7InstanceIdentity}). It is asked of the engine
+   * holders, not read from the keys. A bean <code>camundaBpmDataSource</code> takes the
+   * place of the default datasource without any key, and a <code>data-source-name</code>
+   * may name the default datasource by its bean name. The check of the deployment pipeline
+   * would miss both, if it compared keys.
    */
-  private static Camunda7InstanceIdentity instanceIdentityOf(
-      final Environment environment,
-      final String adapterId) {
+  private static java.util.function.Function<String, Camunda7InstanceIdentity> instanceIdentities(
+      final BeanRegistry.SupplierContext supplierContext) {
 
-    return new Camunda7InstanceIdentity(
-        adapterProperty(environment, adapterId, "data-source-name"), adapterProperty(environment, adapterId,
-            "table-prefix"));
-
-  }
-
-  private static String adapterProperty(
-      final Environment environment,
-      final String adapterId,
-      final String key) {
-
-    return Binder
-        .get(environment)
-        .bind(
-            "vanillabp.adapters.%s.%s".formatted(adapterId, key),
-            Bindable.of(String.class))
-        .orElse(null);
+    final var engineHolders = supplierContext.beanProvider(Camunda7EngineHolder.class);
+    return adapterId -> engineHolders
+        .stream()
+        .filter(holder -> holder
+            .getAdapterId()
+            .equals(adapterId))
+        .findFirst()
+        .map(Camunda7EngineHolder::getInstanceIdentity)
+        .orElseThrow(() -> new IllegalStateException(
+            "There is no Camunda 7 engine for the adapter id '%s'".formatted(adapterId)));
 
   }
-
 
   /**
    * The configured tenant of each workflow module. It is read per workflow module

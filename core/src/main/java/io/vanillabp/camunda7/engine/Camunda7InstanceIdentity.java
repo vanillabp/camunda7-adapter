@@ -24,9 +24,12 @@ import io.vanillabp.integration.adapter.spi.AddressedSystem;
  * {@link Camunda7TablePrefixSchema}.</li>
  * </ul>
  *
- * @param dataSourceName The configured datasource name or <code>null</code> for the
- *          application's default datasource. The reserved name <code>default</code> means
- *          the default datasource as well
+ * @param dataSourceName The name of the datasource the engine runs on, or <code>null</code>
+ *          for the application's default datasource. The reserved name <code>default</code>
+ *          means the default datasource as well. On Spring Boot it is the bean name of the
+ *          datasource the engine really gets, not the key. A bean
+ *          <code>camundaBpmDataSource</code> takes the place of the default datasource without
+ *          a key, and a key may name the default datasource by its bean name
  * @param tablePrefix The configured engine table prefix or <code>null</code> for
  *          the engine's default (no prefix)
  */

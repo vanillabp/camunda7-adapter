@@ -78,7 +78,10 @@ own or a [table prefix of its own](#two-engines-on-one-database-table-prefix). O
 fails with a guiding message. `Camunda7AdapterBootTest#twoAdapterIdsOfTypeCamunda7YieldPerIdEnginesAndBeans`
 and `#twoAdapterIdsSharingTheSameDataSourceFailWithGuidingMessage` test both halves on Spring
 Boot, `Camunda7SameDataSourceValidationTest` on Quarkus. `Camunda7InstanceIdentityTest` tests
-the comparison itself.
+the comparison itself. On Spring Boot the comparison takes the datasource each engine really
+runs on, not the key. An id without `data-source-name` may run on a bean `camundaBpmDataSource`,
+and a key may name the default datasource by its bean name. `Camunda7VersionOneDataSourceTest`
+holds both cases.
 
 Settings per adapter id. All are optional and live at the canonical location
 `vanillabp.adapters.<adapter-id>.*`:
