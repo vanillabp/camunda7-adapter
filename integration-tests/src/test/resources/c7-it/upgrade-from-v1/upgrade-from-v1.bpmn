@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A model the way a version 1 application wrote it. Version 1 did not hand the business
+     key into a call activity, so the model does it itself. The test deploys this file
+     unchanged, the way version 1 did, before version 2 boots. Then version 2 deploys the
+     same file. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_UpgradeFromV1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_UpgradeFromV1Cancel" name="UpgradeFromV1Cancel" />
+  <bpmn:process id="UpgradeFromV1Process" isExecutable="true">
+    <bpmn:startEvent id="UFV_Start">
+      <bpmn:outgoing>UFV_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="UFV_f1" sourceRef="UFV_Start" targetRef="UFV_Review" />
+    <!-- where a workflow of version 1 stands while the application is upgraded -->
+    <bpmn:userTask id="UFV_Review" camunda:formKey="upgradeFromV1Review">
+      <bpmn:incoming>UFV_f1</bpmn:incoming>
+      <bpmn:outgoing>UFV_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="UFV_CancelReview" attachedToRef="UFV_Review">
+      <bpmn:outgoing>UFV_f5</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="UFV_CancelDef" messageRef="Msg_UpgradeFromV1Cancel" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="UFV_f5" sourceRef="UFV_CancelReview" targetRef="UFV_CanceledEnd" />
+    <bpmn:endEvent id="UFV_CanceledEnd">
+      <bpmn:incoming>UFV_f5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="UFV_f2" sourceRef="UFV_Review" targetRef="UFV_Calc" />
+    <bpmn:serviceTask id="UFV_Calc" camunda:delegateExpression="${upgradeFromV1Calc}">
+      <bpmn:incoming>UFV_f2</bpmn:incoming>
+      <bpmn:outgoing>UFV_f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="UFV_f3" sourceRef="UFV_Calc" targetRef="UFV_CallEach" />
+    <!-- the called process continues this workflow, once per iteration -->
+    <bpmn:callActivity id="UFV_CallEach" calledElement="UpgradeFromV1Child">
+      <bpmn:extensionElements>
+        <camunda:in businessKey="#{execution.processBusinessKey}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>UFV_f3</bpmn:incoming>
+      <bpmn:outgoing>UFV_f4</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:loopCardinality>2</bpmn:loopCardinality>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:callActivity>
+    <bpmn:sequenceFlow id="UFV_f4" sourceRef="UFV_CallEach" targetRef="UFV_End" />
+    <bpmn:endEvent id="UFV_End">
+      <bpmn:incoming>UFV_f4</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="UpgradeFromV1Child" isExecutable="true">
+    <bpmn:startEvent id="UFVC_Start">
+      <bpmn:outgoing>UFVC_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="UFVC_f1" sourceRef="UFVC_Start" targetRef="UFVC_Task" />
+    <bpmn:serviceTask id="UFVC_Task" camunda:expression="${upgradeFromV1ChildTask}">
+      <bpmn:incoming>UFVC_f1</bpmn:incoming>
+      <bpmn:outgoing>UFVC_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="UFVC_f2" sourceRef="UFVC_Task" targetRef="UFVC_End" />
+    <bpmn:endEvent id="UFVC_End">
+      <bpmn:incoming>UFVC_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

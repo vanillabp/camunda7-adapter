@@ -83,6 +83,25 @@ The ids have no key. If you had set `camunda.bpm.id-generator` to another value 
 ids are UUIDs now. The engine does not mind ids of two forms in one table, so the old ones stay
 valid.
 
+### The first start deploys every model again
+
+On its first start, version 2 deploys every BPMN file of a workflow module as a new version, also
+a file you did not change. Camunda's duplicate filter compares a model only with the last
+deployment of the same name, source and tenant. The name and the tenant stay the same, both are the
+workflow module id. The source changes. Version 1 wrote `spring.application.name` into it.
+Version 2 writes `<adapter-id>:<workflow-module-id>`, for example `camunda7:loan-approval`.
+
+The version would change even with the old source. Version 2 does not deploy the bytes of your
+file. It deploys the model it prepared. A call activity whose called process works on the same
+workflow aggregate gets the business key handed over and a note which says so. Then the model is
+written out again, and even a model nothing was added to comes out with other bytes.
+
+The new version does what the old one did. New workflows start on it. Workflows which version 1
+started stay on their version, and version 2 serves them to their end: their tasks, the events of
+their user tasks, a cancellation and `@WorkflowEnded`. You do not have to migrate them. Until the
+last of them has ended, the start says that workflows still run on an older version. A report or a
+Cockpit filter which looks at one version number finds the new workflows under the new number.
+
 ### A message starts only the process of its own `ProcessService`
 
 Version 1 correlated the message of `startWorkflowByMessage` with the engine's

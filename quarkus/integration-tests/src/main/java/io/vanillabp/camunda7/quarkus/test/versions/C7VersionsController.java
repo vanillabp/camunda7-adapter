@@ -54,7 +54,7 @@ public class C7VersionsController {
         // with the latest file of the same name. So the next boot finds the old model there
         // and deploys the new one again, as version 3. It does not take it for a duplicate
         .name("c7-versions")
-        .source("camunda7:c7")
+        .source(io.vanillabp.camunda7.wiring.Camunda7DeploymentSource.of("c7", "c7-versions"))
         .tenantId("c7-versions")
         .addInputStream(
             "old-process-versions.bpmn",

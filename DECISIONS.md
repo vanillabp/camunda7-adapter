@@ -405,14 +405,14 @@ The hard part is not the query. It is to tell a foreign holder apart from this a
 history. The adapter can ask about the Camunda deployment, and the part of its stamp which helps is
 the NAME. Every VanillaBP generation deploys a workflow module under the module's own id, version 1
 included. Version 1 wrote the application name into the source, where this adapter writes the
-adapter type and the adapter id. So one query finds the deployments named after the module being
+adapter id and the workflow module id, as `<adapter id>:<workflow module id>`. So one query finds the deployments named after the module being
 deployed, and a definition which belongs to one of them says nothing. Reading the source instead
 would report every definition of an application which upgrades from version 1, on its first start
 and on every start after it.
 
 A definition under another deployment name is reported, and the source then says how sure the
-adapter can be. If the source names a Camunda 7 adapter of VanillaBP, the report is not certain.
-Another adapter id is what a migration between two engines looks like, and another workflow module
+adapter can be. If the source ends with `:` and the deployment's name, a VanillaBP adapter wrote
+it, and the report is not certain. Another adapter id is what a migration between two engines looks like, and another workflow module
 of this application also writes its own name. Any other source was written by something else, like
 a modelling tool or an application which deploys its models itself. That one is reported as
 certainly foreign.

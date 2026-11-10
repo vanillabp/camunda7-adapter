@@ -1257,7 +1257,8 @@ The Camunda deployment NAME tells a foreign holder apart from this application's
 deployment. Every VanillaBP generation, version 1 included, deploys a workflow module under the
 module's own id. So a deployment with that name is our own history and says nothing. A definition
 deployed under another name is reported. The deployment source then says how sure the adapter is.
-A source of `camunda7:<adapter-id>` means another adapter id or another workflow module. That may
+This adapter writes `<adapter-id>:<workflow-module-id>` into the source. A source of that form
+means another adapter id or another workflow module. That may
 be this very application, and the warning says so. Any other source was written by something else,
 and the finding is certainly foreign. A second application which deploys a workflow module of the
 same id stays invisible, because no column of the engine's deployment table names an application.

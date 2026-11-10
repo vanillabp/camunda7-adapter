@@ -2767,9 +2767,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     var deploymentBuilder = repositoryService
         .createDeployment()
         .name(workflowModuleId)
-        .source(ADAPTER_TYPE
-            + ":"
-            + adapterId)
+        // see decision 17 in the repository's DECISIONS.md
+        .source(io.vanillabp.camunda7.wiring.Camunda7DeploymentSource.of(adapterId, workflowModuleId))
         .enableDuplicateFiltering(true);
     if (tenantId != null) {
       deploymentBuilder = deploymentBuilder.tenantId(tenantId);
