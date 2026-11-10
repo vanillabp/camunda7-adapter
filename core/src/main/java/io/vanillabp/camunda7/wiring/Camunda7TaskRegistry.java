@@ -331,6 +331,29 @@ public class Camunda7TaskRegistry {
   }
 
   /**
+   * Per deployment, whether a VanillaBP adapter prepared its models. Version 1 did not.
+   */
+  private final Camunda7DeploymentSource.PreparedDeployments preparedDeployments = new Camunda7DeploymentSource.PreparedDeployments();
+
+  /**
+   * Whether a VanillaBP adapter prepared the models of a deployment before it deployed them.
+   * A model version 1 deployed was not prepared. So it carries none of the notes this adapter
+   * writes, for example the one on a call activity (see {@link Camunda7CallActivities}). The
+   * answer is kept per deployment, so the engine is asked once.
+   *
+   * @param repositoryService Where the deployment is looked up
+   * @param deploymentId The deployment id of a process definition
+   * @return Whether its models were prepared
+   */
+  public boolean preparedTheModelsOf(
+      final org.camunda.bpm.engine.RepositoryService repositoryService,
+      final String deploymentId) {
+
+    return preparedDeployments.prepared(repositoryService, deploymentId);
+
+  }
+
+  /**
    * Which workflow module a process definition key belongs to. It is the way back when
    * there is no tenant to ask (prefixed identifiers, see decision 3 in the repository's
    * DECISIONS.md). It holds only the modules which deploy without a tenant.

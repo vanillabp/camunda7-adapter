@@ -5,6 +5,8 @@ import org.springframework.stereotype.Service;
 
 import io.vanillabp.spi.process.ProcessService;
 import io.vanillabp.spi.service.BpmnProcess;
+import io.vanillabp.spi.service.MultiInstanceIndex;
+import io.vanillabp.spi.service.MultiInstanceTotal;
 import io.vanillabp.spi.service.TaskEvent;
 import io.vanillabp.spi.service.WorkflowEnd;
 import io.vanillabp.spi.service.WorkflowEnded;
@@ -74,9 +76,11 @@ public class UpgradeFromV1WorkflowService {
 
   @WorkflowTask(taskDefinition = "upgradeFromV1ChildTask")
   public void upgradeFromV1ChildTask(
-      final UpgradeFromV1Aggregate aggregate) {
+      final UpgradeFromV1Aggregate aggregate,
+      @MultiInstanceIndex("UFV_CallEach") final Integer index,
+      @MultiInstanceTotal("UFV_CallEach") final Integer total) {
 
-    aggregate.addIteration("ran");
+    aggregate.addIteration("%s/%s".formatted(index, total));
 
   }
 

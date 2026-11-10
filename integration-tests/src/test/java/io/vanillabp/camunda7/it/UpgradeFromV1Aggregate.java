@@ -27,7 +27,7 @@ public class UpgradeFromV1Aggregate {
   /** Whether the service task after the user task ran. */
   private boolean calculated;
 
-  /** What each run of the called process wrote, in order. */
+  /** The iteration of the caller each run of the called process was told about, like "0/2,1/2". */
   private String iterations = "";
 
   /** The end event the workflow ended at, as the application was told. */

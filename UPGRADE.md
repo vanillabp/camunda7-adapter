@@ -98,9 +98,10 @@ written out again, and even a model nothing was added to comes out with other by
 
 The new version does what the old one did. New workflows start on it. Workflows which version 1
 started stay on their version, and version 2 serves them to their end: their tasks, the events of
-their user tasks, a cancellation and `@WorkflowEnded`. You do not have to migrate them. Until the
-last of them has ended, the start says that workflows still run on an older version. A report or a
-Cockpit filter which looks at one version number finds the new workflows under the new number.
+their user tasks, a cancellation, `@WorkflowEnded`, and the iteration of a caller which a task of
+a called process asks for. You do not have to migrate them. Until the last of them has ended, the
+start says that workflows still run on an older version. A report or a Cockpit filter which looks
+at one version number finds the new workflows under the new number.
 
 ### A message starts only the process of its own `ProcessService`
 

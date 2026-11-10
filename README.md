@@ -442,6 +442,12 @@ Workflows which still run in an older version of a process need exactly that.
 `Camunda7MultiInstanceByExpressionIT` runs one model against the engine which names the same
 called process both ways. `Camunda7MultiInstancesAcrossCallActivitiesTest` tests the shapes.
 
+A model which version 1 deployed carries no note at all, because version 1 deployed the file as
+it was. A workflow version 1 started runs on such a model after the upgrade. So a missing note
+means "no" only where a VanillaBP adapter prepared the model. The deployment source tells this
+apart (`Camunda7DeploymentSource`). For a model of version 1 the walk asks the core, as for an
+expression. The answer is kept per deployment. `Camunda7UpgradeFromVersionOneIT` holds it.
+
 Both contexts of this adapter answer the walk: the one of a service-like task and the one of a
 user task. A user task is notified from a task listener. The engine hands that listener a
 `DelegateTask`, not an execution. So the levels were missing there, while every other kind of

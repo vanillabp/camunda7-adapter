@@ -174,9 +174,9 @@ public class Camunda7UpgradeFromVersionOneIT {
       final var completed = repository.findById(COMPLETED).orElseThrow();
       assertTrue(completed.isCalculated(), "the service task after the user task ran");
       assertEquals(
-          "ran,ran",
+          "0/2,1/2",
           completed.getIterations(),
-          "the called process ran once per iteration of its caller");
+          "each run of the called process was told the iteration of its caller");
       assertEquals("UFV_End", completed.getEndedAt(), "the application heard the end");
       assertNull(instanceOf(application, COMPLETED), "the workflow is over");
     } finally {
