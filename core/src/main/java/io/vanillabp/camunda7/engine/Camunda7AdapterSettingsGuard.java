@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
  * <code>true</code>. Then each changed setting gets a WARN and the start goes on. Any setting
  * which the adapter does not set itself stays free for a plugin. The list of settings is the
  * one which <code>client-configuration-inventory.yml</code> marks as {@code set-by-adapter}
- * on the engine surface. See {@code DECISIONS.pending/2119.md} in the repository.
+ * on the engine surface. See decision 61 in the repository's DECISIONS.md for why.
  */
 public final class Camunda7AdapterSettingsGuard {
 

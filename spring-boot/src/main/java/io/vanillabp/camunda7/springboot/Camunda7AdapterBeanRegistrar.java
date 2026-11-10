@@ -346,7 +346,7 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
    * holders, not read from the keys. A bean <code>camundaBpmDataSource</code> takes the
    * place of the default datasource without any key, and a <code>data-source-name</code>
    * may name the default datasource by its bean name. The check of the deployment pipeline
-   * would miss both, if it compared keys.
+   * would miss both, if it compared keys. See decision 60 in the repository's DECISIONS.md.
    */
   private static java.util.function.Function<String, Camunda7InstanceIdentity> instanceIdentities(
       final BeanRegistry.SupplierContext supplierContext) {

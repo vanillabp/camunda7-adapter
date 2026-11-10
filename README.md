@@ -81,7 +81,8 @@ Boot, `Camunda7SameDataSourceValidationTest` on Quarkus. `Camunda7InstanceIdenti
 the comparison itself. On Spring Boot the comparison takes the datasource each engine really
 runs on, not the key. An id without `data-source-name` may run on a bean `camundaBpmDataSource`,
 and a key may name the default datasource by its bean name. `Camunda7VersionOneDataSourceTest`
-holds both cases.
+holds both cases. See
+[decision 60](./DECISIONS.md#60-a-bean-camundabpmdatasource-is-the-engines-datasource-as-in-version-1-and-the-engine-behaves-by-the-datasource-it-really-gets).
 
 Settings per adapter id. All are optional and live at the canonical location
 `vanillabp.adapters.<adapter-id>.*`:
@@ -350,7 +351,7 @@ is reported with the plugin which made it. It ends the start, unless
 `vanillabp.adapters.<adapter-id>.allow-plugins-to-change-adapter-settings` is `true`. Then each
 change gets a WARN. A plugin may add entries to a list like the parse listeners, but it may not
 remove the adapter's. The history level is not watched, because it has a key of its own
-([`DECISIONS.pending/2119.md`](./DECISIONS.pending/2119.md) says why).
+([decision 61](./DECISIONS.md#61-an-engine-plugin-which-changes-a-setting-the-adapter-sets-ends-the-start-unless-a-key-allows-it) says why).
 `Camunda7AdapterSettingsGuardTest` holds the rules on a real engine,
 `Camunda7PluginChangingAnAdapterSettingIT` on Spring Boot, and
 `Camunda7PluginChangingAnAdapterSettingTest` and `Camunda7PluginAllowedToChangeAnAdapterSettingTest`

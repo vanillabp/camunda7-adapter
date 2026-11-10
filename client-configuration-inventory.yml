@@ -92,7 +92,7 @@ settings:
     # start. The message names the setting, the adapter's value and the plugin. With
     # 'vanillabp.adapters.<id>.allow-plugins-to-change-adapter-settings: true' the start goes on, with
     # a WARN for each changed setting. A plugin may add entries to a list, but it may not remove the
-    # adapter's. The watch is Camunda7AdapterSettingsGuard, see DECISIONS.pending/2119.md.
+    # adapter's. The watch is Camunda7AdapterSettingsGuard, see decision 61.
     set-by-adapter:
       - names:
           - applicationContext
