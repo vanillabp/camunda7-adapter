@@ -92,6 +92,8 @@ public class Camunda7VersionOneKeysTest {
         false,
         "server.port",
         "camunda.bpm.job-execution.core-pool-size",
+        "camunda.bpm.job-execution.deployment-aware",
+        "camunda.bpm.id-generator",
         "camunda.bpm.generic-properties.properties.enable-exceptions-after-unhandled-bpmn-error",
         "camunda.bpm.authorization.enabled",
         "camunda.bpm.default-number-of-retries",
@@ -111,6 +113,9 @@ public class Camunda7VersionOneKeysTest {
         + "application.";
     Assertions.assertTrue(message.contains("'camunda.bpm.job-execution.core-pool-size': "
         + noKeyYet), message);
+    // the adapter sets these two itself, so they need no key
+    Assertions.assertTrue(message.contains("'camunda.bpm.job-execution.deployment-aware': VanillaBP sets it"), message);
+    Assertions.assertTrue(message.contains("'camunda.bpm.id-generator': VanillaBP sets it"), message);
     Assertions.assertTrue(
         message.contains("'camunda.bpm.generic-properties.properties.enable-exceptions-after-unhandled-bpmn-error': "
             + noKeyYet),

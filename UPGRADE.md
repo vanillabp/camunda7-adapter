@@ -53,6 +53,8 @@ on every BPMS.
 
 For the same reason, beans of the engine's own types are no longer picked up. A
 `HistoryEventHandler`, a `JobHandler` or an `IdGenerator` in your application context stays unused.
+The ids are still UUIDs, because the adapter sets the generator which the starter used by default
+(see the next section).
 
 The engine is called `vanillabp-camunda7-<adapter-id>` now, not `default`. A Cockpit bookmark or a
 REST call with `default` in its path has to use the new name. A REST call without an engine in its
@@ -81,7 +83,35 @@ start ends with a message which names the key and both levels.
 
 The ids have no key. If you had set `camunda.bpm.id-generator` to another value in version 1, new
 ids are UUIDs now. The engine does not mind ids of two forms in one table, so the old ones stay
-valid.
+valid. Remove the key, because a `camunda.bpm.*` key ends the boot now (see the next section).
+
+### A `camundaBpmDataSource` works as before, and a `camunda.bpm.*` key ends the boot
+
+**A bean `camundaBpmDataSource` is the engine's datasource, as in version 1.** The same holds for a
+bean `camundaBpmTransactionManager`. Both count by their name or by a `@Qualifier` of that name,
+where the adapter id has no `data-source-name`. So an application which gave its engine a database
+of its own keeps it. There are three changes:
+
+- With several datasources, `camundaBpmDataSource` is the choice. Without it the boot ends and asks
+  for `vanillabp.adapters.<id>.data-source-name`.
+- A `camundaBpmDataSource` without a `camundaBpmTransactionManager` gets a transaction manager of
+  the adapter's own. Version 1 used your application's transaction manager there. That one does not
+  manage the engine's datasource, so the engine's statements were not committed together.
+- An engine on a `camundaBpmDataSource` which is not your default datasource does not join your
+  transactions. Its task deliveries are deduplicated, as on any datasource of its own. See the wiki
+  page *Configuration*, section "Choosing the datasource".
+
+**Every key of Camunda's Spring Boot starter ends the boot.** Version 1 let the starter build the
+engine, and the starter read `camunda.bpm.*`. Version 2 builds the engine itself and reads only
+`vanillabp.adapters.<id>.*`. A key left over from version 1 would change nothing, so the boot ends
+and lists every such key with what to write instead. For example, `camunda.bpm.history-level`
+becomes `vanillabp.adapters.<id>.history-level`, and `camunda.bpm.database.schema-update` becomes
+`vanillabp.adapters.<id>.database-schema-update`. For a setting which has no key in version 2,
+such as `camunda.bpm.job-execution.*` or `camunda.bpm.generic-properties.*`, the message points
+to a `ProcessEnginePlugin` bean of your application. The `camunda.bpm.eventing.*` keys have no
+successor on purpose: use `@WorkflowTask`, `@TaskEvent` and `@WorkflowEnded` instead. With the
+module `camunda7-adapter-spring-boot-webapps`, `camunda.bpm.webapp.*` and `camunda.bpm.enabled`
+are read and may stay.
 
 ### The first start deploys every model again
 
@@ -329,7 +359,7 @@ of the wiki have the details.
 Version 1 left `jobExecutorDeploymentAware` at the default of Camunda's starter, which is `false`. It
 was `true` only where you set `camunda.bpm.job-execution.deployment-aware: true`, as version 1's
 README recommended for a cluster. Version 2 always works deployment-aware, and there is no key to
-switch it off. The starter key has no effect any more.
+switch it off. Remove the starter key: like every `camunda.bpm.*` key, it ends the boot now.
 
 Like version 1, version 2 registers every earlier deployment of your workflow module when it starts.
 It finds them by the module's id as the deployment name and by the module's tenant. So the
@@ -618,31 +648,3 @@ none and failed the parse. So in practice such a process did not run on an engin
 shared. Version 2 does not touch it at all. The flags it carries are the ones its modeller set, and
 its transactions end where that model says. If such a process runs on your engine and relies on the
 transaction boundaries version 1 added to it, model them yourself.
-
-### A `camundaBpmDataSource` works as before, and a `camunda.bpm.*` key ends the boot
-
-**A bean `camundaBpmDataSource` is the engine's datasource, as in version 1.** The same holds for a
-bean `camundaBpmTransactionManager`. Both count by their name or by a `@Qualifier` of that name,
-where the adapter id has no `data-source-name`. So an application which gave its engine a database
-of its own keeps it. There are three changes:
-
-- With several datasources, `camundaBpmDataSource` is the choice. Without it the boot ends and asks
-  for `vanillabp.adapters.<id>.data-source-name`.
-- A `camundaBpmDataSource` without a `camundaBpmTransactionManager` gets a transaction manager of
-  the adapter's own. Version 1 used your application's transaction manager there. That one does not
-  manage the engine's datasource, so the engine's statements were not committed together.
-- An engine on a `camundaBpmDataSource` which is not your default datasource does not join your
-  transactions. Its task deliveries are deduplicated, as on any datasource of its own. See the wiki
-  page *Configuration*, section "Choosing the datasource".
-
-**Every key of Camunda's Spring Boot starter ends the boot.** Version 1 let the starter build the
-engine, and the starter read `camunda.bpm.*`. Version 2 builds the engine itself and reads only
-`vanillabp.adapters.<id>.*`. A key left over from version 1 would change nothing, so the boot ends
-and lists every such key with what to write instead. For example, `camunda.bpm.history-level`
-becomes `vanillabp.adapters.<id>.history-level`, and `camunda.bpm.database.schema-update` becomes
-`vanillabp.adapters.<id>.database-schema-update`. For a setting which has no key in version 2,
-such as `camunda.bpm.job-execution.*` or `camunda.bpm.generic-properties.*`, the message points
-to a `ProcessEnginePlugin` bean of your application. The `camunda.bpm.eventing.*` keys have no
-successor on purpose: use `@WorkflowTask`, `@TaskEvent` and `@WorkflowEnded` instead. With the
-module `camunda7-adapter-spring-boot-webapps`, `camunda.bpm.webapp.*` and `camunda.bpm.enabled`
-are read and may stay.

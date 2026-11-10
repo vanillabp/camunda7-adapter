@@ -10,10 +10,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 
 import org.camunda.bpm.engine.ProcessEngine;
-import org.camunda.bpm.engine.ProcessEngineConfiguration;
 import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.engine.RuntimeService;
-import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
 import org.camunda.bpm.engine.repository.ProcessDefinition;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
@@ -33,7 +31,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * serve those workflows to their end, on the version they were started on.
  * <p>
  * The first step writes what version 1 left in the database, without version 1 itself: a
- * plain engine deploys the file as version 1 did. The deployment is named after the workflow
+ * {@link VersionOneEngine}, with the history level and the ids of version 1, deploys the file
+ * as version 1 did. The deployment is named after the workflow
  * module, its source is the application's name, its tenant is the workflow module, and it
  * holds the original bytes of the file. Then two workflows are started. Both wait at a user
  * task. Version 1 would have told the application about that task already, so nothing is
@@ -46,7 +45,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class Camunda7UpgradeFromVersionOneIT {
 
-  private static final String JDBC_URL = "jdbc:h2:mem:c7-upgrade-from-v1;DB_CLOSE_DELAY=-1";
+  private static final String DATABASE = "c7-upgrade-from-v1";
 
   private static final String WORKFLOW_MODULE = "c7-it";
 
@@ -63,18 +62,8 @@ public class Camunda7UpgradeFromVersionOneIT {
   @DisplayName("Version 1 deployed the model and started two workflows, which wait at a user task")
   public void versionOneLeftTwoWorkflows() throws Exception {
 
-    final var configuration = (ProcessEngineConfigurationImpl) ProcessEngineConfiguration
-        .createStandaloneProcessEngineConfiguration()
-        .setProcessEngineName("vanillabp-1-application")
-        .setJdbcUrl(JDBC_URL)
-        .setJdbcDriver("org.h2.Driver")
-        .setJdbcUsername("sa")
-        .setJdbcPassword("")
-        .setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_TRUE)
-        .setJobExecutorActivate(false);
-    // the engine refuses a model without a history time to live
-    configuration.setHistoryTimeToLive("P1D");
-    final var engine = configuration.buildProcessEngine();
+    // the history level and the ids of version 1, which version 2 keeps
+    final var engine = VersionOneEngine.on(DATABASE, "vanillabp-1-application");
     try (var file = getClass().getClassLoader().getResourceAsStream(FILE)) {
       // what the deployment of version 1 wrote: the original bytes, the module as name and
       // tenant, and the application's name as source
@@ -134,6 +123,14 @@ public class Camunda7UpgradeFromVersionOneIT {
           new String(repository.getResourceAsStream(ofVersionOne.getId(), "upgrade-from-v1.bpmn").readAllBytes()),
           new String(repository.getResourceAsStream(ofVersionTwo.getId(), "upgrade-from-v1.bpmn").readAllBytes()),
           "version 2 deploys the model it prepared, not the bytes of the file");
+
+      assertTrue(
+          application
+              .getBean(ProcessEngine.class)
+              .getManagementService()
+              .getRegisteredDeployments()
+              .containsAll(java.util.List.of(ofVersionOne.getId(), ofVersionTwo.getId())),
+          "the job executor fetches the jobs of both deployments, although their sources differ");
 
       final var runtime = application.getBean(RuntimeService.class);
       assertEquals(
@@ -304,8 +301,7 @@ public class Camunda7UpgradeFromVersionOneIT {
   private static ConfigurableApplicationContext boot() {
 
     final var boot = new ArrayList<String>();
-    boot.add("--spring.datasource.url="
-        + JDBC_URL);
+    boot.add("--spring.datasource.url=jdbc:h2:mem:%s;DB_CLOSE_DELAY=-1".formatted(DATABASE));
     boot.add("--spring.profiles.active=upgrade-from-v1");
     boot.add("--spring.jpa.hibernate.ddl-auto=update");
     boot.add("--vanillabp.workflow-modules.c7-it.adapters.c7.resources-location=classpath*:c7-it/upgrade-from-v1");

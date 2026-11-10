@@ -91,6 +91,10 @@ final class Camunda7VersionOneKeys {
               "admin-user", "Write it below 'vanillabp.adapters.%1$s.webapps.admin-user' instead, with the module "
                   + "camunda7-adapter-spring-boot-webapps on the classpath."),
           new Rule(
+              "job-execution.deployment-aware", "VanillaBP sets it: the job executor always fetches only the jobs "
+                  + "of the deployments of your workflow modules, every version of them. "
+                  + REMOVE_IT),
+          new Rule(
               "job-execution", NO_KEY_YET),
           new Rule(
               "job-executor-acquire-by-priority", NO_KEY_YET),
@@ -101,7 +105,8 @@ final class Camunda7VersionOneKeys {
           new Rule(
               "default-number-of-retries", NO_KEY_YET),
           new Rule(
-              "id-generator", NO_KEY_YET),
+              "id-generator", "VanillaBP sets it: the engine makes UUIDs as ids, like the starter's default "
+                  + "'strong'. Remove it, or set another generator in a ProcessEnginePlugin bean of your application."),
           new Rule(
               "eventing", "The engine publishes no Spring events in version 2, on purpose. Such a listener would work "
                   + "with the engine behind VanillaBP's back. Use @WorkflowTask, @TaskEvent and @WorkflowEnded "

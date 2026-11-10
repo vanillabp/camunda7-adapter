@@ -11,9 +11,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import org.camunda.bpm.engine.ProcessEngine;
-import org.camunda.bpm.engine.ProcessEngineConfiguration;
 import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
-import org.camunda.bpm.engine.impl.cfg.StandaloneProcessEngineConfiguration;
 import org.camunda.bpm.engine.impl.history.HistoryLevel;
 import org.camunda.bpm.engine.impl.persistence.StrongUuidGenerator;
 import org.camunda.bpm.engine.repository.Deployment;
@@ -31,11 +29,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * and UUIDs as ids. The engine stores the level in the database, and an engine of version 2
  * with the engine's own default <code>audit</code> did not start on such a database.
  * <p>
- * The test sets up the database with a plain engine configured like the starter of version 1:
- * the level <code>full</code>, the {@link StrongUuidGenerator} and a running workflow. The
- * classes of version 1 cannot be on this class path. What version 2 meets is the same,
- * because the starter only built the engine. On 2026-11-09 the same case was measured with
- * the application of version 1 itself, on PostgreSQL.
+ * The test sets up the database with a {@link VersionOneEngine}, configured like the starter
+ * of version 1: the level <code>full</code>, the {@link StrongUuidGenerator} and a running
+ * workflow. On 2026-11-09 the same case was measured with the application of version 1
+ * itself, on PostgreSQL.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -153,14 +150,7 @@ public class Camunda7VersionOneDatabaseIT {
   private static String setUpLikeVersionOne(
       final String database) {
 
-    final var configuration = (ProcessEngineConfigurationImpl) new StandaloneProcessEngineConfiguration()
-        .setJdbcUrl("jdbc:h2:mem:%s;DB_CLOSE_DELAY=-1".formatted(database))
-        .setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_TRUE)
-        .setHistory(ProcessEngineConfiguration.HISTORY_FULL)
-        .setJobExecutorActivate(false)
-        .setProcessEngineName("version-one-%s".formatted(database));
-    configuration.setIdGenerator(new StrongUuidGenerator());
-    final var engine = configuration.buildProcessEngine();
+    final var engine = VersionOneEngine.on(database, "version-one-%s".formatted(database));
     try {
       engine
           .getRepositoryService()
