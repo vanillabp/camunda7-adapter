@@ -195,6 +195,12 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     // the FEEL implementation decisions are evaluated with. The older one needs no FEEL
     // engine library, which is what an application needs next to the Operaton adapter
     io.vanillabp.camunda7.engine.Camunda7DmnFeelLegacyBehavior.applyTo(adapterId, configuration, properties);
+
+    // the same history level and ids as on Spring Boot, where they are the ones of version 1.
+    // Version 1 had no Quarkus adapter, but an application should get the same engine on both
+    // platforms (see DECISIONS.pending/2103.md)
+    io.vanillabp.camunda7.engine.Camunda7HistoryLevel.applyTo(adapterId, configuration, properties);
+    configuration.setIdGenerator(new org.camunda.bpm.engine.impl.persistence.StrongUuidGenerator());
     // job-executor threads must load delegate classes through the Quarkus runtime
     // classloader. Otherwise they fail with ClassNotFoundException; we have seen it
     configuration.setClassLoader(Thread.currentThread().getContextClassLoader());
@@ -266,6 +272,10 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
       // error. The developer gets the remedy instead of a NoSuchMethodError
       io.vanillabp.camunda7.engine.Camunda7DmnFeelLegacyBehavior.explainWhyTheEngineDidNotStart(adapterId, properties,
           e);
+      // a history level the engine does not know, or one which differs from the level in
+      // the database. The developer gets the key and the stored level
+      io.vanillabp.camunda7.engine.Camunda7HistoryLevel.explainWhyTheEngineDidNotStart(adapterId, configuration,
+          properties, e);
       throw e;
     }
     this.jobExecutorLifecycle = new Camunda7JobExecutorLifecycle(

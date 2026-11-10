@@ -361,6 +361,12 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     // engine library, which is what an application needs next to the Operaton adapter
     io.vanillabp.camunda7.engine.Camunda7DmnFeelLegacyBehavior.applyTo(adapterId, configuration, properties);
 
+    // the history level and the ids of version 1, whose engine Camunda's Spring Boot starter
+    // built. The engine stores the level in the database and does not start with another
+    // one, so a database of version 1 needs 'full' (see DECISIONS.pending/2103.md)
+    io.vanillabp.camunda7.engine.Camunda7HistoryLevel.applyTo(adapterId, configuration, properties);
+    configuration.setIdGenerator(new org.camunda.bpm.engine.impl.persistence.StrongUuidGenerator());
+
     // what an extension contributes to THIS engine: parse listeners before or after
     // VanillaBP's own, and a history event handler installed next to the engine's
     io.vanillabp.camunda7.engine.Camunda7EngineCustomizers
@@ -379,6 +385,10 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       // error. The developer gets the remedy instead of a NoSuchMethodError
       io.vanillabp.camunda7.engine.Camunda7DmnFeelLegacyBehavior.explainWhyTheEngineDidNotStart(adapterId, properties,
           e);
+      // a history level the engine does not know, or one which differs from the level in
+      // the database. The developer gets the key and the stored level
+      io.vanillabp.camunda7.engine.Camunda7HistoryLevel.explainWhyTheEngineDidNotStart(adapterId, configuration,
+          properties, e);
       throw e;
     }
     this.jobExecutorLifecycle = new Camunda7JobExecutorLifecycle(adapterId, this.jobExecutor);

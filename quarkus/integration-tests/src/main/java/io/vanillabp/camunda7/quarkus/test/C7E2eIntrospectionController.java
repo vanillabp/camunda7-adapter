@@ -376,6 +376,45 @@ public class C7E2eIntrospectionController {
 
   }
 
+  /**
+   * How much history the engine writes and what its ids look like.
+   *
+   * @return <code>historyLevel</code> (the name of the engine's level),
+   *         <code>storedHistoryLevel</code> (the id the database stores),
+   *         <code>idGenerator</code> (the simple class name of the engine's id generator) and
+   *         <code>deploymentIds</code> (the ids of the deployments of the workflow module)
+   */
+  @GET
+  @Path("/engine/history-and-ids")
+  public Map<String, Object> historyAndIds() {
+
+    final var engine = engine().getProcessEngine();
+    final var configuration = (ProcessEngineConfigurationImpl) engine.getProcessEngineConfiguration();
+    final var reported = new LinkedHashMap<String, Object>();
+    reported.put("historyLevel", configuration.getHistoryLevel().getName());
+    reported
+        .put(
+            "storedHistoryLevel",
+            engine
+                .getManagementService()
+                .getProperties()
+                .get("historyLevel"));
+    reported.put("idGenerator", configuration.getIdGenerator().getClass().getSimpleName());
+    reported
+        .put(
+            "deploymentIds",
+            engine
+                .getRepositoryService()
+                .createDeploymentQuery()
+                .tenantIdIn(MODULE_ID)
+                .list()
+                .stream()
+                .map(org.camunda.bpm.engine.repository.Deployment::getId)
+                .toList());
+    return reported;
+
+  }
+
   // --- starting workflows ---
 
   /**

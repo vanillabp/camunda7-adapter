@@ -347,6 +347,26 @@ public class Camunda7WorkflowLifecycleTest {
   }
 
   @Test
+  @DisplayName("The engine writes the history level 'full' and makes UUIDs, the same as on Spring Boot")
+  @SuppressWarnings("unchecked")
+  public void theEngineHasTheHistoryLevelAndIdsOfSpringBoot() {
+
+    final var reported = object("introspect/engine/history-and-ids");
+
+    assertEquals("full", reported.get("historyLevel"), reported::toString);
+    assertEquals("3", reported.get("storedHistoryLevel"), reported::toString);
+    assertEquals("StrongUuidGenerator", reported.get("idGenerator"), reported::toString);
+    final var deploymentIds = (List<String>) reported.get("deploymentIds");
+    assertFalse(deploymentIds.isEmpty(), reported::toString);
+    deploymentIds
+        .forEach(id -> assertTrue(
+            id.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"),
+            "not a UUID: "
+                + id));
+
+  }
+
+  @Test
   @DisplayName("The parse listener forces the asynchronous continuations onto the task types it has to")
   public void theParseListenerForcesAsyncContinuations() {
 

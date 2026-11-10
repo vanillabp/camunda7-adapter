@@ -37,6 +37,28 @@ On Quarkus the artifact is `io.vanillabp:camunda7-adapter-quarkus`. Version 1 st
 Nothing is published under the old groupId for version 2, so there is no relocation: a build which
 still names the old groupId with a version 2 number finds nothing.
 
+### The engine keeps the history level and the ids of version 1
+
+Version 1 let Camunda's Spring Boot starter build the engine. The starter writes history at the
+level `full` and makes UUIDs as ids. Version 2 builds the engine itself and sets both the same way.
+So your database of version 1 starts without a change. The engine stores its history level in the
+database and refuses to start with another one. So if you set `camunda.bpm.history-level` in
+version 1, set the same value at the new key:
+
+```yaml
+vanillabp:
+  adapters:
+    c7:
+      history-level: audit
+```
+
+`auto` takes the level which the database stores. If the level does not fit the database, the
+start ends with a message which names the key and both levels.
+
+The ids have no key. If you had set `camunda.bpm.id-generator` to another value in version 1, new
+ids are UUIDs now. The engine does not mind ids of two forms in one table, so the old ones stay
+valid.
+
 ### A message starts only the process of its own `ProcessService`
 
 Version 1 correlated the message of `startWorkflowByMessage` with the engine's

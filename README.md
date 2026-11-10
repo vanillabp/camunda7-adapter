@@ -95,6 +95,10 @@ vanillabp:
       # of processes without one); default: P180D; a process may override it via
       # camunda:historyTimeToLive
       history-time-to-live: P180D
+      # how much history the engine writes: none, activity, audit, full, auto or a
+      # level an engine plugin adds. The engine stores it in the database, and a
+      # later start with another level fails. Default: full, as in version 1
+      history-level: full
       # OPTIONAL: the name of an APPLICATION-PROVIDED datasource this id's engine
       # runs on (required for every additional camunda7 id - see the transaction
       # caveat below!). Setting up datasources is deliberately the application's
@@ -300,7 +304,18 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   managed thread pool, active only while workflow processing is started, and
 - applies a default history time-to-live (`history-time-to-live`, default `P180D`).
   Camunda 7.24 rejects deployments of processes without one. A process may still
-  override it with `camunda:historyTimeToLive`.
+  override it with `camunda:historyTimeToLive`,
+- writes history at the level `full` (`history-level`) and makes its ids with the
+  `StrongUuidGenerator`, as Camunda's Spring Boot starter did in version 1. The engine on its
+  own would use `audit` and numbers from the database. The engine stores the level in the
+  database on its first start and refuses a later start with another level. So the level of
+  version 1 is what lets a database of version 1 start without a change
+  (`DECISIONS.pending/2103.md`). Quarkus gets the same defaults, so an application gets the
+  same engine on both platforms. A level the engine does not know, and a level which differs
+  from the database, end the start with a message which names the key and the levels
+  (`Camunda7HistoryLevel`). `Camunda7HistoryLevelTest` tests both messages and `auto` on a real
+  engine. `Camunda7VersionOneDatabaseIT` starts the application on a database set up like
+  version 1 did it.
 
 A `DataSource` and a `PlatformTransactionManager` must be present, unless every configured
 id brings its own datasource. A Camunda 7 application always needs a database.

@@ -14,6 +14,8 @@ package io.vanillabp.camunda7.engine;
  *       live. Camunda 7.24 rejects the deployment of a process without one. Default
  *       <code>P180D</code>. A process may override it with
  *       <code>camunda:historyTimeToLive</code>.</li>
+ *   <li><code>history-level</code> - how much history the engine writes. Default
+ *       <code>full</code>, as in VanillaBP 1. See {@link Camunda7HistoryLevel}.</li>
  *   <li><code>data-source-name</code> - OPTIONAL. The name of the datasource this adapter
  *       id's embedded engine runs on. The application or the runtime provides it. Setting
  *       up datasources is on purpose NOT VanillaBP's job, and the adapter never builds its
@@ -73,6 +75,14 @@ public class Camunda7EngineProperties {
 
   /** The engine-wide default history time to live. */
   private String historyTimeToLive = "P180D";
+
+  /**
+   * How much history the engine writes: <code>none</code>, <code>activity</code>,
+   * <code>audit</code>, <code>full</code>, <code>auto</code> or the name of a level an engine
+   * plugin adds. The engine stores it in the database on its first start, and a later start
+   * with another level fails. See {@link Camunda7HistoryLevel}.
+   */
+  private String historyLevel = Camunda7HistoryLevel.DEFAULT;
 
   /** The name of the datasource this adapter id's engine runs on. */
   private String dataSourceName;
@@ -214,6 +224,25 @@ public class Camunda7EngineProperties {
   public void setHistoryTimeToLive(
       final String historyTimeToLive) {
     this.historyTimeToLive = historyTimeToLive;
+  }
+
+  /**
+   * How much history the engine writes.
+   *
+   * @return The configured level, <code>full</code> unless a deployment says otherwise
+   */
+  public String getHistoryLevel() {
+    return historyLevel;
+  }
+
+  /**
+   * How much history the engine writes.
+   *
+   * @param historyLevel The name of a history level, or <code>auto</code>
+   */
+  public void setHistoryLevel(
+      final String historyLevel) {
+    this.historyLevel = historyLevel;
   }
 
   /**
