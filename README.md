@@ -78,7 +78,11 @@ own or a [table prefix of its own](#two-engines-on-one-database-table-prefix). O
 fails with a guiding message. `Camunda7AdapterBootTest#twoAdapterIdsOfTypeCamunda7YieldPerIdEnginesAndBeans`
 and `#twoAdapterIdsSharingTheSameDataSourceFailWithGuidingMessage` test both halves on Spring
 Boot, `Camunda7SameDataSourceValidationTest` on Quarkus. `Camunda7InstanceIdentityTest` tests
-the comparison itself.
+the comparison itself. On Spring Boot the comparison takes the datasource each engine really
+runs on, not the key. An id without `data-source-name` may run on a bean `camundaBpmDataSource`,
+and a key may name the default datasource by its bean name. `Camunda7VersionOneDataSourceTest`
+holds both cases. See
+[decision 60](./DECISIONS.md#60-a-bean-camundabpmdatasource-is-the-engines-datasource-as-in-version-1-and-the-engine-behaves-by-the-datasource-it-really-gets).
 
 Settings per adapter id. All are optional and live at the canonical location
 `vanillabp.adapters.<adapter-id>.*`:
@@ -123,6 +127,10 @@ vanillabp:
       # which needs no FEEL engine library. Needed next to the Operaton adapter.
       # Default: false - see 'Decision tables next to the Operaton adapter' below.
       dmn-feel-legacy-behavior: true
+      # OPTIONAL: an engine plugin of the application may change a setting the
+      # adapter sets itself, like the id generator. Each change gets a WARN.
+      # Default: false, which ends the start - see 'Embedded-engine wiring' below.
+      allow-plugins-to-change-adapter-settings: true
 ```
 
 On Spring Boot, declare the additional datasource bean with
@@ -139,6 +147,14 @@ public DataSource legacy() {
 
 BPMN files are read from each workflow module's configured `resources-location` and
 deployed to the embedded engine of every prioritized adapter.
+
+An adapter id whose type is its name may be configured as `vanillabp.adapters.camunda7: {}`.
+Spring Boot reads an empty YAML map as an empty value at the section's own name. When it binds an
+object, it takes that value first and ignores the keys below it, also those from the command line,
+an environment variable or a second YAML document. So the adapter binds every section of its own
+with Spring Boot's `NO_DIRECT_PROPERTY` restriction, which skips that value, see
+`Camunda7EmptySections` and `EmptyAdapterSectionTest`. The platform's own keys of such a section,
+for example `deployment-failure`, are bound by the platform and are not covered by this.
 
 ### What the IDE knows about the keys
 
@@ -326,11 +342,26 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   engine. `Camunda7VersionOneDatabaseIT` starts the application on a database set up like
   version 1 did it.
 
+An engine plugin of the application runs after the adapter set all of this up. So it could
+change a setting the adapter sets itself, and nobody would notice. `Camunda7AdapterSettingsGuard`
+(module `core`) puts a small plugin of its own before, between and after the application's plugins.
+Each one compares the settings which `client-configuration-inventory.yml` marks as `set-by-adapter`
+with what the one before it saw, in `preInit`, `postInit` and `postProcessEngineBuild`. So a change
+is reported with the plugin which made it. It ends the start, unless
+`vanillabp.adapters.<adapter-id>.allow-plugins-to-change-adapter-settings` is `true`. Then each
+change gets a WARN. A plugin may add entries to a list like the parse listeners, but it may not
+remove the adapter's. The history level is not watched, because it has a key of its own
+([decision 61](./DECISIONS.md#61-an-engine-plugin-which-changes-a-setting-the-adapter-sets-ends-the-start-unless-a-key-allows-it) says why).
+`Camunda7AdapterSettingsGuardTest` holds the rules on a real engine,
+`Camunda7PluginChangingAnAdapterSettingIT` on Spring Boot, and
+`Camunda7PluginChangingAnAdapterSettingTest` and `Camunda7PluginAllowedToChangeAnAdapterSettingTest`
+on Quarkus.
+
 A `DataSource` and a `PlatformTransactionManager` must be present, unless every configured
 id brings its own datasource. A Camunda 7 application always needs a database.
 `Camunda7AdapterBootTest#configuredAdapterWithoutDataSourceFailsWithGuidingMessage`
-tests that message. `Camunda7UnknownDataSourceNameTest` tests the message for a
-`data-source-name` which names nothing.
+tests that message. `Camunda7EngineHolderTest#unknownDataSourceNameFailsWithGuidingMessage`
+tests the message for a `data-source-name` which names nothing.
 
 A key of Camunda's Spring Boot starter (`camunda.bpm.*`) ends the start, and the message says
 for each key what to write instead. Version 1 let the starter build the engine, so an upgraded
@@ -342,7 +373,23 @@ from the bytecode of `camunda-bpm-spring-boot-starter-webapp-core` 7.24: its aut
 calls only `CamundaBpmProperties#getWebapp`, and its condition reads
 `camunda.bpm.webapp.enabled`. The starter's `PropertiesListener` also writes
 `camunda.bpm.version`, `camunda.bpm.is-enterprise` and `camunda.bpm.formatted-version` into
-the environment, so these are never the application's.
+the environment, so these are never the application's. With Camunda's starter of the external
+task client (`camunda-bpm-spring-boot-starter-external-task-client`) on the classpath,
+`camunda.bpm.client.*` is left alone as well. The adapter finds the starter by its class
+`ClientProperties`, which binds exactly these keys in 7.24. An application may use that client
+next to the adapter, for the external tasks of another engine.
+`Camunda7ExternalTaskClientVersionOneKeysTest` starts the client next to the adapter.
+
+Where the adapter knows why the engine did not start, it throws a `Camunda7StartupExplanation`:
+what is wrong, and what to change. Today these are a history level which is unknown or differs
+from the database, a FEEL engine library which does not fit Camunda 7, an engine plugin which
+changes a setting the adapter sets, a table prefix without its tables, and two adapter ids on
+the same engine database. The developer has to read this message first. On Spring Boot it sits
+deep in a chain of bean creation exceptions, so `Camunda7StartupExplanationFailureAnalyzer` puts
+its two parts under "APPLICATION FAILED TO START" as "Description" and "Action"
+(`Camunda7VersionOneDatabaseIT`). On Quarkus,
+`Camunda7EngineProducer` throws it as it is and does not wrap it into its general message about
+building the engine (`Camunda7StartupExplanationTest`).
 
 ### What an extension may add to the engine
 

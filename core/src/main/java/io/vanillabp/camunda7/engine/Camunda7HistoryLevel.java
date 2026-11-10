@@ -72,7 +72,7 @@ public final class Camunda7HistoryLevel {
    * @param adapterId The adapter id whose engine is being built
    * @param configuration The engine configuration, before the engine is built
    * @param properties The adapter id's engine settings
-   * @throws IllegalStateException If the value is empty, or the old name
+   * @throws Camunda7StartupExplanation If the value is empty, or the old name
    *         <code>variable</code>, which the engine still reads as <code>activity</code>
    */
   public static void applyTo(
@@ -100,7 +100,7 @@ public final class Camunda7HistoryLevel {
    * @param configuration The configuration the engine was built from
    * @param properties The adapter id's engine settings
    * @param failure What building the engine threw
-   * @throws IllegalStateException If the history level is why the engine did not start
+   * @throws Camunda7StartupExplanation If the history level is why the engine did not start
    */
   public static void explainWhyTheEngineDidNotStart(
       final String adapterId,
@@ -137,29 +137,31 @@ public final class Camunda7HistoryLevel {
     final var stored = matcher.find()
         ? matcher.group(1)
         : null;
-    throw new IllegalStateException(
+    throw new Camunda7StartupExplanation(
         """
             Camunda 7 adapter '%s' could not start its engine, because the database was set up with \
             another history level. The database stores %s, but 'vanillabp.adapters.%s.history-level' \
             is '%s'. The engine writes its history level into the database on its first start, and \
-            every later start has to use the same level. Set 'vanillabp.adapters.%s.history-level: %s' \
-            to keep the level of this database. Or set it to 'auto', which always takes the level the \
-            database stores. VanillaBP 1 set up its databases with 'full'."""
+            every later start has to use the same level."""
             .formatted(
                 adapterId,
                 stored == null
                     ? "another level"
                     : "'%s'".formatted(stored),
                 adapterId,
-                configured.trim(),
-                adapterId,
-                stored == null
-                    ? "<the stored level>"
-                    : stored), failure);
+                configured.trim()), """
+                    Set 'vanillabp.adapters.%s.history-level: %s' to keep the level of this database. Or set \
+                    it to 'auto', which always takes the level the database stores. VanillaBP 1 set up its \
+                    databases with 'full'."""
+                    .formatted(
+                        adapterId,
+                        stored == null
+                            ? "<the stored level>"
+                            : stored), failure);
 
   }
 
-  private static IllegalStateException notALevel(
+  private static Camunda7StartupExplanation notALevel(
       final String adapterId,
       final String configured,
       final List<String> allowed) {
@@ -168,26 +170,27 @@ public final class Camunda7HistoryLevel {
 
   }
 
-  private static IllegalStateException notALevel(
+  private static Camunda7StartupExplanation notALevel(
       final String adapterId,
       final String configured,
       final List<String> allowed,
       final Throwable failure) {
 
-    return new IllegalStateException(
+    return new Camunda7StartupExplanation(
         """
             Camunda 7 adapter '%s' could not start its engine, because 'vanillabp.adapters.%s.history-level' \
-            is '%s', which is not a history level of this engine. Use one of: %s. The default is '%s', \
-            as in VanillaBP 1. 'auto' takes the level the database stores, and 'audit' for a new \
-            database."""
+            is '%s', which is not a history level of this engine."""
             .formatted(
                 adapterId,
                 adapterId,
                 configured == null
                     ? ""
-                    : configured,
-                String.join(", ", allowed),
-                DEFAULT), failure);
+                    : configured), """
+                        Use one of: %s. The default is '%s', as in VanillaBP 1. 'auto' takes the level the \
+                        database stores, and 'audit' for a new database."""
+                        .formatted(
+                            String.join(", ", allowed),
+                            DEFAULT), failure);
 
   }
 

@@ -103,6 +103,13 @@
       <artifactId>h2</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <!-- reads camunda.bpm.client.*, which the adapter then leaves alone. See
+           Camunda7ExternalTaskClientVersionOneKeysTest -->
+      <groupId>org.camunda.bpm.springboot</groupId>
+      <artifactId>camunda-bpm-spring-boot-starter-external-task-client</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

@@ -109,43 +109,64 @@ public final class Camunda7TablePrefixSchema {
       final Camunda7EngineProperties properties,
       final DataSource dataSource) {
 
+    validate(adapterId, properties, dataSource, properties.usesSeparateDataSource()
+        ? properties.getDataSourceName()
+        : null);
+
+  }
+
+  /**
+   * The same check, for a platform which knows more about the datasource than the key
+   * says. On Spring Boot an adapter id without <code>data-source-name</code> may run on a
+   * bean <code>camundaBpmDataSource</code>, and the message has to name that one.
+   *
+   * @param adapterId The adapter id
+   * @param properties The adapter id's engine settings
+   * @param dataSource The datasource the engine of this adapter id runs on
+   * @param dataSourceName The name of that datasource, or <code>null</code> where it is the
+   *          application's default datasource
+   */
+  public static void validate(
+      final String adapterId,
+      final Camunda7EngineProperties properties,
+      final DataSource dataSource,
+      final String dataSourceName) {
+
     final var tablePrefix = properties.getTablePrefix();
     if (!hasTablePrefix(tablePrefix)) {
       return;
     }
 
     if (createsTables(properties.getDatabaseSchemaUpdate())) {
-      throw new IllegalStateException(
+      throw new Camunda7StartupExplanation(
           """
               Camunda 7 adapter '%s' is configured with the table prefix '%s' \
               ('vanillabp.adapters.%s.table-prefix') and 'database-schema-update: %s'. Camunda \
               cannot create prefixed tables: its schema management executes the DDL shipped with \
               the engine, and those statements name the tables verbatim, so it would create a set \
-              of ACT_* tables in %s - not the tables this adapter id reads. %s"""
+              of ACT_* tables in %s - not the tables this adapter id reads."""
               .formatted(
                   adapterId,
                   tablePrefix,
                   adapterId,
                   properties.getDatabaseSchemaUpdate(),
-                  describeDataSource(properties),
-                  waysOn(adapterId, tablePrefix)));
+                  describeDataSource(dataSourceName)), waysOn(adapterId, tablePrefix), null);
     }
 
     final var missing = missingTables(dataSource, tablePrefix);
     if (!missing.isEmpty()) {
-      throw new IllegalStateException(
+      throw new Camunda7StartupExplanation(
           """
               Camunda 7 adapter '%s' runs on the table prefix '%s' \
               ('vanillabp.adapters.%s.table-prefix') in %s, but these tables of it are missing: \
               %s. A prefixed engine needs a schema which is there already, because Camunda's own \
-              schema management ignores the prefix. %s"""
+              schema management ignores the prefix."""
               .formatted(
                   adapterId,
                   tablePrefix,
                   adapterId,
-                  describeDataSource(properties),
-                  String.join(", ", missing),
-                  waysOn(adapterId, tablePrefix)));
+                  describeDataSource(dataSourceName),
+                  String.join(", ", missing)), waysOn(adapterId, tablePrefix), null);
     }
 
     log.info(
@@ -153,7 +174,7 @@ public final class Camunda7TablePrefixSchema {
             + "engine's schema management stays out of it ('database-schema-update: false')",
         adapterId,
         tablePrefix,
-        describeDataSource(properties));
+        describeDataSource(dataSourceName));
 
   }
 
@@ -180,11 +201,11 @@ public final class Camunda7TablePrefixSchema {
   }
 
   private static String describeDataSource(
-      final Camunda7EngineProperties properties) {
+      final String dataSourceName) {
 
-    return properties.usesSeparateDataSource()
-        ? "the datasource '%s'".formatted(properties.getDataSourceName())
-        : "the application's default datasource";
+    return dataSourceName == null
+        ? "the application's default datasource"
+        : "the datasource '%s'".formatted(dataSourceName);
 
   }
 

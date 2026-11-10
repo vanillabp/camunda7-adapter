@@ -131,6 +131,12 @@ public class Camunda7EngineProducer {
                         .isDefaultDataSourceName(
                             dataSourceName), transactionManager, workflowTaskRegistry, workflowTaskRegistry, workflowTaskRegistry));
           } catch (final RuntimeException e) {
+            // the adapter's own explanation already names the key and what to write. Wrapped
+            // into the general message below, it would be the second thing the developer reads
+            final var explanation = io.vanillabp.camunda7.engine.Camunda7StartupExplanation.in(e);
+            if (explanation != null) {
+              throw explanation;
+            }
             throw new IllegalStateException(
                 """
                     Camunda 7 adapter '%s': building the embedded engine on datasource '%s' failed! \
@@ -181,6 +187,7 @@ public class Camunda7EngineProducer {
     keys.sleepUntilSomethingIsDue().ifPresent(properties::setSleepUntilSomethingIsDue);
     keys.dbMetricsReporting().ifPresent(properties::setDbMetricsReporting);
     keys.dmnFeelLegacyBehavior().ifPresent(properties::setDmnFeelLegacyBehavior);
+    keys.allowPluginsToChangeAdapterSettings().ifPresent(properties::setAllowPluginsToChangeAdapterSettings);
     // the named plugin sections are copied onto the platform-neutral model. So the core
     // builds and configures them the same way on both platforms
     properties

@@ -58,6 +58,10 @@ package io.vanillabp.camunda7.engine;
  *   <li><code>dmn-feel-legacy-behavior</code> - OPTIONAL. The engine evaluates decisions with
  *       its older FEEL implementation, which needs no FEEL engine library. Default
  *       <code>false</code>, see {@link Camunda7DmnFeelLegacyBehavior}.</li>
+ *   <li><code>allow-plugins-to-change-adapter-settings</code> - OPTIONAL. Whether an engine
+ *       plugin of the application may change a setting which the adapter sets itself. Then
+ *       the start goes on with a WARN per changed setting. Default <code>false</code>, which
+ *       ends the start. See {@link Camunda7AdapterSettingsGuard}.</li>
  * </ul>
  */
 public class Camunda7EngineProperties {
@@ -185,6 +189,18 @@ public class Camunda7EngineProperties {
    * serves every workflow module of the adapter id.
    */
   private boolean dmnFeelLegacyBehavior = false;
+
+  /**
+   * Whether an engine plugin of the application may change a setting which the adapter sets
+   * itself, like the id generator or {@code jobExecutorDeploymentAware}. Default
+   * <code>false</code>: such a change ends the start, and the message names the setting and
+   * the plugin. With <code>true</code> each change gets a WARN, and the start goes on. See
+   * {@link Camunda7AdapterSettingsGuard}.
+   * <p>
+   * There is only this adapter level. The settings belong to the engine, and one engine
+   * serves every workflow module of the adapter id.
+   */
+  private boolean allowPluginsToChangeAdapterSettings = false;
 
   /**
    * What the engine does to its schema on boot, e.g. <code>true</code>,
@@ -436,6 +452,25 @@ public class Camunda7EngineProperties {
   public void setDmnFeelLegacyBehavior(
       final boolean dmnFeelLegacyBehavior) {
     this.dmnFeelLegacyBehavior = dmnFeelLegacyBehavior;
+  }
+
+  /**
+   * Whether an engine plugin may change a setting which the adapter sets itself.
+   *
+   * @return Whether a change only gets a WARN instead of ending the start
+   */
+  public boolean isAllowPluginsToChangeAdapterSettings() {
+    return allowPluginsToChangeAdapterSettings;
+  }
+
+  /**
+   * Whether an engine plugin may change a setting which the adapter sets itself.
+   *
+   * @param allowPluginsToChangeAdapterSettings Whether a change only gets a WARN
+   */
+  public void setAllowPluginsToChangeAdapterSettings(
+      final boolean allowPluginsToChangeAdapterSettings) {
+    this.allowPluginsToChangeAdapterSettings = allowPluginsToChangeAdapterSettings;
   }
 
   /**

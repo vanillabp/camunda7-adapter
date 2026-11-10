@@ -21,7 +21,10 @@ import java.util.Map;
  * <code>camunda7-adapter-spring-boot-webapps</code> hands <code>camunda.bpm.webapp.*</code> to
  * Camunda's web applications and reads <code>camunda.bpm.enabled</code> itself. The starter it
  * brings writes <code>camunda.bpm.version</code>, <code>camunda.bpm.is-enterprise</code> and
- * <code>camunda.bpm.formatted-version</code> into the environment on its own.
+ * <code>camunda.bpm.formatted-version</code> into the environment on its own. Camunda's
+ * starter of the external task client, <code>camunda-bpm-spring-boot-starter-external-task-client</code>,
+ * reads <code>camunda.bpm.client.*</code>. An application may use it next to the adapter, to
+ * work on the external tasks of another engine.
  * <p>
  * Keys are compared the way Spring Boot binds them: case, dashes and underscores do not matter.
  * An environment variable such as <code>CAMUNDA_BPM_HISTORY_LEVEL</code> is found as well.
@@ -37,6 +40,14 @@ final class Camunda7VersionOneKeys {
    * fails if the class is renamed.
    */
   static final String WEBAPPS_MODULE_CLASS = "io.vanillabp.camunda7.springboot.webapps.Camunda7WebappsAutoConfiguration";
+
+  /**
+   * The class of Camunda's starter of the external task client which binds
+   * <code>camunda.bpm.client.*</code>. It is named as text, because the adapter does not
+   * depend on that starter. <code>Camunda7ExternalTaskClientVersionOneKeysTest</code> fails if
+   * the class is renamed.
+   */
+  static final String EXTERNAL_TASK_CLIENT_CLASS = "org.camunda.bpm.client.spring.boot.starter.ClientProperties";
 
   private static final String PREFIX = "camunda.bpm.";
 
@@ -141,6 +152,9 @@ final class Camunda7VersionOneKeys {
               "webapp", "Add the module camunda7-adapter-spring-boot-webapps, which serves the web "
                   + "applications and reads these keys, or remove the key."),
           new Rule(
+              "client", "Add Camunda's starter camunda-bpm-spring-boot-starter-external-task-client, which reads "
+                  + "these keys, or remove the key."),
+          new Rule(
               "enabled", "VanillaBP builds an engine for every adapter id of type camunda7. "
                   + REMOVE_IT
                   + " An application without an engine configures no such adapter id."));
@@ -160,6 +174,12 @@ final class Camunda7VersionOneKeys {
   private static final List<String> READ_BY_THE_WEBAPPS_MODULE = List.of("webapp", "enabled");
 
   /**
+   * The keys which Camunda's starter of the external task client reads, where it is on the
+   * classpath.
+   */
+  private static final List<String> READ_BY_THE_EXTERNAL_TASK_CLIENT = List.of("client");
+
+  /**
    * Whether the module <code>camunda7-adapter-spring-boot-webapps</code> is on the
    * classpath.
    *
@@ -174,18 +194,34 @@ final class Camunda7VersionOneKeys {
   }
 
   /**
+   * Whether Camunda's starter of the external task client is on the classpath.
+   *
+   * @param classLoader The class loader to ask
+   * @return Whether the starter is there
+   */
+  static boolean externalTaskClientIsPresent(
+      final ClassLoader classLoader) {
+
+    return org.springframework.util.ClassUtils.isPresent(EXTERNAL_TASK_CLIENT_CLASS, classLoader);
+
+  }
+
+  /**
    * Ends the start if the configuration holds a key of the starter which nobody reads. All
    * such keys are named at once, so one restart is enough to fix them.
    *
    * @param adapterIds The ids of the configured adapters of type <code>camunda7</code>
    * @param propertyNames Every property name the environment knows
    * @param webappsModuleIsPresent Whether the webapps module is on the classpath
+   * @param externalTaskClientIsPresent Whether Camunda's starter of the external task client
+   *          is on the classpath
    * @throws IllegalStateException Naming every such key and what to write instead
    */
   static void endTheStartOnKeysOfVersionOne(
       final Collection<String> adapterIds,
       final Iterable<String> propertyNames,
-      final boolean webappsModuleIsPresent) {
+      final boolean webappsModuleIsPresent,
+      final boolean externalTaskClientIsPresent) {
 
     final var findings = new LinkedHashMap<String, String>();
     for (final var name : propertyNames) {
@@ -193,7 +229,7 @@ final class Camunda7VersionOneKeys {
         continue;
       }
       final var key = keyBelowThePrefix(name);
-      if ((key == null) || isLeftAlone(key, webappsModuleIsPresent)) {
+      if ((key == null) || isLeftAlone(key, webappsModuleIsPresent, externalTaskClientIsPresent)) {
         continue;
       }
       findings.put(name, successorOf(key, adapterIds));
@@ -226,11 +262,17 @@ final class Camunda7VersionOneKeys {
 
   private static boolean isLeftAlone(
       final String key,
-      final boolean webappsModuleIsPresent) {
+      final boolean webappsModuleIsPresent,
+      final boolean externalTaskClientIsPresent) {
 
     if (WRITTEN_BY_THE_STARTER
         .stream()
         .anyMatch(written -> covers(written, key))) {
+      return true;
+    }
+    if (externalTaskClientIsPresent && READ_BY_THE_EXTERNAL_TASK_CLIENT
+        .stream()
+        .anyMatch(read -> covers(read, key))) {
       return true;
     }
     return webappsModuleIsPresent && READ_BY_THE_WEBAPPS_MODULE

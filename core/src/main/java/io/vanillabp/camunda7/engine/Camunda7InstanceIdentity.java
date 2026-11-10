@@ -24,9 +24,12 @@ import io.vanillabp.integration.adapter.spi.AddressedSystem;
  * {@link Camunda7TablePrefixSchema}.</li>
  * </ul>
  *
- * @param dataSourceName The configured datasource name or <code>null</code> for the
- *          application's default datasource. The reserved name <code>default</code> means
- *          the default datasource as well
+ * @param dataSourceName The name of the datasource the engine runs on, or <code>null</code>
+ *          for the application's default datasource. The reserved name <code>default</code>
+ *          means the default datasource as well. On Spring Boot it is the bean name of the
+ *          datasource the engine really gets, not the key. A bean
+ *          <code>camundaBpmDataSource</code> takes the place of the default datasource without
+ *          a key, and a key may name the default datasource by its bean name
  * @param tablePrefix The configured engine table prefix or <code>null</code> for
  *          the engine's default (no prefix)
  */
@@ -113,22 +116,23 @@ public record Camunda7InstanceIdentity(
       if (idsSharingIt.size() < 2) {
         return;
       }
-      throw new IllegalStateException(
+      throw new Camunda7StartupExplanation(
           """
               The Camunda 7 adapters '%s' would run on the SAME engine database (datasource %s, \
               table prefix %s)! Two embedded engines on one schema are the same engine state - \
-              configuring them as separate adapters is an error. Make them distinguishable:
-                - give each one its own database/schema by referencing an own datasource \
-              ('vanillabp.adapters.<id>.data-source-name'), or
-                - let them share one datasource but use separate engine tables \
-              ('vanillabp.adapters.<id>.table-prefix'). Camunda does not create prefixed tables, so \
-              such an id needs its tables created beforehand and \
-              'vanillabp.adapters.<id>.database-schema-update: false',
-              or remove all but one of these adapters."""
+              configuring them as separate adapters is an error."""
               .formatted(
                   String.join("', '", idsSharingIt),
                   identity.describeDataSource(),
-                  identity.describeTablePrefix()));
+                  identity.describeTablePrefix()), """
+                      Make them distinguishable:
+                        - give each one its own database/schema by referencing an own datasource \
+                      ('vanillabp.adapters.<id>.data-source-name'), or
+                        - let them share one datasource but use separate engine tables \
+                      ('vanillabp.adapters.<id>.table-prefix'). Camunda does not create prefixed tables, so \
+                      such an id needs its tables created beforehand and \
+                      'vanillabp.adapters.<id>.database-schema-update: false',
+                      or remove all but one of these adapters.""", null);
     });
 
   }

@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.datasource.SimpleDriverDataSource;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
@@ -36,14 +37,28 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
     },
     webEnvironment = WebEnvironment.RANDOM_PORT,
     properties = {
-        "spring.datasource.url=jdbc:h2:mem:c7-webapps-two-ids;DB_CLOSE_DELAY=-1", "vanillabp.adapters.c7-new.type=camunda7", "vanillabp.adapters.c7-new.data-source-name=c7NewDataSource", "vanillabp.prioritized-adapters=camunda7,c7-new"
+        "vanillabp.adapters.camunda7.data-source-name=dataSource", "vanillabp.adapters.c7-new.type=camunda7", "vanillabp.adapters.c7-new.data-source-name=c7NewDataSource", "vanillabp.prioritized-adapters=camunda7,c7-new"
     })
 @DirtiesContext(classMode = ClassMode.AFTER_CLASS)
 public class Camunda7WebappsTwoAdapterIdsTest {
 
-  /** The datasource of the second engine, as an application would provide it. */
+  /**
+   * The datasources of both engines, as an application would provide them. Spring Boot's own
+   * datasource backs off as soon as the application has one, so the application's datasource
+   * is declared here as well, and the first id names it. Without it both ids would run on the
+   * second datasource, and the start would end because they share it.
+   */
   @Configuration
   public static class SecondDataSource {
+
+    @Bean
+    @Primary
+    public DataSource dataSource() {
+
+      return new SimpleDriverDataSource(
+          new org.h2.Driver(), "jdbc:h2:mem:c7-webapps-two-ids;DB_CLOSE_DELAY=-1", "sa", "");
+
+    }
 
     @Bean
     public DataSource c7NewDataSource() {

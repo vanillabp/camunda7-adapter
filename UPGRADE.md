@@ -56,6 +56,10 @@ For the same reason, beans of the engine's own types are no longer picked up. A
 The ids are still UUIDs, because the adapter sets the generator which the starter used by default
 (see the next section).
 
+A `ProcessEnginePlugin` bean which changes a setting the adapter sets itself, like the id generator
+or `jobExecutorDeploymentAware`, ends the boot now, unless you set
+`vanillabp.adapters.<id>.allow-plugins-to-change-adapter-settings: true`.
+
 The engine is called `vanillabp-camunda7-<adapter-id>` now, not `default`. A Cockpit bookmark or a
 REST call with `default` in its path has to use the new name. A REST call without an engine in its
 path finds no engine.
@@ -111,7 +115,8 @@ such as `camunda.bpm.job-execution.*` or `camunda.bpm.generic-properties.*`, the
 to a `ProcessEnginePlugin` bean of your application. The `camunda.bpm.eventing.*` keys have no
 successor on purpose: use `@WorkflowTask`, `@TaskEvent` and `@WorkflowEnded` instead. With the
 module `camunda7-adapter-spring-boot-webapps`, `camunda.bpm.webapp.*` and `camunda.bpm.enabled`
-are read and may stay.
+are read and may stay. With Camunda's starter `camunda-bpm-spring-boot-starter-external-task-client`,
+`camunda.bpm.client.*` is read and may stay too.
 
 ### The first start deploys every model again
 

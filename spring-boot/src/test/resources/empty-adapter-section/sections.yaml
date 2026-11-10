@@ -1,0 +1,12 @@
+vanillabp:
+  adapters:
+    camunda7: {}
+  workflow-modules:
+    loans:
+      adapters:
+        camunda7: {}
+---
+vanillabp:
+  adapters:
+    camunda7:
+      history-time-to-live: P2D

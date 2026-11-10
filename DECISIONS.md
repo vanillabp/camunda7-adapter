@@ -2131,6 +2131,12 @@ why application code should not touch the engine.
 
 An engine plugin or an engine customizer still runs after the adapter, so its values win.
 
+**Addendum of story 2119, decided by the maintainer on 2026-11-10.** For the id generator the
+sentence above holds for an engine plugin only together with the key
+`vanillabp.adapters.<adapter-id>.allow-plugins-to-change-adapter-settings`. Without the key a plugin
+which sets another id generator ends the start. Decision 61 says why. The history level is not
+affected: a plugin may still add a level, and its value wins.
+
 **Tests.** `Camunda7HistoryLevelTest` (core, real engine on H2) holds the default, a level which
 differs from the database, `auto`, an unknown level, a level of a plugin, and the refusal of an
 empty value and of `variable`. `Camunda7VersionOneDatabaseIT` (Spring Boot) starts the application
@@ -2234,6 +2240,17 @@ and the start uses two phases. The application's default datasource is the one S
 type, so a `@Primary` bean or the only one. An application whose only datasource is called
 `camundaBpmDataSource` shares it with the engine, as before.
 
+**Addendum of story 2116, decided by the maintainer on 2026-11-10.** The check that two adapter
+ids do not share a database (decision 47) follows the datasource too. It compares the bean name of
+the datasource each engine got, and the application's default datasource counts as one datasource
+however it was reached. Before, the check read only the keys. So it missed an id without
+`data-source-name`, which runs on `camundaBpmDataSource`, next to an id with
+`data-source-name: camundaBpmDataSource`. It also missed an id on the default datasource next to an
+id which names that datasource by its bean name, such as `dataSource`. An alias and the bean name
+compare equal as well. The table prefix is still read from the key. A fork adapter which builds its
+identity from the keys describes the default datasource the same way, so the check across adapter
+types still works. Quarkus is not touched, because it names its datasources in the configuration.
+
 Quarkus has nothing like it. Version 1 had no Quarkus adapter, and Quarkus names its datasources in
 the configuration, not as beans.
 
@@ -2242,9 +2259,79 @@ the configuration, not as beans.
 - `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/engine/Camunda7EngineDatabase.java`
   (type Javadoc and `choose`)
 - `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/engine/Camunda7EngineHolder.java`
-  (class Javadoc, field `ownDataSource`)
+  (class Javadoc, field `ownDataSource`, field `instanceIdentity`, method `nameOfTheDataSource`)
+- `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/Camunda7AdapterBeanRegistrar.java`
+  (method `instanceIdentities`)
+- `core/src/main/java/io/vanillabp/camunda7/engine/Camunda7InstanceIdentity.java` (parameter
+  `dataSourceName`)
 - `spring-boot/src/test/java/io/vanillabp/camunda7/springboot/it/Camunda7VersionOneDataSourceTest.java`
-- `README.md`, section "Embedded-engine wiring"
+- `README.md`, section "Embedded-engine wiring", and the section on several ids of one type
 - `UPGRADE.md`, section "A `camundaBpmDataSource` works as before, and a `camunda.bpm.*` key ends the boot"
 - wiki page *Configuration*, section "Choosing the datasource"
+- wiki page *Configuration*, section "Several engines side by side"
+
+### 61. An engine plugin which changes a setting the adapter sets ends the start, unless a key allows it
+
+Proposed by story 2119. Decided by the maintainer on 2026-11-10: the start ends while the key is not set.
+With the key set, each changed setting gets a WARN.
+
+**Why.** The engine runs the `ProcessEnginePlugin`s of the application after the adapter set up the engine
+configuration. So a plugin could change any setting the adapter sets itself, and nobody would notice. Think of
+`jobExecutorDeploymentAware=false` (decision 59), another id generator (decision 58) or another class loader.
+The application would lose what the adapter promises, and the first sign would be a stuck workflow during a
+rolling update. Plugins stay supported, though. A data format (SPIN, camunda-xstream) needs one, and an
+application reaches every setting without a key through one.
+
+**What holds.**
+
+- The adapter puts a small plugin of its own before, between and after the plugins of the application. Each
+  one compares the watched settings with what the one before it saw. So a change is reported with the class of
+  the plugin which made it. A plugin configured under `engine-plugins` and a plugin bean are watched alike.
+- This happens in each of the three steps of a plugin: `preInit`, `postInit` and `postProcessEngineBuild`.
+  The engine fills some settings itself between two steps, so each step starts from what the engine holds
+  when the step begins. A change found in `postProcessEngineBuild` closes the engine again before the start
+  ends.
+- The watched settings are the engine settings which `client-configuration-inventory.yml` marks as
+  `set-by-adapter`: `applicationContext` (Spring Boot only), `classLoader`, `processEngineName`,
+  `transactionManager`, `transactionsExternallyManaged`, `customPreBPMNParseListeners`,
+  `customPostBPMNParseListeners`, `expressionManager`, `historyEventHandler`,
+  `customPostCommandInterceptorsTxRequired`, `customPostCommandInterceptorsTxRequiresNew`, `jobExecutor`,
+  `jobExecutorActivate`, `idGenerator` and `jobExecutorDeploymentAware`. Every other setting stays free for a
+  plugin.
+- A list is changed only if an entry the adapter put there is gone. Adding a parse listener or a command
+  interceptor is what many plugins do, and it is fine. An entry counts as there only if it is the same object.
+- The message which ends the start names each setting, the adapter's value, the plugin and the step, and the
+  key `vanillabp.adapters.<adapter-id>.allow-plugins-to-change-adapter-settings`. With that key set to
+  `true`, the start goes on, and each change gets one WARN with the same facts. Only the adapter level exists,
+  because the settings belong to the engine, and one engine serves every workflow module of the adapter id.
+- On Quarkus a plugin bean was removed by ArC before, because nothing injects it, and the engine was built
+  without it. The extension now keeps every `ProcessEnginePlugin` bean, as it keeps the engine customizers.
+- An engine customizer (`Camunda7EngineCustomizer`) is not watched. It runs before the plugins, and what it
+  sets is part of what the plugins are compared against.
+
+**The history level is not watched.** It has its own key (`history-level`, decision 58), so it is a setting the
+application owns, not one the adapter sets on its own. Decision 58 also lets a plugin add a history level and
+lets its value win. And a level which differs from the database ends the start anyway, with the adapter's
+message. The same holds for every other setting the inventory lists as `supported`.
+
+**What changes for decision 58.** Its sentence "An engine plugin or an engine customizer still runs after the
+adapter, so its values win" now holds for a plugin only together with the new key, as far as the id generator is
+concerned. An application which wants the `DbIdGenerator` sets it with a plugin and sets the key. Decision 58
+has an addendum which says so.
+
+**Tests.** `Camunda7AdapterSettingsGuardTest` (core, real engine on H2) holds the rules: a changed setting, the
+key, a free setting, an added and a removed list entry, a change in `postInit` and one after the build.
+`Camunda7PluginChangingAnAdapterSettingIT` holds them on a booted Spring Boot application.
+`Camunda7PluginChangingAnAdapterSettingTest` (a CDI bean) and
+`Camunda7PluginAllowedToChangeAnAdapterSettingTest` (two plugins under `engine-plugins`) hold them on Quarkus.
+
+**Where it is cited.**
+
+- type javadoc of `core/src/main/java/io/vanillabp/camunda7/engine/Camunda7AdapterSettingsGuard.java`
+- `client-configuration-inventory.yml`, the comment above the `set-by-adapter` settings of the engine surface,
+  and the entries `idGenerator` and `jobExecutorDeploymentAware`
+- `README.md`, section "Embedded-engine wiring"
+- `UPGRADE.md`, section "Camunda's Spring Boot starter no longer builds the engine"
+- wiki page *Configuration*, the key table and the section "A plugin may not change what the adapter sets"
+- the Operaton and CIB seven adapters get the same entry through the sync
 

@@ -71,6 +71,12 @@
       "type": "java.lang.Boolean",
       "description": "Whether the engine evaluates decisions with its older FEEL implementation, which needs no FEEL engine library. An application which runs the Operaton adapter next to this one needs it, together with an exclusion of 'org.camunda.feel:feel-engine'. Only the adapter level exists, because the setting belongs to the engine.",
       "defaultValue": false
+    },
+    {
+      "name": "vanillabp.adapters.camunda7.allow-plugins-to-change-adapter-settings",
+      "type": "java.lang.Boolean",
+      "description": "Whether an engine plugin of the application may change a setting which the adapter sets itself, like the id generator or 'jobExecutorDeploymentAware'. Without it such a change ends the start, and the message names the setting and the plugin. With it each change gets a warning, and the start goes on. Only the adapter level exists, because the settings belong to the engine.",
+      "defaultValue": false
     }
   ]
 }
