@@ -16,7 +16,8 @@ import org.camunda.bpm.engine.RepositoryService;
  * source does not end with that name holds models which version 1 deployed. Version 1
  * deployed the file as it was. This adapter did not prepare those models.
  * <p>
- * Decision 17 in the repository's DECISIONS.md says what the source is used for.
+ * See decision 17 in the repository's DECISIONS.md for what the source is used for, and
+ * decision 22 for why a model which version 1 deployed is told apart.
  */
 public final class Camunda7DeploymentSource {
 

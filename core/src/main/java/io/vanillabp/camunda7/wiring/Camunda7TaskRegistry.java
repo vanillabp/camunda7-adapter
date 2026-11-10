@@ -338,8 +338,9 @@ public class Camunda7TaskRegistry {
   /**
    * Whether a VanillaBP adapter prepared the models of a deployment before it deployed them.
    * A model version 1 deployed was not prepared. So it carries none of the notes this adapter
-   * writes, for example the one on a call activity (see {@link Camunda7CallActivities}). The
-   * answer is kept per deployment, so the engine is asked once.
+   * writes, for example the one on a call activity (see {@link Camunda7CallActivities}, and
+   * see decision 22 in the repository's DECISIONS.md). The answer is kept per deployment, so
+   * the engine is asked once.
    *
    * @param repositoryService Where the deployment is looked up
    * @param deploymentId The deployment id of a process definition

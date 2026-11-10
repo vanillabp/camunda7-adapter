@@ -228,7 +228,7 @@ public final class Camunda7MultiInstances {
    * in an expression, there was nothing to write the answer onto. So the core is asked now,
    * through the registry of this engine. Without a registry the walk ends there. The core is
    * asked the same way for a model version 1 deployed, because nobody wrote an answer into
-   * it either.
+   * it either. See decision 22 in the repository's DECISIONS.md.
    */
   private static DelegateExecution nextOf(
       final DelegateExecution execution,

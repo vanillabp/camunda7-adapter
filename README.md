@@ -302,7 +302,8 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   and a bean `camundaBpmTransactionManager` take the place of the application's beans, as
   they did in version 1. `Camunda7EngineDatabase#choose` says what differs from version 1
   and why, and `Camunda7VersionOneDataSourceTest` holds each case. Whether the engine joins
-  the caller's transaction follows the datasource it really gets, not the key,
+  the caller's transaction follows the datasource it really gets, not the key
+  ([decision 60](./DECISIONS.md#60-a-bean-camundabpmdatasource-is-the-engines-datasource-as-in-version-1-and-the-engine-behaves-by-the-datasource-it-really-gets)),
 - creates or upgrades its schema on boot (`database-schema-update`, default `true`),
 - loads the classes a model names, Java-serialized values and scripts through the class
   loader of the application context, as version 1 did. Otherwise the engine would fall back
@@ -318,7 +319,7 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   own would use `audit` and numbers from the database. The engine stores the level in the
   database on its first start and refuses a later start with another level. So the level of
   version 1 is what lets a database of version 1 start without a change
-  (`DECISIONS.pending/2103.md`). Quarkus gets the same defaults, so an application gets the
+  ([decision 58](./DECISIONS.md#58-the-engine-keeps-the-history-level-and-the-ids-of-version-1)). Quarkus gets the same defaults, so an application gets the
   same engine on both platforms. A level the engine does not know, and a level which differs
   from the database, end the start with a message which names the key and the levels
   (`Camunda7HistoryLevel`). `Camunda7HistoryLevelTest` tests both messages and `auto` on a real
@@ -446,7 +447,8 @@ A model which version 1 deployed carries no note at all, because version 1 deplo
 it was. A workflow version 1 started runs on such a model after the upgrade. So a missing note
 means "no" only where a VanillaBP adapter prepared the model. The deployment source tells this
 apart (`Camunda7DeploymentSource`). For a model of version 1 the walk asks the core, as for an
-expression. The answer is kept per deployment. `Camunda7UpgradeFromVersionOneIT` holds it.
+expression. The answer is kept per deployment. `Camunda7UpgradeFromVersionOneIT` holds it. Decision
+22 says so in its addendum.
 
 Both contexts of this adapter answer the walk: the one of a service-like task and the one of a
 user task. A user task is notified from a task listener. The engine hands that listener a
@@ -1578,7 +1580,8 @@ tenant. The older versions are what workflows started before this release run on
 is not read, because version 1 wrote the application name there. A node with an older release never
 registers a deployment made after it started, which is what keeps it away from the jobs of a newer
 version during a rolling update. `Camunda7DeploymentAwareJobAcquisitionTest` holds this with two
-engines on one database.
+engines on one database. The reasoning is
+[decision 59](./DECISIONS.md#59-the-job-executor-fetches-the-jobs-of-this-applications-workflow-modules-every-version-of-them).
 
 ### A workflow is served from the model of its own version
 

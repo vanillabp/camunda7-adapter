@@ -34,7 +34,8 @@ import lombok.extern.slf4j.Slf4j;
  *       is configured, the engine runs on the {@link DataSource} BEAN of that name
  *       instead, which the application provides. Without that key a bean named
  *       <code>camundaBpmDataSource</code> takes the place of the default datasource, as
- *       in version 1 (see {@link Camunda7EngineDatabase}). Setting up datasources is NOT
+ *       in version 1 (see {@link Camunda7EngineDatabase}, and see decision 60 in the
+ *       repository's DECISIONS.md). Setting up datasources is NOT
  *       VanillaBP's job, on purpose. The adapter never builds its own pool. A named
  *       datasource is needed when two engines run side by side for a migration, because
  *       two embedded engines must never share one schema. Engine commands on such a
@@ -86,8 +87,9 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   /**
    * Whether the engine runs on a datasource which is not the application's default one. It
    * follows the datasource the engine really gets, not the key alone. A bean
-   * <code>camundaBpmDataSource</code> makes it true without any key. It is known once
-   * {@link #afterPropertiesSet()} chose the datasource.
+   * <code>camundaBpmDataSource</code> makes it true without any key (see decision 60 in the
+   * repository's DECISIONS.md). It is known once {@link #afterPropertiesSet()} chose the
+   * datasource.
    */
   private boolean ownDataSource;
 
@@ -334,7 +336,8 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     // the job executor fetches only the jobs of deployments registered with this engine, as
     // in version 1. During a rolling update a node with the old code then leaves the jobs of
     // a newer version alone. The deployment service registers every version this
-    // application deployed before, so workflows on older versions keep running
+    // application deployed before, so workflows on older versions keep running. See
+    // decision 59 in the repository's DECISIONS.md
     configuration.setJobExecutorDeploymentAware(true);
     // Camunda 7.24 rejects deployments of processes without a history-time-to-live.
     // A default for the whole engine means that BPMN models need not declare it one by
@@ -395,7 +398,8 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
     // the history level and the ids of version 1, whose engine Camunda's Spring Boot starter
     // built. The engine stores the level in the database and does not start with another
-    // one, so a database of version 1 needs 'full' (see DECISIONS.pending/2103.md)
+    // one, so a database of version 1 needs 'full'. See decision 58 in the repository's
+    // DECISIONS.md
     io.vanillabp.camunda7.engine.Camunda7HistoryLevel.applyTo(adapterId, configuration, properties);
     configuration.setIdGenerator(new org.camunda.bpm.engine.impl.persistence.StrongUuidGenerator());
 

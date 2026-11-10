@@ -184,7 +184,8 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     // the job executor fetches only the jobs of deployments registered with this engine, as
     // in version 1. During a rolling update a node with the old code then leaves the jobs of
     // a newer version alone. The deployment service registers every version this
-    // application deployed before, so workflows on older versions keep running
+    // application deployed before, so workflows on older versions keep running. See
+    // decision 59 in the repository's DECISIONS.md
     configuration.setJobExecutorDeploymentAware(true);
     // an adapter id which may let its engine sleep needs the acquisition loop which asks
     // for the next due date. The executor itself installs that loop. Without the sleep
@@ -203,7 +204,7 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
 
     // the same history level and ids as on Spring Boot, where they are the ones of version 1.
     // Version 1 had no Quarkus adapter, but an application should get the same engine on both
-    // platforms (see DECISIONS.pending/2103.md)
+    // platforms. See decision 58 in the repository's DECISIONS.md
     io.vanillabp.camunda7.engine.Camunda7HistoryLevel.applyTo(adapterId, configuration, properties);
     configuration.setIdGenerator(new org.camunda.bpm.engine.impl.persistence.StrongUuidGenerator());
     // job-executor threads must load delegate classes through the Quarkus runtime

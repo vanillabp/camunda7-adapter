@@ -20,7 +20,8 @@ import lombok.extern.slf4j.Slf4j;
  * The database an engine runs on, where the adapter id names no datasource
  * (<code>data-source-name</code> unset or <code>default</code>). That is the application's
  * default datasource, or a bean <code>camundaBpmDataSource</code> where the application has
- * one, as in version 1. See {@link #choose}.
+ * one, as in version 1. See {@link #choose}, and see decision 60 in the repository's
+ * DECISIONS.md.
  *
  * @param dataSource The datasource the engine runs on
  * @param transactionManager The transaction manager the engine's commands run on
@@ -61,7 +62,8 @@ public record Camunda7EngineDatabase(
    * adapter's own. Version 1 used the application's transaction manager there. That one
    * does not manage this datasource, so the statements of one engine command were not
    * committed together. What the engine does then follows the datasource it really gets:
-   * it does not join the caller's transaction, and repeated deliveries are recognized.
+   * it does not join the caller's transaction, and repeated deliveries are recognized. See
+   * decision 60 in the repository's DECISIONS.md.
    *
    * @param adapterId The adapter id
    * @param applicationContext Where the beans of version 1 are looked for

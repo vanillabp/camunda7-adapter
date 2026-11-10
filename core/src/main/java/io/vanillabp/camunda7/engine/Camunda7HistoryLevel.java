@@ -21,8 +21,8 @@ import org.camunda.bpm.engine.impl.history.HistoryLevel;
  * The engine writes the level into the database on its first start and compares it on every
  * later start. If the two differ, the engine does not start. So a
  * database which version 1 set up only starts with <code>full</code>, or with
- * <code>auto</code>, which takes the level the database stores. The entry
- * {@code DECISIONS.pending/2103.md} says why the default is the one of version 1.
+ * <code>auto</code>, which takes the level the database stores. See decision 58 in the
+ * repository's DECISIONS.md for why the default is the one of version 1.
  * <p>
  * {@link #applyTo} hands the value to the engine before it is built. The engine itself decides
  * which names it knows, because an engine plugin or an engine customizer may add a level of its

@@ -2792,7 +2792,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // version deployed by THIS boot needs no query at all
     final var deployment = deploymentBuilder.deployWithResult();
     // the engine works deployment-aware. The deploy command registered only the deployment
-    // it made or found. Workflows on older versions need theirs registered as well
+    // it made or found. Workflows on older versions need theirs registered as well. See
+    // decision 59 in the repository's DECISIONS.md
     if (managementService != null) {
       Camunda7JobExecutorRegistration
           .registerEveryDeploymentOf(adapterId, workflowModuleId, tenantId, repositoryService, managementService);

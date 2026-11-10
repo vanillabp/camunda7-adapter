@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * stays unregistered. A node with the old code of this application does not know a deployment
  * which a newer node made after it started. So during a rolling update it leaves the jobs of
  * the newest version to the nodes which have the code for them. That is what the setting is
- * for.
+ * for. See decision 59 in the repository's DECISIONS.md.
  */
 final class Camunda7JobExecutorRegistration {
 

@@ -33,7 +33,8 @@ import io.vanillabp.integration.workflowmodule.WorkflowModuleAutoConfiguration;
  * A bean <code>camundaBpmDataSource</code> and a bean <code>camundaBpmTransactionManager</code>
  * work as they did in VanillaBP 1, where the adapter id names no datasource. Without them the
  * engine would run on the application's datasource and create empty tables there. The
- * running workflows of the application would seem to be gone, and nothing would say so.
+ * running workflows of the application would seem to be gone, and nothing would say so. See
+ * decision 60 in the repository's DECISIONS.md.
  * <p>
  * The engine's datasource is read from the engine configuration, where Spring's proxy wraps
  * it. Each case builds its own H2 databases, so no case sees the tables of another one.
