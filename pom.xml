@@ -91,7 +91,7 @@
     <quarkus.version>3.40.1.1</quarkus.version>
     <lombok.version>1.18.48</lombok.version>
     <!-- the engine's StrongUuidGenerator needs it, and camunda-engine declares it 'provided' -->
-    <java-uuid-generator.version>4.3.0</java-uuid-generator.version>
+    <java-uuid-generator.version>5.2.0</java-uuid-generator.version>
   </properties>
 
   <dependencyManagement>
