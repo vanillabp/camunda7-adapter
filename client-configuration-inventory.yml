@@ -96,8 +96,8 @@ settings:
           - transactionManager
           - transactionsExternallyManaged
         reason: >-
-          The adapter connects the engine to the application: to the Spring context or the class
-          loader of Quarkus, and to the transaction manager of the platform. It names the engine after
+          The adapter connects the engine to the application: to the Spring context and its class
+          loader or the class loader of Quarkus, and to the transaction manager of the platform. It names the engine after
           the adapter type and the adapter id, so that the engines of several adapter ids stay apart.
       - names:
           - customPostBPMNParseListeners

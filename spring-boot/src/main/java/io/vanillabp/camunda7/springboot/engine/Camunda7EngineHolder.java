@@ -280,6 +280,11 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
     final var configuration = new SpringProcessEngineConfiguration();
     configuration.setApplicationContext(applicationContext);
+    // the engine loads the classes a model names (camunda:class, Java-serialized values,
+    // scripts) through this class loader first. Without it the engine falls back to the
+    // class loader of the calling thread, which does not see the application's classes under
+    // Spring DevTools or on a thread the application did not start. Version 1 did the same
+    configuration.setClassLoader(applicationContext.getClassLoader());
     // VanillaBP task wiring: a top-level EL name which neither a process variable nor a
     // Spring bean answers reaches a @WorkflowTask method. The parse listener sets
     // transaction boundaries like a remote BPMS has them (async before/after)

@@ -300,6 +300,10 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   adapter never builds a pool. If the bean is missing, the boot fails and lists the
   available `DataSource` beans,
 - creates or upgrades its schema on boot (`database-schema-update`, default `true`),
+- loads the classes a model names, Java-serialized values and scripts through the class
+  loader of the application context, as version 1 did. Otherwise the engine would fall back
+  to the class loader of the calling thread, which does not see the application's classes
+  under Spring DevTools or on a thread of a library (`Camunda7ApplicationClassLoaderIT`),
 - runs asynchronous continuations on a `SpringJobExecutor` with its own
   managed thread pool, active only while workflow processing is started, and
 - applies a default history time-to-live (`history-time-to-live`, default `P180D`).
