@@ -394,16 +394,18 @@ public final class Camunda7AdapterSettingsGuard {
         // the engine exists already in the last step. It must not keep running
         builtEngine.close();
       }
-      throw new IllegalStateException(
+      throw new Camunda7StartupExplanation(
           """
               Camunda 7 adapter '%s': an engine plugin of your application changed settings which \
               the adapter sets itself!
               %s
               VanillaBP needs these values. The file client-configuration-inventory.yml of the \
-              adapter says why for each of them. Remove the change from the plugin. If your \
-              application really needs it, set '%s: true'. Then the start goes on, with a warning \
-              for each setting a plugin changed."""
-              .formatted(adapterId, lines, key));
+              adapter says why for each of them."""
+              .formatted(adapterId, lines), """
+                  Remove the change from the plugin. If your application really needs it, set \
+                  '%s: true'. Then the start goes on, with a warning for each setting a plugin \
+                  changed."""
+                  .formatted(key), null);
 
     }
 

@@ -2,6 +2,7 @@ package io.vanillabp.camunda7.it;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 
+import io.vanillabp.camunda7.engine.Camunda7StartupExplanation;
 import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
@@ -24,7 +26,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * An engine plugin of the application which changes a setting the adapter sets itself, on a
  * booted Spring Boot application. The start ends and names the setting, the adapter's value,
  * the plugin and the key. With the key the application starts, and the change gets a WARN. A
- * plugin which changes any other setting is left alone. The rules themselves are tested in
+ * plugin which changes any other setting is left alone. The message which ends the start is
+ * the adapter's explanation, so Spring Boot shows it first. The rules themselves are tested in
  * {@code Camunda7AdapterSettingsGuardTest} (core).
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -82,6 +85,8 @@ public class Camunda7PluginChangingAnAdapterSettingIT {
     final var failure = assertThrows(RuntimeException.class,
         () -> start("c7-plugin-changes-setting", NotDeploymentAwarePlugin.class.getName()));
 
+    // the failure analyzer shows the message first only if it is the adapter's explanation
+    assertNotNull(Camunda7StartupExplanation.in(failure));
     final var message = rootMessage(failure);
     assertTrue(message.contains("Camunda 7 adapter 'c7': an engine plugin of your application changed settings"),
         message);
