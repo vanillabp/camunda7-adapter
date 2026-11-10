@@ -60,6 +60,22 @@ import lombok.extern.slf4j.Slf4j;
 @SuppressWarnings("LombokGetterMayBeUsed")
 public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle, ApplicationContextAware, InitializingBean, AutoCloseable {
 
+  /**
+   * The settings the adapter sets on Spring Boot only, which a plugin of the application may
+   * not change without the key. The application context has no getter, so its field is read.
+   */
+  static final java.util.List<io.vanillabp.camunda7.engine.Camunda7AdapterSettingsGuard.Setting> SETTINGS_ONLY_SPRING_BOOT_HAS = java.util.List
+      .of(
+          io.vanillabp.camunda7.engine.Camunda7AdapterSettingsGuard.Setting
+              .value(
+                  "applicationContext",
+                  io.vanillabp.camunda7.engine.Camunda7AdapterSettingsGuard
+                      .fieldOf(SpringProcessEngineConfiguration.class, "applicationContext")),
+          io.vanillabp.camunda7.engine.Camunda7AdapterSettingsGuard.Setting
+              .value(
+                  "transactionManager",
+                  configuration -> ((SpringProcessEngineConfiguration) configuration).getTransactionManager()));
+
   private final String adapterId;
 
   /**
@@ -427,6 +443,16 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
                 .getBeanProvider(io.vanillabp.camunda7.engine.Camunda7EngineCustomizer.class)
                 .orderedStream()
                 .toList());
+
+    // a plugin of the application runs after everything above. So it could change a
+    // setting the adapter sets itself without anybody noticing. This puts a watch around
+    // the plugins, which names each such change and the plugin which made it
+    io.vanillabp.camunda7.engine.Camunda7AdapterSettingsGuard
+        .watch(
+            adapterId,
+            configuration,
+            properties.isAllowPluginsToChangeAdapterSettings(),
+            SETTINGS_ONLY_SPRING_BOOT_HAS);
 
     try {
       this.processEngine = configuration.buildProcessEngine();

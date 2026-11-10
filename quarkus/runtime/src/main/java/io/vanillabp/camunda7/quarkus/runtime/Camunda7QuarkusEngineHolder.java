@@ -271,6 +271,23 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
                 .map(io.quarkus.arc.InstanceHandle::get)
                 .toList());
 
+    // a plugin of the application runs after everything above. So it could change a
+    // setting the adapter sets itself without anybody noticing. This puts a watch around
+    // the plugins, which names each such change and the plugin which made it. The
+    // transaction manager is the one setting only this platform has
+    io.vanillabp.camunda7.engine.Camunda7AdapterSettingsGuard
+        .watch(
+            adapterId,
+            configuration,
+            properties.isAllowPluginsToChangeAdapterSettings(),
+            java.util.List
+                .of(
+                    io.vanillabp.camunda7.engine.Camunda7AdapterSettingsGuard.Setting
+                        .value(
+                            "transactionManager",
+                            settings -> ((org.camunda.bpm.engine.impl.cfg.JakartaTransactionProcessEngineConfiguration) settings)
+                                .getTransactionManager())));
+
     try {
       this.processEngine = configuration.buildProcessEngine();
     } catch (final RuntimeException | LinkageError e) {

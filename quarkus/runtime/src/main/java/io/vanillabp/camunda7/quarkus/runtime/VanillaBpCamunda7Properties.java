@@ -420,6 +420,15 @@ public interface VanillaBpCamunda7Properties {
      */
     Optional<Boolean> dmnFeelLegacyBehavior();
 
+    /**
+     * OPTIONAL: whether an engine plugin of the application may change a setting which the
+     * adapter sets itself. Then each change gets a WARN, and the start goes on. The default
+     * is <code>false</code>, which ends the start. See {@code Camunda7AdapterSettingsGuard}.
+     *
+     * @return The configured answer, empty for <code>false</code>
+     */
+    Optional<Boolean> allowPluginsToChangeAdapterSettings();
+
   }
 
 }

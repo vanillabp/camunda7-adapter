@@ -126,6 +126,10 @@ vanillabp:
       # which needs no FEEL engine library. Needed next to the Operaton adapter.
       # Default: false - see 'Decision tables next to the Operaton adapter' below.
       dmn-feel-legacy-behavior: true
+      # OPTIONAL: an engine plugin of the application may change a setting the
+      # adapter sets itself, like the id generator. Each change gets a WARN.
+      # Default: false, which ends the start - see 'Embedded-engine wiring' below.
+      allow-plugins-to-change-adapter-settings: true
 ```
 
 On Spring Boot, declare the additional datasource bean with
@@ -328,6 +332,21 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   (`Camunda7HistoryLevel`). `Camunda7HistoryLevelTest` tests both messages and `auto` on a real
   engine. `Camunda7VersionOneDatabaseIT` starts the application on a database set up like
   version 1 did it.
+
+An engine plugin of the application runs after the adapter set all of this up. So it could
+change a setting the adapter sets itself, and nobody would notice. `Camunda7AdapterSettingsGuard`
+(module `core`) puts a small plugin of its own before, between and after the application's plugins.
+Each one compares the settings which `client-configuration-inventory.yml` marks as `set-by-adapter`
+with what the one before it saw, in `preInit`, `postInit` and `postProcessEngineBuild`. So a change
+is reported with the plugin which made it. It ends the start, unless
+`vanillabp.adapters.<adapter-id>.allow-plugins-to-change-adapter-settings` is `true`. Then each
+change gets a WARN. A plugin may add entries to a list like the parse listeners, but it may not
+remove the adapter's. The history level is not watched, because it has a key of its own
+([`DECISIONS.pending/2119.md`](./DECISIONS.pending/2119.md) says why).
+`Camunda7AdapterSettingsGuardTest` holds the rules on a real engine,
+`Camunda7PluginChangingAnAdapterSettingIT` on Spring Boot, and
+`Camunda7PluginChangingAnAdapterSettingTest` and `Camunda7PluginAllowedToChangeAnAdapterSettingTest`
+on Quarkus.
 
 A `DataSource` and a `PlatformTransactionManager` must be present, unless every configured
 id brings its own datasource. A Camunda 7 application always needs a database.
