@@ -37,6 +37,30 @@ On Quarkus the artifact is `io.vanillabp:camunda7-adapter-quarkus`. Version 1 st
 Nothing is published under the old groupId for version 2, so there is no relocation: a build which
 still names the old groupId with a version 2 number finds nothing.
 
+### Camunda's Spring Boot starter no longer builds the engine
+
+Version 1 let Camunda's Spring Boot starter build the engine. Version 2 builds it itself and uses
+none of the starter's plugins. Most of what those plugins did, the engine does anyway. So job
+retries, `camunda:failedJobRetryTimeCycle`, incidents, metrics and authorization checks behave as
+before. A few things are gone, most of them on purpose.
+
+The engine no longer publishes Spring events. An `@EventListener` for a `DelegateExecution`, a
+`DelegateTask`, a `HistoryEvent`, a `PostDeployEvent` or a `PreUndeployEvent` is never called, and
+the `camunda.bpm.eventing.*` keys do nothing. This is deliberate. Such a listener works with the
+engine behind VanillaBP's back, and it ties your code to Camunda 7. Use `@WorkflowTask`,
+`@TaskEvent` and `@WorkflowEnded` instead. They cover the moments a workflow needs, and they work
+on every BPMS.
+
+For the same reason, beans of the engine's own types are no longer picked up. A
+`HistoryEventHandler`, a `JobHandler` or an `IdGenerator` in your application context stays unused.
+
+The engine is called `vanillabp-camunda7-<adapter-id>` now, not `default`. A Cockpit bookmark or a
+REST call with `default` in its path has to use the new name. A REST call without an engine in its
+path finds no engine.
+
+The health contributors `processEngine` and `jobExecutor` are gone. If a health group in your
+configuration lists one of them, Spring Boot refuses to start. Remove it from the group.
+
 ### The engine keeps the history level and the ids of version 1
 
 Version 1 let Camunda's Spring Boot starter build the engine. The starter writes history at the
