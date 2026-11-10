@@ -379,6 +379,15 @@ task client (`camunda-bpm-spring-boot-starter-external-task-client`) on the clas
 next to the adapter, for the external tasks of another engine.
 `Camunda7ExternalTaskClientVersionOneKeysTest` starts the client next to the adapter.
 
+Where the adapter knows why the engine did not start, it throws a `Camunda7StartupExplanation`:
+what is wrong, and what to change. Today these are a history level which is unknown or differs
+from the database, and a FEEL engine library which does not fit Camunda 7. The developer has to
+read this message first. On Spring Boot it sits deep in a chain of bean creation exceptions, so
+`Camunda7StartupExplanationFailureAnalyzer` puts its two parts under "APPLICATION FAILED TO
+START" as "Description" and "Action" (`Camunda7VersionOneDatabaseIT`). On Quarkus,
+`Camunda7EngineProducer` throws it as it is and does not wrap it into its general message about
+building the engine (`Camunda7StartupExplanationTest`).
+
 ### What an extension may add to the engine
 
 An extension of VanillaBP, above all the Business Cockpit, needs hooks inside the engine. It

@@ -104,7 +104,8 @@ public class Camunda7DmnFeelLegacyBehaviorTest {
 
     assertEquals(1, answer.size(), () -> answer.toString());
     final var message = answer.get(0);
-    assertTrue(message.startsWith("FAILED: java.lang.IllegalStateException: Camunda 7 adapter 'feel-less-without-key'"),
+    assertTrue(message.startsWith(
+        "FAILED: io.vanillabp.camunda7.engine.Camunda7StartupExplanation: Camunda 7 adapter 'feel-less-without-key'"),
         message);
     assertTrue(message.contains("set 'vanillabp.adapters.feel-less-without-key.dmn-feel-legacy-behavior: true'"),
         message);

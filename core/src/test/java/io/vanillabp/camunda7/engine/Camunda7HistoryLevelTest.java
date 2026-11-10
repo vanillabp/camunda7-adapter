@@ -2,6 +2,7 @@ package io.vanillabp.camunda7.engine;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,6 +64,12 @@ public class Camunda7HistoryLevelTest {
       assertTrue(message.contains("The database stores 'full', but 'vanillabp.adapters.c7.history-level' is 'audit'"),
           message);
       assertTrue(message.contains("Set 'vanillabp.adapters.c7.history-level: full'"), message);
+      // the two parts a failure analyzer shows under "Description" and "Action"
+      final var explanation = assertInstanceOf(Camunda7StartupExplanation.class, failure);
+      assertTrue(explanation.getDescription().endsWith("every later start has to use the same level."),
+          explanation.getDescription());
+      assertTrue(explanation.getAction().startsWith("Set 'vanillabp.adapters.c7.history-level: full'"),
+          explanation.getAction());
       // the engine's own exception stays the cause, so nothing of it is lost
       assertTrue(failure.getCause().getMessage().startsWith("historyLevel mismatch"), failure.getCause().getMessage());
     } finally {

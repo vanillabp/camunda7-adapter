@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 
+import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
@@ -100,7 +101,8 @@ public class Camunda7VersionOneDatabaseIT {
 
   @Test
   @DisplayName("another level on a database of version 1 ends the start with the key and both levels named")
-  public void anotherLevelIsExplained() {
+  public void anotherLevelIsExplained(
+      final CapturedOutput output) {
 
     final var database = "c7-version-one-database-audit";
     setUpLikeVersionOne(database);
@@ -115,12 +117,14 @@ public class Camunda7VersionOneDatabaseIT {
     assertTrue(message.contains("The database stores 'full', but 'vanillabp.adapters.c7.history-level' is 'audit'"),
         message);
     assertTrue(message.contains("Set 'vanillabp.adapters.c7.history-level: full'"), message);
+    assertTheReportStartsWithTheAdapter(output, "Set 'vanillabp.adapters.c7.history-level: full'");
 
   }
 
   @Test
   @DisplayName("a level the engine does not know ends the start with the list of the allowed ones")
-  public void anUnknownLevelIsExplained() {
+  public void anUnknownLevelIsExplained(
+      final CapturedOutput output) {
 
     final var failure = assertThrows(
         RuntimeException.class,
@@ -131,6 +135,37 @@ public class Camunda7VersionOneDatabaseIT {
     final var message = messageOfTheAdapter(failure);
     assertTrue(message.contains("'vanillabp.adapters.c7.history-level' is 'everything'"), message);
     assertTrue(message.contains("Use one of: none, activity, audit, full, auto."), message);
+    assertTheReportStartsWithTheAdapter(output, "Use one of: none, activity, audit, full, auto.");
+
+  }
+
+  /**
+   * Spring Boot's report of the failed start shows the adapter's explanation first, under
+   * "Description" and "Action", and not the chain of bean creation exceptions around it.
+   */
+  private static void assertTheReportStartsWithTheAdapter(
+      final CapturedOutput output,
+      final String action) {
+
+    final var printed = output.getAllOfThisTest();
+    final var report = printed.indexOf("APPLICATION FAILED TO START");
+    assertTrue(report >= 0, printed);
+    final var afterTheHeadline = printed.substring(report);
+    final var description = afterTheHeadline.indexOf("Description:");
+    final var actionHeadline = afterTheHeadline.indexOf("Action:");
+    assertTrue((description >= 0) && (actionHeadline > description), afterTheHeadline);
+    assertTrue(
+        afterTheHeadline
+            .substring(description + "Description:".length())
+            .strip()
+            .startsWith("Camunda 7 adapter 'c7' could not start its engine"),
+        afterTheHeadline);
+    assertTrue(
+        afterTheHeadline
+            .substring(actionHeadline + "Action:".length())
+            .strip()
+            .startsWith(action),
+        afterTheHeadline);
 
   }
 
