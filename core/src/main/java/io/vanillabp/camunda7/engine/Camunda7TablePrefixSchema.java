@@ -109,6 +109,29 @@ public final class Camunda7TablePrefixSchema {
       final Camunda7EngineProperties properties,
       final DataSource dataSource) {
 
+    validate(adapterId, properties, dataSource, properties.usesSeparateDataSource()
+        ? properties.getDataSourceName()
+        : null);
+
+  }
+
+  /**
+   * The same check, for a platform which knows more about the datasource than the key
+   * says. On Spring Boot an adapter id without <code>data-source-name</code> may run on a
+   * bean <code>camundaBpmDataSource</code>, and the message has to name that one.
+   *
+   * @param adapterId The adapter id
+   * @param properties The adapter id's engine settings
+   * @param dataSource The datasource the engine of this adapter id runs on
+   * @param dataSourceName The name of that datasource, or <code>null</code> where it is the
+   *          application's default datasource
+   */
+  public static void validate(
+      final String adapterId,
+      final Camunda7EngineProperties properties,
+      final DataSource dataSource,
+      final String dataSourceName) {
+
     final var tablePrefix = properties.getTablePrefix();
     if (!hasTablePrefix(tablePrefix)) {
       return;
@@ -127,7 +150,7 @@ public final class Camunda7TablePrefixSchema {
                   tablePrefix,
                   adapterId,
                   properties.getDatabaseSchemaUpdate(),
-                  describeDataSource(properties),
+                  describeDataSource(dataSourceName),
                   waysOn(adapterId, tablePrefix)));
     }
 
@@ -143,7 +166,7 @@ public final class Camunda7TablePrefixSchema {
                   adapterId,
                   tablePrefix,
                   adapterId,
-                  describeDataSource(properties),
+                  describeDataSource(dataSourceName),
                   String.join(", ", missing),
                   waysOn(adapterId, tablePrefix)));
     }
@@ -153,7 +176,7 @@ public final class Camunda7TablePrefixSchema {
             + "engine's schema management stays out of it ('database-schema-update: false')",
         adapterId,
         tablePrefix,
-        describeDataSource(properties));
+        describeDataSource(dataSourceName));
 
   }
 
@@ -180,11 +203,11 @@ public final class Camunda7TablePrefixSchema {
   }
 
   private static String describeDataSource(
-      final Camunda7EngineProperties properties) {
+      final String dataSourceName) {
 
-    return properties.usesSeparateDataSource()
-        ? "the datasource '%s'".formatted(properties.getDataSourceName())
-        : "the application's default datasource";
+    return dataSourceName == null
+        ? "the application's default datasource"
+        : "the datasource '%s'".formatted(dataSourceName);
 
   }
 

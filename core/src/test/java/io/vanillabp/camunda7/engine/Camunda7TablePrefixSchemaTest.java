@@ -151,6 +151,21 @@ public class Camunda7TablePrefixSchemaTest {
   }
 
   @Test
+  @DisplayName("The datasource the platform names wins over the key")
+  public void theDataSourceThePlatformNamesIsNamed() {
+
+    // on Spring Boot an id without data-source-name may run on camundaBpmDataSource
+    final var exception = assertThrows(
+        IllegalStateException.class,
+        () -> Camunda7TablePrefixSchema
+            .validate("c7-new", properties("NEW_", "false"), h2("prefix-check-platform-named"),
+                "camundaBpmDataSource"));
+
+    assertTrue(exception.getMessage().contains("the datasource 'camundaBpmDataSource'"), exception::getMessage);
+
+  }
+
+  @Test
   @DisplayName("Tables which are there let the boot pass")
   public void tablesWhichExistPass() {
 

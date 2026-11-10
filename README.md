@@ -332,8 +332,8 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
 A `DataSource` and a `PlatformTransactionManager` must be present, unless every configured
 id brings its own datasource. A Camunda 7 application always needs a database.
 `Camunda7AdapterBootTest#configuredAdapterWithoutDataSourceFailsWithGuidingMessage`
-tests that message. `Camunda7UnknownDataSourceNameTest` tests the message for a
-`data-source-name` which names nothing.
+tests that message. `Camunda7EngineHolderTest#unknownDataSourceNameFailsWithGuidingMessage`
+tests the message for a `data-source-name` which names nothing.
 
 A key of Camunda's Spring Boot starter (`camunda.bpm.*`) ends the start, and the message says
 for each key what to write instead. Version 1 let the starter build the engine, so an upgraded

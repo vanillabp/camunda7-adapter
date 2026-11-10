@@ -296,8 +296,10 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
     // an adapter id which runs on a table prefix needs its tables to exist. Camunda's
     // schema management ignores the prefix and would create a set of unprefixed ACT_*
-    // tables here. We ask BEFORE the engine is built, so those tables are never written
-    io.vanillabp.camunda7.engine.Camunda7TablePrefixSchema.validate(adapterId, properties, dataSource);
+    // tables here. We ask BEFORE the engine is built, so those tables are never written.
+    // The message names the datasource the engine really got, camundaBpmDataSource included
+    io.vanillabp.camunda7.engine.Camunda7TablePrefixSchema.validate(adapterId, properties, dataSource,
+        instanceIdentity.dataSourceName());
 
     // the usual Spring job executor: SpringJobExecutor on a managed thread pool. The
     // engine's default DefaultJobExecutor runs raw threads and starts with the engine

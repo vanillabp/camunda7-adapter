@@ -154,6 +154,8 @@ public record Camunda7EngineDatabase(
             provides SEVERAL DataSource beans: '%s'. Name the one this adapter id runs on:
               vanillabp.adapters.%s.data-source-name: <bean name>
             Use the reserved value 'default' for the application's default (primary) datasource. \
+            Or name one of them 'camundaBpmDataSource', as in VanillaBP 1, and the engine runs on \
+            that one without the key. \
             (Two adapter ids may also share one datasource if each uses its own \
             'vanillabp.adapters.<id>.table-prefix' - Camunda does not create prefixed tables, so \
             those have to exist beforehand.)"""

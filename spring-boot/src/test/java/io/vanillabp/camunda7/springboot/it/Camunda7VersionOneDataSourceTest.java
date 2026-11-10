@@ -202,6 +202,9 @@ public class Camunda7VersionOneDataSourceTest {
           final var message = rootCauseMessage(context.getStartupFailure());
           Assertions.assertTrue(message.contains("SEVERAL DataSource beans"), () -> message);
           Assertions.assertTrue(message.contains("vanillabp.adapters.c7.data-source-name"), () -> message);
+          // an application of version 1 may only have lost its camundaBpmDataSource
+          Assertions.assertTrue(message.contains("Or name one of them 'camundaBpmDataSource', as in VanillaBP 1"),
+              () -> message);
 
         });
 
@@ -325,6 +328,31 @@ public class Camunda7VersionOneDataSourceTest {
           Assertions.assertTrue(message.contains("The Camunda 7 adapters 'c7', 'c7-two' would run on the SAME engine "
               + "database (datasource <the application's default datasource>, table prefix <no table prefix>)"),
               () -> message);
+
+        });
+
+  }
+
+  /**
+   * A message about the table prefix names the datasource the engine really got, not the
+   * application's default one the missing key suggests.
+   */
+  @Test
+  @DisplayName("A message about the table prefix names camundaBpmDataSource where the engine runs on it")
+  public void aTablePrefixMessageNamesCamundaBpmDataSource() {
+
+    this.contextRunner
+        .withBean("dataSource", DataSource.class, () -> h2("v1-ds-prefix-app"), definition -> definition
+            .setPrimary(true))
+        .withBean("camundaBpmDataSource", DataSource.class, () -> h2("v1-ds-prefix-engine"))
+        .withPropertyValues(
+            "spring.config.location=classpath:application.yaml",
+            "vanillabp.adapters.c7.table-prefix=NEW_")
+        .run(context -> {
+
+          final var message = rootCauseMessage(context.getStartupFailure());
+          Assertions.assertTrue(message.contains("it would create a set of ACT_* tables in the datasource "
+              + "'camundaBpmDataSource'"), () -> message);
 
         });
 
