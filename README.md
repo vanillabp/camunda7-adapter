@@ -147,6 +147,14 @@ public DataSource legacy() {
 BPMN files are read from each workflow module's configured `resources-location` and
 deployed to the embedded engine of every prioritized adapter.
 
+An adapter id whose type is its name may be configured as `vanillabp.adapters.camunda7: {}`.
+Spring Boot reads an empty YAML map as an empty value at the section's own name. When it binds an
+object, it takes that value first and ignores the keys below it, also those from the command line,
+an environment variable or a second YAML document. So the adapter binds every section of its own
+with Spring Boot's `NO_DIRECT_PROPERTY` restriction, which skips that value, see
+`Camunda7EmptySections` and `EmptyAdapterSectionTest`. The platform's own keys of such a section,
+for example `deployment-failure`, are bound by the platform and are not covered by this.
+
 ### What the IDE knows about the keys
 
 Both Spring Boot modules, `spring-boot` and `spring-boot-webapps`, ship

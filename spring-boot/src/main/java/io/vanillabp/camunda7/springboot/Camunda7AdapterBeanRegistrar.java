@@ -268,7 +268,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
   /**
    * Binds the adapter id's engine settings from the canonical per-adapter location
    * <code>vanillabp.adapters.&lt;id&gt;.*</code> (the overlay view, see
-   * {@link VanillaBpCamunda7Properties}).
+   * {@link VanillaBpCamunda7Properties}). A section written as <code>{}</code> keeps the
+   * keys other property sources set below it, see {@link Camunda7EmptySections}.
    */
   private static Camunda7EngineProperties enginePropertiesFor(
       final Environment environment,
@@ -276,7 +277,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
 
     return Binder
         .get(environment)
-        .bind("vanillabp.adapters.%s".formatted(adapterId), Camunda7EngineProperties.class)
+        .bind("vanillabp.adapters.%s".formatted(adapterId),
+            Camunda7EmptySections.section(Camunda7EngineProperties.class))
         .orElseGet(Camunda7EngineProperties::new);
 
   }
