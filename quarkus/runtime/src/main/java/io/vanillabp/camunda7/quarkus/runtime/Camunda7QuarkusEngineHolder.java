@@ -181,6 +181,11 @@ public class Camunda7QuarkusEngineHolder implements Camunda7WorkflowProcessingLi
     configuration.setDatabaseSchemaUpdate(properties.getDatabaseSchemaUpdate());
     // activation waits for startWorkflowProcessing, as on Spring Boot
     configuration.setJobExecutorActivate(false);
+    // the job executor fetches only the jobs of deployments registered with this engine, as
+    // in version 1. During a rolling update a node with the old code then leaves the jobs of
+    // a newer version alone. The deployment service registers every version this
+    // application deployed before, so workflows on older versions keep running
+    configuration.setJobExecutorDeploymentAware(true);
     // an adapter id which may let its engine sleep needs the acquisition loop which asks
     // for the next due date. The executor itself installs that loop. Without the sleep
     // the engine builds its own executor, exactly as before

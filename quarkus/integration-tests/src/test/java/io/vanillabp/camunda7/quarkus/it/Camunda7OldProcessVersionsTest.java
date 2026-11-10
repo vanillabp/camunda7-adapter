@@ -4,6 +4,7 @@ import static io.vanillabp.integration.adapter.migration.workflowtask.DeployedPr
 import static io.vanillabp.integration.adapter.migration.workflowtask.DeployedProcessVersionsCheck.STILL_RUN_ON_THIS_VERSION;
 import static io.vanillabp.integration.test.utils.TestCoverageUtils.testCoverageJavaAgent;
 import static io.vanillabp.integration.test.utils.TestJvmArgs.quarkusProdModeTestDefaults;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -150,6 +151,7 @@ public class Camunda7OldProcessVersionsTest {
     prodModeTest.start();
 
     final var reported = prodModeTest.getStartupConsoleOutput();
+    assertEveryVersionIsRegisteredWithTheJobExecutor();
 
     assertTrue(
         reported.contains(A_VERSION_OF_A_PROCESS.formatted("2", "OldProcessVersionsProcess")),
@@ -177,6 +179,39 @@ public class Camunda7OldProcessVersionsTest {
         reported.contains("outfaded-versions"),
         () -> "the report has to say how an operator retires a version: "
             + reported);
+
+  }
+
+  /**
+   * What the second boot registered with the job executor. The engine works deployment-aware,
+   * and the deploy command registers only the deployment it makes. The workflow parked on
+   * version 2 runs on a deployment which another node made, so only the adapter's
+   * registration lets this node fetch its jobs.
+   */
+  @SuppressWarnings("unchecked")
+  private static void assertEveryVersionIsRegisteredWithTheJobExecutor() {
+
+    final Map<String, Object> jobExecutor = RestAssured
+        .given()
+        .baseUri("http://localhost")
+        .port(PORT)
+        .get("versions/job-executor")
+        .then()
+        .statusCode(200)
+        .extract()
+        .as(Map.class);
+    assertEquals(Boolean.TRUE, jobExecutor.get("deploymentAware"),
+        "the engine works deployment-aware, as in version 1");
+    final var ofTheWorkflowModule = (List<String>) jobExecutor.get("ofTheWorkflowModule");
+    assertEquals(
+        3,
+        ofTheWorkflowModule.size(),
+        () -> "the first boot, the other node and the second boot each made a deployment: "
+            + jobExecutor);
+    assertTrue(
+        ((List<String>) jobExecutor.get("registered")).containsAll(ofTheWorkflowModule),
+        () -> "every deployment of the workflow module is registered, the older versions included: "
+            + jobExecutor);
 
   }
 

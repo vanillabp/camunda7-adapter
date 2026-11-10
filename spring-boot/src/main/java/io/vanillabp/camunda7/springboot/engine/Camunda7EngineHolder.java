@@ -309,6 +309,11 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     configuration.setJobExecutor(this.jobExecutor);
     // activation waits for startWorkflowProcessing (see class comment)
     configuration.setJobExecutorActivate(false);
+    // the job executor fetches only the jobs of deployments registered with this engine, as
+    // in version 1. During a rolling update a node with the old code then leaves the jobs of
+    // a newer version alone. The deployment service registers every version this
+    // application deployed before, so workflows on older versions keep running
+    configuration.setJobExecutorDeploymentAware(true);
     // Camunda 7.24 rejects deployments of processes without a history-time-to-live.
     // A default for the whole engine means that BPMN models need not declare it one by
     // one. A process may still override it through camunda:historyTimeToLive.

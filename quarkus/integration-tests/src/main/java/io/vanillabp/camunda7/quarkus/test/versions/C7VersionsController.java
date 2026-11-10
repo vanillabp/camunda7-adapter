@@ -1,6 +1,8 @@
 package io.vanillabp.camunda7.quarkus.test.versions;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import io.vanillabp.camunda7.quarkus.runtime.Camunda7QuarkusEngineRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -94,6 +96,55 @@ public class C7VersionsController {
         .map(aggregate -> "%s|%s|%s"
             .formatted(aggregate.getId(), aggregate.getServedBy(), aggregate.getOpenTaskId()))
         .toList();
+
+  }
+
+  /**
+   * What the job executor of this engine fetches. The engine works deployment-aware, so it
+   * fetches only the jobs of the deployments registered with it.
+   *
+   * @return <code>deploymentAware</code> (the engine setting), <code>registered</code> (the
+   *         ids registered with the job executor) and <code>ofTheWorkflowModule</code> (the ids
+   *         of every deployment named after the workflow module, in its tenant)
+   */
+  @GET
+  @Path("/job-executor")
+  public Map<String, Object> jobExecutor() {
+
+    final var engine = engineRegistry
+        .engineFor("c7")
+        .getProcessEngine();
+    final var reported = new LinkedHashMap<String, Object>();
+    reported
+        .put(
+            "deploymentAware",
+            Boolean
+                .valueOf(engine
+                    .getProcessEngineConfiguration()
+                    .isJobExecutorDeploymentAware()));
+    reported
+        .put(
+            "registered",
+            engine
+                .getManagementService()
+                .getRegisteredDeployments()
+                .stream()
+                .sorted()
+                .toList());
+    reported
+        .put(
+            "ofTheWorkflowModule",
+            engine
+                .getRepositoryService()
+                .createDeploymentQuery()
+                .deploymentName("c7-versions")
+                .tenantIdIn("c7-versions")
+                .list()
+                .stream()
+                .map(org.camunda.bpm.engine.repository.Deployment::getId)
+                .sorted()
+                .toList());
+    return reported;
 
   }
 

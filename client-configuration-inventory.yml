@@ -122,6 +122,13 @@ settings:
           The adapter uses the StrongUuidGenerator, so ids are UUIDs as in version 1, where Camunda's
           Spring Boot starter built the engine. The ids of a database which version 1 set up keep one
           form, and several engines on one database do not compete for blocks of ids.
+      - names: [jobExecutorDeploymentAware]
+        reason: >-
+          Always true, as recommended for version 1. The job executor fetches only the jobs of the
+          deployments registered with it, and the adapter registers every deployment of the
+          application's workflow modules, the older versions included. During a rolling update a node
+          with the old code then leaves the jobs of a newer version alone. There is no key to switch
+          it off.
     not-supported:
       - names:
           - artifactFactory
@@ -370,7 +377,6 @@ settings:
           - invocationsPerBatchJobByBatchType
           - jobExecutorAcquireByPriority
           - jobExecutorAcquireExclusiveOverProcessHierarchies
-          - jobExecutorDeploymentAware
           - jobExecutorPreferTimerJobs
           - jobExecutorPriorityRangeMax
           - jobExecutorPriorityRangeMin
@@ -560,6 +566,10 @@ settings:
         reason: >-
           The adapter names the engine after the adapter type and the adapter id, so that the engines
           of several adapter ids stay apart.
+      - names: [camunda.bpm.job-execution.deployment-aware]
+        reason: >-
+          The adapter always works deployment-aware, see 'jobExecutorDeploymentAware' on the engine
+          surface.
       - names:
           - camunda.bpm.job-execution.core-pool-size
           - camunda.bpm.job-execution.enabled
@@ -616,7 +626,6 @@ settings:
       - names:
           - camunda.bpm.job-execution.backoff-decrease-threshold
           - camunda.bpm.job-execution.backoff-time-in-millis
-          - camunda.bpm.job-execution.deployment-aware
           - camunda.bpm.job-execution.lock-time-in-millis
           - camunda.bpm.job-execution.max-backoff
           - camunda.bpm.job-execution.max-jobs-per-acquisition

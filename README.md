@@ -1545,6 +1545,18 @@ all: the deploy command names the version the engine assigned to every model, ta
 `Camunda7ProcessVersionIT#theVersionDecidesWhichMethodRuns` tests the routing.
 `Camunda7StartupQuestionCostTest` tests how many questions a start asks.
 
+### The job executor serves every version of a workflow module
+
+Both platforms build the engine with `jobExecutorDeploymentAware=true`. The job executor then fetches
+only the jobs of deployments registered with its engine. The deploy command registers just the
+deployment it makes, or the duplicate it finds. So after the deploy command of a workflow module,
+`Camunda7JobExecutorRegistration` registers every deployment named after the module, in the module's
+tenant. The older versions are what workflows started before this release run on. The source column
+is not read, because version 1 wrote the application name there. A node with an older release never
+registers a deployment made after it started, which is what keeps it away from the jobs of a newer
+version during a rolling update. `Camunda7DeploymentAwareJobAcquisitionTest` holds this with two
+engines on one database.
+
 ### A workflow is served from the model of its own version
 
 Camunda 7 evaluates the expressions of the model a workflow was started with. Say version 2 of a

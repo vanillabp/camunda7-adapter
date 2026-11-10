@@ -280,6 +280,26 @@ The [README section](https://github.com/vanillabp/camunda7-adapter/blob/main/REA
 and the [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#letting-an-idle-engine-go-quiet)
 of the wiki have the details.
 
+### The job executor is always deployment-aware
+
+Version 1 left `jobExecutorDeploymentAware` at the default of Camunda's starter, which is `false`. It
+was `true` only where you set `camunda.bpm.job-execution.deployment-aware: true`, as version 1's
+README recommended for a cluster. Version 2 always works deployment-aware, and there is no key to
+switch it off. The starter key has no effect any more.
+
+Like version 1, version 2 registers every earlier deployment of your workflow module when it starts.
+It finds them by the module's id as the deployment name and by the module's tenant. So the
+deployments version 1 made are included, and the workflows started under version 1 keep running.
+
+You notice the change only if your engine runs jobs of a deployment which belongs to none of your
+workflow modules: a model another application or a script deployed into the same database, or one you
+deployed through Cockpit or the REST API. After a restart, your nodes no longer fetch the jobs of such
+a deployment. Deploy such a model through a workflow module, or let the application which deployed it
+run its jobs.
+
+The [configuration page](https://github.com/vanillabp/camunda7-adapter/wiki/Configuration#which-jobs-a-node-fetches-also-during-a-rolling-update)
+of the wiki says what this means for a rolling update.
+
 ### One tenant for every workflow module refuses two modules sharing a BPMN process id
 
 Version 1 deployed each workflow module into a tenant named after the module. `tenant-id` let you
