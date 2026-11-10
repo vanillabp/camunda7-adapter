@@ -43,8 +43,9 @@ public class Camunda7VersionOneKeysTest {
       final String... propertyNames) {
 
     try {
+      // Camunda7ExternalTaskClientVersionOneKeysTest holds the keys of the external task client
       Camunda7VersionOneKeys.endTheStartOnKeysOfVersionOne(adapterIds, List.of(propertyNames),
-          webappsModuleIsPresent);
+          webappsModuleIsPresent, false);
       return null;
     } catch (final IllegalStateException e) {
       return e.getMessage();

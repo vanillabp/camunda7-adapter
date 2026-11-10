@@ -111,7 +111,8 @@ such as `camunda.bpm.job-execution.*` or `camunda.bpm.generic-properties.*`, the
 to a `ProcessEnginePlugin` bean of your application. The `camunda.bpm.eventing.*` keys have no
 successor on purpose: use `@WorkflowTask`, `@TaskEvent` and `@WorkflowEnded` instead. With the
 module `camunda7-adapter-spring-boot-webapps`, `camunda.bpm.webapp.*` and `camunda.bpm.enabled`
-are read and may stay.
+are read and may stay. With Camunda's starter `camunda-bpm-spring-boot-starter-external-task-client`,
+`camunda.bpm.client.*` is read and may stay too.
 
 ### The first start deploys every model again
 

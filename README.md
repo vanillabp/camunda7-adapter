@@ -345,7 +345,12 @@ from the bytecode of `camunda-bpm-spring-boot-starter-webapp-core` 7.24: its aut
 calls only `CamundaBpmProperties#getWebapp`, and its condition reads
 `camunda.bpm.webapp.enabled`. The starter's `PropertiesListener` also writes
 `camunda.bpm.version`, `camunda.bpm.is-enterprise` and `camunda.bpm.formatted-version` into
-the environment, so these are never the application's.
+the environment, so these are never the application's. With Camunda's starter of the external
+task client (`camunda-bpm-spring-boot-starter-external-task-client`) on the classpath,
+`camunda.bpm.client.*` is left alone as well. The adapter finds the starter by its class
+`ClientProperties`, which binds exactly these keys in 7.24. An application may use that client
+next to the adapter, for the external tasks of another engine.
+`Camunda7ExternalTaskClientVersionOneKeysTest` starts the client next to the adapter.
 
 ### What an extension may add to the engine
 

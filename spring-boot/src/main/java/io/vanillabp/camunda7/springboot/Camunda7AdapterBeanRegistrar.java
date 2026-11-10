@@ -85,7 +85,8 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
       Camunda7VersionOneKeys.endTheStartOnKeysOfVersionOne(
           camunda7AdapterIds,
           propertyNames(environment),
-          Camunda7VersionOneKeys.webappsModuleIsPresent(Camunda7AdapterBeanRegistrar.class.getClassLoader()));
+          Camunda7VersionOneKeys.webappsModuleIsPresent(Camunda7AdapterBeanRegistrar.class.getClassLoader()),
+          Camunda7VersionOneKeys.externalTaskClientIsPresent(Camunda7AdapterBeanRegistrar.class.getClassLoader()));
     }
 
     camunda7AdapterIds
