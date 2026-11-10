@@ -228,6 +228,27 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * The engine's management service. Every deployment of a workflow module is registered
+   * there with the job executor, the older versions included (see
+   * {@link Camunda7JobExecutorRegistration}). May be <code>null</code> in tests. Then only the
+   * deploy command registers the deployment it makes.
+   */
+  private org.camunda.bpm.engine.ManagementService managementService;
+
+  /**
+   * Sets the engine's management service (the platform modules take it from this adapter
+   * id's engine).
+   *
+   * @param managementService The management service or <code>null</code>
+   */
+  public void setManagementService(
+      final org.camunda.bpm.engine.ManagementService managementService) {
+
+    this.managementService = managementService;
+
+  }
+
+  /**
    * The BPMN process id as the ENGINE knows it (prefixed when the module's mode is
    * {@code use-prefix}).
    */
@@ -2746,9 +2767,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     var deploymentBuilder = repositoryService
         .createDeployment()
         .name(workflowModuleId)
-        .source(ADAPTER_TYPE
-            + ":"
-            + adapterId)
+        // see decision 17 in the repository's DECISIONS.md
+        .source(io.vanillabp.camunda7.wiring.Camunda7DeploymentSource.of(adapterId, workflowModuleId))
         .enableDuplicateFiltering(true);
     if (tenantId != null) {
       deploymentBuilder = deploymentBuilder.tenantId(tenantId);
@@ -2771,6 +2791,13 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // it assigned to every model deployed now. They feed the version catalog. So the
     // version deployed by THIS boot needs no query at all
     final var deployment = deploymentBuilder.deployWithResult();
+    // the engine works deployment-aware. The deploy command registered only the deployment
+    // it made or found. Workflows on older versions need theirs registered as well. See
+    // decision 59 in the repository's DECISIONS.md
+    if (managementService != null) {
+      Camunda7JobExecutorRegistration
+          .registerEveryDeploymentOf(adapterId, workflowModuleId, tenantId, repositoryService, managementService);
+    }
     final var deployedDefinitions = deployment.getDeployedProcessDefinitions();
     if (deployedDefinitions != null) {
       deployedDefinitions

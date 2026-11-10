@@ -13,6 +13,12 @@
       "defaultValue": "P180D"
     },
     {
+      "name": "vanillabp.adapters.camunda7.history-level",
+      "type": "java.lang.String",
+      "description": "How much history the engine writes: 'none', 'activity', 'audit', 'full', 'auto' or the name of a level an engine plugin adds. The engine stores the level in the database on its first start, and a later start with another level fails. 'auto' takes the level the database stores. The default 'full' is what VanillaBP 1 used.",
+      "defaultValue": "full"
+    },
+    {
       "name": "vanillabp.adapters.camunda7.data-source-name",
       "type": "java.lang.String",
       "description": "The name of the datasource bean the engine of this adapter id runs on."

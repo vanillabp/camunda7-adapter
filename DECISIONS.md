@@ -405,15 +405,17 @@ The hard part is not the query. It is to tell a foreign holder apart from this a
 history. The adapter can ask about the Camunda deployment, and the part of its stamp which helps is
 the NAME. Every VanillaBP generation deploys a workflow module under the module's own id, version 1
 included. Version 1 wrote the application name into the source, where this adapter writes the
-adapter type and the adapter id. So one query finds the deployments named after the module being
-deployed, and a definition which belongs to one of them says nothing. Reading the source instead
+adapter id and the workflow module id, as `<adapter id>:<workflow module id>`. So one query finds
+the deployments named after the module being deployed, and a definition which belongs to one of
+them says nothing. Reading the source instead
 would report every definition of an application which upgrades from version 1, on its first start
 and on every start after it.
 
 A definition under another deployment name is reported, and the source then says how sure the
-adapter can be. If the source names a Camunda 7 adapter of VanillaBP, the report is not certain.
-Another adapter id is what a migration between two engines looks like, and another workflow module
-of this application also writes its own name. Any other source was written by something else, like
+adapter can be. If the source ends with `:` and the deployment's name, a VanillaBP adapter wrote
+it, and the report is not certain. Another adapter id is what a migration between two engines
+looks like, and another workflow module of this application also writes its own name. Any other
+source was written by something else, like
 a modelling tool or an application which deploys its models itself. That one is reported as
 certainly foreign.
 
@@ -427,6 +429,10 @@ runtime path reads it.
 `Camunda7DeclaredIdentifiersTest` holds what a model declares and what a held version still
 declares. `Camunda7StartupQuestionCostTest` holds that a boot asks once per workflow module plus
 once per decision.
+
+*Changed on 2026-11-10 by story 2112, decided by the maintainer: the source used to be
+`camunda7:<adapter id>`, and a source which named a Camunda 7 adapter of VanillaBP made a report
+uncertain. The two sentences about the source describe the new format. Nothing else changed.*
 
 ### 18. An idle engine is told when to wake up instead of asking whether it is time yet
 
@@ -732,6 +738,16 @@ service hands that one answer. The start listener of a called process asks the s
 (decisions 32 and 34). It is asked ONLY there. Where the model spells out the called process, the
 answer of the deployment stands. A workflow standing in an older version keeps the answer that
 version was deployed with.
+
+**Addendum of story 2112, decided by the maintainer on 2026-11-10.** A model which version 1
+deployed was never prepared, so none of its call activities has a note. The source of its
+deployment tells it apart: only a source which ends with `:` and the deployment's name was written
+by a VanillaBP adapter (decision 17). For the call activities of any other model the core is asked
+while the workflow runs, as for an expression. The answer is kept per deployment in
+`Camunda7TaskRegistry`, so the core is asked once per deployment. Without this, a task of a called
+process in a workflow which version 1 started lost the iteration of its caller and ended in an
+incident.
+`Camunda7UpgradeFromVersionOneIT` holds it.
 
 The values themselves are never copied anywhere. The engine holds them in the executions of the
 calling process. A called process which is not told about them can still read what the model passes
@@ -2077,3 +2093,158 @@ adapters), `.github/workflows/release.yml` (business-cockpit), `.github/workflow
 (camunda8-adapter) and the release workflow of businesscockpit-camunda8-adapter; README of
 maven-release-parent, section "Versions in a release"; `RELEASE-2-0-GATE.md`, "Ablauf am
 Release-Tag", step 2.
+
+### 58. The engine keeps the history level and the ids of version 1
+
+Proposed by story 2103. Decided by the maintainer on 2026-11-09.
+
+**Why.** Version 1 did not build the engine itself. Camunda's Spring Boot starter built it, and
+the starter sets the history level `full` and the `StrongUuidGenerator`. This adapter builds the
+plain engine, and the plain engine uses `audit` and the `DbIdGenerator`. The engine writes its
+history level into the database on its first start, and `HistoryLevelSetupCommand` compares it on
+every later start. So a database which version 1 set up did not start with version 2:
+`historyLevel mismatch: configuration says audit and database says full`. That hit every
+application of version 1 which never set the level itself, and that is almost all of them. The
+only way past it was an engine plugin, which is engine code in the application. Decision 50 says
+why application code should not touch the engine.
+
+**What holds.**
+
+- **History level:** the key `vanillabp.adapters.<adapter-id>.history-level`. The default is
+  `full`, as in version 1. Allowed are `none`, `activity`, `audit`, `full`, `auto` and the name of
+  a level which an engine plugin or an engine customizer adds (`customHistoryLevels`). The engine
+  decides which names it knows, because a plugin adds its levels only while the engine is built.
+  Anything else ends the start with the list of the allowed values. The old name `variable`, which
+  the engine still reads as `activity`, is refused as well. Only the adapter level exists, because
+  the setting belongs to the engine, and one engine serves every workflow module of the adapter id.
+- **A level which differs from the database** ends the start with a message of the adapter. It
+  names the key, the configured level and the stored level, and it offers `auto`. The engine's
+  own exception stays its cause. The engine has no exception type for this case, so the adapter
+  looks for the start of its message.
+- **Ids:** the adapter sets the `StrongUuidGenerator` itself, without a key (`set-by-adapter` in
+  `client-configuration-inventory.yml`). New ids are UUIDs again, so a database of version 1 keeps
+  one form of ids, and several engines on one database do not compete for blocks of ids. An
+  application which wants the `DbIdGenerator` sets it with an engine plugin. `camunda-engine`
+  declares `java-uuid-generator` as `provided`, so this adapter declares it itself.
+- **Quarkus** gets the same two defaults, although version 1 had no Quarkus adapter. An
+  application should get the same engine on both platforms.
+
+An engine plugin or an engine customizer still runs after the adapter, so its values win.
+
+**Tests.** `Camunda7HistoryLevelTest` (core, real engine on H2) holds the default, a level which
+differs from the database, `auto`, an unknown level, a level of a plugin, and the refusal of an
+empty value and of `variable`. `Camunda7VersionOneDatabaseIT` (Spring Boot) starts the application
+on a database which a plain engine set up like the starter of version 1, with a running workflow,
+and on a new database. `Camunda7WorkflowLifecycleTest#theEngineHasTheHistoryLevelAndIdsOfSpringBoot`
+and `Camunda7HistoryLevelTest` (Quarkus) hold the default and the key on Quarkus.
+
+**Where it is cited.**
+
+- javadoc of `Camunda7HistoryLevel`
+- the comments next to `Camunda7HistoryLevel.applyTo` in `Camunda7EngineHolder` (Spring Boot)
+  and `Camunda7QuarkusEngineHolder` (Quarkus)
+- `README.md`, section "Embedded-engine wiring"
+- `UPGRADE.md`, section "The engine keeps the history level and the ids of version 1"
+- `client-configuration-inventory.yml`, entries `history`, `idGenerator`,
+  `camunda.bpm.history-level` and `camunda.bpm.id-generator`
+- wiki page `Configuration`
+- the Operaton and CIB seven adapters get the same entry through the sync
+
+### 59. The job executor fetches the jobs of this application's workflow modules, every version of them
+
+Proposed by story 2106. Decided by the maintainer on 2026-11-09: the engine works deployment-aware, with no
+key to switch it off.
+
+**Why.** During a rolling update, nodes with the old and the new release share one database. The new release
+deploys a new version of a process, say with a new service task. Without the setting, a node with the old
+release fetches the jobs of that version as well. It has no method for the new task, so the job fails three
+times at once and ends in an incident. With the setting, the job executor fetches only the jobs of deployments
+registered with its engine. The old node never registered the new deployment, because it was made after the
+node started.
+
+The setting alone does harm, though. The deploy command registers only the deployment it makes, or the
+duplicate it finds. A workflow started on an older version runs on an older deployment. After a restart nobody
+fetches its timers and continuations, and it stops without an error and without an incident. Version 1 avoided
+this because it ran as a process application, which registered the earlier deployments by name
+(`resumePreviousVersionsBy(RESUME_BY_DEPLOYMENT_NAME)`). Version 2 does the same through the engine API.
+
+**What holds.**
+
+- Both platforms build the engine with `jobExecutorDeploymentAware=true`. The inventory lists the setting as
+  `set-by-adapter`.
+- After the deploy command of a workflow module, the adapter registers every deployment whose name is the
+  module's id, in the tenant the module deploys into (`withoutTenantId()` where it deploys into none). This is
+  one query per workflow module and start.
+- The source of a deployment is not read. Version 1 wrote the application name there, and the adapter's own
+  format may change. Every deployment under the module's name held the full set of the module's models at its
+  time, so registering all of them is right.
+- A version faded out with `outfaded-versions` stays registered. Workflows may still run on it, and the
+  registration costs nothing.
+- A deployment under another name, or in another tenant, is not registered: another workflow module, another
+  application, a modelling tool. A second application deploying a module of the same id cannot be told apart, as
+  decision 17 says for the name check.
+- Jobs without a deployment (history cleanup, batches) are fetched by every node, as the engine does it.
+
+What is measured, against PostgreSQL with two nodes of one application on 2026-11-10: without the setting, an
+old node fetched the jobs of the new task, and each failed three times within 133 ms and ended in an incident.
+With the setting but without the registration, the timer of a workflow on version 1 was not fetched for 120
+seconds after the restart, with no incident. With the registration it was fetched, also where VanillaBP 1.6.0
+had made the deployment.
+
+`Camunda7DeploymentAwareJobAcquisitionTest` holds the rules with two engines on one database.
+`Camunda7OldProcessVersionsIT` and the Quarkus `Camunda7OldProcessVersionsTest` hold that both platforms set
+the flag and register every version.
+
+**Where it is referred to.** `Camunda7JobExecutorRegistration` (type javadoc) and its call in
+`Camunda7DeploymentService#deployResources`; the comment at `setJobExecutorDeploymentAware` in
+`Camunda7EngineHolder` (Spring Boot) and `Camunda7QuarkusEngineHolder`; `client-configuration-inventory.yml`
+(`jobExecutorDeploymentAware`, `camunda.bpm.job-execution.deployment-aware`); README section "The job executor
+serves every version of a workflow module"; `UPGRADE.md` section "The job executor is always deployment-aware";
+wiki page *Configuration*, section "Which jobs a node fetches, also during a rolling update".
+
+### 60. A bean `camundaBpmDataSource` is the engine's datasource as in version 1, and the engine behaves by the datasource it really gets
+
+Proposed by story 2113. Decided by the maintainer on 2026-11-09.
+
+Camunda's Spring Boot starter of version 1 took a `DataSource` bean of the name or qualifier
+`camundaBpmDataSource` instead of the application's datasource. It took a
+`PlatformTransactionManager` of the name or qualifier `camundaBpmTransactionManager` the same way.
+The two were chosen apart from each other. Version 2 does the same where an adapter id names no
+datasource (`data-source-name` unset or `default`). Without that, a version 1 application with an
+engine database of its own would run on its application database. With `database-schema-update`
+at its default the engine creates empty tables there. The running workflows seem to be gone, and
+nothing says so. A `data-source-name` with any other value wins over the bean.
+
+Three things differ from version 1, all on purpose:
+
+- With several datasources, `camundaBpmDataSource` is the choice, and the start does not end with
+  "name the datasource". The bean already names it.
+- A `camundaBpmDataSource` which is not the application's default datasource gets a transaction
+  manager of the adapter's own, unless there is a `camundaBpmTransactionManager`. Version 1 used the
+  application's transaction manager there. That manager does not manage the engine's datasource. So
+  the statements of one engine command were committed one by one, or not at all, depending on the
+  pool. This was measured from the sources of `camunda-bpm-spring-boot-starter` 7.24.0,
+  `DefaultDatasourceConfiguration#preInit`, not tried in an application.
+- Two beans with the qualifier end the start, as Spring's `@Qualifier` did in version 1.
+
+What the engine does then follows the datasource it really runs on, not the key. A
+`camundaBpmDataSource` which is not the application's default datasource is a datasource of its
+own: the engine does not join the caller's transaction, deliveries are deduplicated (decision 6),
+and the start uses two phases. The application's default datasource is the one Spring injects by
+type, so a `@Primary` bean or the only one. An application whose only datasource is called
+`camundaBpmDataSource` shares it with the engine, as before.
+
+Quarkus has nothing like it. Version 1 had no Quarkus adapter, and Quarkus names its datasources in
+the configuration, not as beans.
+
+**Where it is cited.**
+
+- `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/engine/Camunda7EngineDatabase.java`
+  (type Javadoc and `choose`)
+- `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/engine/Camunda7EngineHolder.java`
+  (class Javadoc, field `ownDataSource`)
+- `spring-boot/src/test/java/io/vanillabp/camunda7/springboot/it/Camunda7VersionOneDataSourceTest.java`
+- `README.md`, section "Embedded-engine wiring"
+- `UPGRADE.md`, section "A `camundaBpmDataSource` works as before, and a `camunda.bpm.*` key ends the boot"
+- wiki page *Configuration*, section "Choosing the datasource"
+

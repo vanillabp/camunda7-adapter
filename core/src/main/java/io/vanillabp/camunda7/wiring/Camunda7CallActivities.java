@@ -266,6 +266,36 @@ public final class Camunda7CallActivities {
   }
 
   /**
+   * Whether the note on the call activity a calling execution stands on can be trusted.
+   * That is the case where a VanillaBP adapter prepared the calling model. Then a call
+   * activity which names its called process and carries no note calls a process with a
+   * workflow aggregate of its own.
+   * <p>
+   * Version 1 deployed the file as it was, so its models carry no note at all. A workflow
+   * version 1 started runs on such a model after the upgrade. For its call activities the
+   * core is asked while the workflow runs, as for a call activity which names its process
+   * in an expression. Decision 22 in the repository's DECISIONS.md says what the note is
+   * for.
+   *
+   * @param callingExecution The execution of the call activity
+   * @param taskRegistry Where the answer is kept per deployment, possibly <code>null</code>
+   * @return Whether the deployed model says where the walk may go. <code>true</code> where
+   *         nothing can be asked (tests)
+   */
+  public static boolean theNotesOfTheCallingModelCount(
+      final DelegateExecution callingExecution,
+      final Camunda7TaskRegistry taskRegistry) {
+
+    if ((taskRegistry == null) || (callingExecution == null)) {
+      return true;
+    }
+    final var repositoryService = callingExecution.getProcessEngineServices().getRepositoryService();
+    final var definition = repositoryService.getProcessDefinition(callingExecution.getProcessDefinitionId());
+    return (definition == null) || taskRegistry.preparedTheModelsOf(repositoryService, definition.getDeploymentId());
+
+  }
+
+  /**
    * Whether the called process of a running instance continues the workflow aggregate of
    * the process which called it, asked while the workflow runs.
    * <p>

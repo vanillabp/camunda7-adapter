@@ -303,6 +303,17 @@ public interface VanillaBpCamunda7Properties {
     Optional<String> historyTimeToLive();
 
     /**
+     * How much history the engine writes: <code>none</code>, <code>activity</code>,
+     * <code>audit</code>, <code>full</code>, <code>auto</code> or the name of a level an engine
+     * plugin adds. The default is <code>full</code>, the same as on Spring Boot. The engine
+     * stores the level in the database on its first start, and a later start with another
+     * level fails. See {@code Camunda7HistoryLevel}.
+     *
+     * @return The configured level, empty for the default
+     */
+    Optional<String> historyLevel();
+
+    /**
      * OPTIONAL name of a declared Quarkus datasource
      * (<code>quarkus.datasource.&lt;name&gt;.*</code>) which this adapter id's embedded
      * engine runs on. Without it the engine shares the application's default datasource.

@@ -32,7 +32,10 @@ import lombok.extern.slf4j.Slf4j;
  *       point of the embedded adapter: engine state commits or rolls back together with
  *       the business data. If <code>vanillabp.adapters.&lt;id&gt;.data-source-name</code>
  *       is configured, the engine runs on the {@link DataSource} BEAN of that name
- *       instead, which the application provides. Setting up datasources is NOT
+ *       instead, which the application provides. Without that key a bean named
+ *       <code>camundaBpmDataSource</code> takes the place of the default datasource, as
+ *       in version 1 (see {@link Camunda7EngineDatabase}, and see decision 60 in the
+ *       repository's DECISIONS.md). Setting up datasources is NOT
  *       VanillaBP's job, on purpose. The adapter never builds its own pool. A named
  *       datasource is needed when two engines run side by side for a migration, because
  *       two embedded engines must never share one schema. Engine commands on such a
@@ -70,9 +73,25 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
   private final Camunda7EngineProperties properties;
 
-  private final DataSource applicationDataSource;
+  /**
+   * The application's default datasource, asked for only where the engine needs it. It is
+   * <code>null</code> for an id which names a datasource.
+   */
+  private final java.util.function.Supplier<DataSource> applicationDataSource;
 
-  private final PlatformTransactionManager applicationTransactionManager;
+  /**
+   * The application's transaction manager, asked for the same way.
+   */
+  private final java.util.function.Supplier<PlatformTransactionManager> applicationTransactionManager;
+
+  /**
+   * Whether the engine runs on a datasource which is not the application's default one. It
+   * follows the datasource the engine really gets, not the key alone. A bean
+   * <code>camundaBpmDataSource</code> makes it true without any key (see decision 60 in the
+   * repository's DECISIONS.md). It is known once {@link #afterPropertiesSet()} chose the
+   * datasource.
+   */
+  private boolean ownDataSource;
 
   /**
    * {@code SpringProcessEngineConfiguration} needs it to resolve Spring beans in scripts
@@ -120,10 +139,10 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    *
    * @param adapterId The adapter id
    * @param properties The adapter id's engine settings
-   * @param applicationDataSource The application's data source (null for an id using
-   *        a named one)
-   * @param applicationTransactionManager The application's transaction manager (null
-   *        for an id using a named data source)
+   * @param applicationDataSource The application's default datasource, asked for only
+   *        where it is needed (null for an id which names a datasource)
+   * @param applicationTransactionManager The application's transaction manager, asked
+   *        for only where it is needed (null for an id which names a datasource)
    * @param workflowTaskInvoker The core's entry point for BPMN tasks
    * @param bpmsInitiatedStartInvoker The core's entry point for workflows the engine
    *        starts on its own (may be <code>null</code> if the core provides none)
@@ -133,8 +152,8 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   public Camunda7EngineHolder(
       final String adapterId,
       final Camunda7EngineProperties properties,
-      final DataSource applicationDataSource,
-      final PlatformTransactionManager applicationTransactionManager,
+      final java.util.function.Supplier<DataSource> applicationDataSource,
+      final java.util.function.Supplier<PlatformTransactionManager> applicationTransactionManager,
       final WorkflowTaskInvoker workflowTaskInvoker,
       final io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker,
       final io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker workflowEndedInvoker) {
@@ -146,9 +165,6 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     this.properties = properties;
     this.applicationDataSource = applicationDataSource;
     this.applicationTransactionManager = applicationTransactionManager;
-    // every listener building an invocation context has to know whose transaction it
-    // delivers in, and the datasource this engine was configured with is what decides it
-    this.taskRegistry.setEngineRunsOnItsOwnDataSource(usesSeparateDataSource());
 
   }
 
@@ -253,10 +269,18 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
               + "join the application's transactions; starting workflows uses the two-phase pattern",
           adapterId,
           properties.getDataSourceName());
+      ownDataSource = true;
     } else {
-      dataSource = applicationDataSource;
-      transactionManager = applicationTransactionManager;
+      // a bean camundaBpmDataSource still counts, as in version 1
+      final var database = Camunda7EngineDatabase.choose(
+          adapterId, applicationContext, applicationDataSource, applicationTransactionManager);
+      dataSource = database.dataSource();
+      transactionManager = database.transactionManager();
+      ownDataSource = database.ownDataSource();
     }
+    // every listener building an invocation context has to know whose transaction it
+    // delivers in, and the datasource this engine really runs on is what decides it
+    this.taskRegistry.setEngineRunsOnItsOwnDataSource(ownDataSource);
 
     // an adapter id which runs on a table prefix needs its tables to exist. Camunda's
     // schema management ignores the prefix and would create a set of unprefixed ACT_*
@@ -280,6 +304,11 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
     final var configuration = new SpringProcessEngineConfiguration();
     configuration.setApplicationContext(applicationContext);
+    // the engine loads the classes a model names (camunda:class, Java-serialized values,
+    // scripts) through this class loader first. Without it the engine falls back to the
+    // class loader of the calling thread, which does not see the application's classes under
+    // Spring DevTools or on a thread the application did not start. Version 1 did the same
+    configuration.setClassLoader(applicationContext.getClassLoader());
     // VanillaBP task wiring: a top-level EL name which neither a process variable nor a
     // Spring bean answers reaches a @WorkflowTask method. The parse listener sets
     // transaction boundaries like a remote BPMS has them (async before/after)
@@ -304,6 +333,12 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     configuration.setJobExecutor(this.jobExecutor);
     // activation waits for startWorkflowProcessing (see class comment)
     configuration.setJobExecutorActivate(false);
+    // the job executor fetches only the jobs of deployments registered with this engine, as
+    // in version 1. During a rolling update a node with the old code then leaves the jobs of
+    // a newer version alone. The deployment service registers every version this
+    // application deployed before, so workflows on older versions keep running. See
+    // decision 59 in the repository's DECISIONS.md
+    configuration.setJobExecutorDeploymentAware(true);
     // Camunda 7.24 rejects deployments of processes without a history-time-to-live.
     // A default for the whole engine means that BPMN models need not declare it one by
     // one. A process may still override it through camunda:historyTimeToLive.
@@ -361,6 +396,13 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     // engine library, which is what an application needs next to the Operaton adapter
     io.vanillabp.camunda7.engine.Camunda7DmnFeelLegacyBehavior.applyTo(adapterId, configuration, properties);
 
+    // the history level and the ids of version 1, whose engine Camunda's Spring Boot starter
+    // built. The engine stores the level in the database and does not start with another
+    // one, so a database of version 1 needs 'full'. See decision 58 in the repository's
+    // DECISIONS.md
+    io.vanillabp.camunda7.engine.Camunda7HistoryLevel.applyTo(adapterId, configuration, properties);
+    configuration.setIdGenerator(new org.camunda.bpm.engine.impl.persistence.StrongUuidGenerator());
+
     // what an extension contributes to THIS engine: parse listeners before or after
     // VanillaBP's own, and a history event handler installed next to the engine's
     io.vanillabp.camunda7.engine.Camunda7EngineCustomizers
@@ -379,6 +421,10 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
       // error. The developer gets the remedy instead of a NoSuchMethodError
       io.vanillabp.camunda7.engine.Camunda7DmnFeelLegacyBehavior.explainWhyTheEngineDidNotStart(adapterId, properties,
           e);
+      // a history level the engine does not know, or one which differs from the level in
+      // the database. The developer gets the key and the stored level
+      io.vanillabp.camunda7.engine.Camunda7HistoryLevel.explainWhyTheEngineDidNotStart(adapterId, configuration,
+          properties, e);
       throw e;
     }
     this.jobExecutorLifecycle = new Camunda7JobExecutorLifecycle(adapterId, this.jobExecutor);
@@ -485,12 +531,12 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    * datasource an engine command joins the caller's transaction. That guarantee is why
    * people choose an embedded engine. On a named datasource it cannot join.
    *
-   * @return Whether this adapter id's engine runs on a named datasource (see class
-   *         comment)
+   * @return Whether this adapter id's engine runs on a datasource other than the
+   *         application's default one (see class comment)
    */
   public boolean usesSeparateDataSource() {
 
-    return properties.usesSeparateDataSource();
+    return ownDataSource;
 
   }
 

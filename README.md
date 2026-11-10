@@ -95,6 +95,10 @@ vanillabp:
       # of processes without one); default: P180D; a process may override it via
       # camunda:historyTimeToLive
       history-time-to-live: P180D
+      # how much history the engine writes: none, activity, audit, full, auto or a
+      # level an engine plugin adds. The engine stores it in the database, and a
+      # later start with another level fails. Default: full, as in version 1
+      history-level: full
       # OPTIONAL: the name of an APPLICATION-PROVIDED datasource this id's engine
       # runs on (required for every additional camunda7 id - see the transaction
       # caveat below!). Setting up datasources is deliberately the application's
@@ -294,19 +298,51 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   application-provided `DataSource` bean. Then the engine runs on that bean's datasource
   with an adapter-internal transaction manager (see the transaction caveat above). The
   adapter never builds a pool. If the bean is missing, the boot fails and lists the
-  available `DataSource` beans,
+  available `DataSource` beans. Without `data-source-name`, a bean `camundaBpmDataSource`
+  and a bean `camundaBpmTransactionManager` take the place of the application's beans, as
+  they did in version 1. `Camunda7EngineDatabase#choose` says what differs from version 1
+  and why, and `Camunda7VersionOneDataSourceTest` holds each case. Whether the engine joins
+  the caller's transaction follows the datasource it really gets, not the key
+  ([decision 60](./DECISIONS.md#60-a-bean-camundabpmdatasource-is-the-engines-datasource-as-in-version-1-and-the-engine-behaves-by-the-datasource-it-really-gets)),
 - creates or upgrades its schema on boot (`database-schema-update`, default `true`),
+- loads the classes a model names, Java-serialized values and scripts through the class
+  loader of the application context, as version 1 did. Otherwise the engine would fall back
+  to the class loader of the calling thread, which does not see the application's classes
+  under Spring DevTools or on a thread of a library (`Camunda7ApplicationClassLoaderIT`),
 - runs asynchronous continuations on a `SpringJobExecutor` with its own
   managed thread pool, active only while workflow processing is started, and
 - applies a default history time-to-live (`history-time-to-live`, default `P180D`).
   Camunda 7.24 rejects deployments of processes without one. A process may still
-  override it with `camunda:historyTimeToLive`.
+  override it with `camunda:historyTimeToLive`,
+- writes history at the level `full` (`history-level`) and makes its ids with the
+  `StrongUuidGenerator`, as Camunda's Spring Boot starter did in version 1. The engine on its
+  own would use `audit` and numbers from the database. The engine stores the level in the
+  database on its first start and refuses a later start with another level. So the level of
+  version 1 is what lets a database of version 1 start without a change
+  ([decision 58](./DECISIONS.md#58-the-engine-keeps-the-history-level-and-the-ids-of-version-1)). Quarkus gets the same defaults, so an application gets the
+  same engine on both platforms. A level the engine does not know, and a level which differs
+  from the database, end the start with a message which names the key and the levels
+  (`Camunda7HistoryLevel`). `Camunda7HistoryLevelTest` tests both messages and `auto` on a real
+  engine. `Camunda7VersionOneDatabaseIT` starts the application on a database set up like
+  version 1 did it.
 
 A `DataSource` and a `PlatformTransactionManager` must be present, unless every configured
 id brings its own datasource. A Camunda 7 application always needs a database.
 `Camunda7AdapterBootTest#configuredAdapterWithoutDataSourceFailsWithGuidingMessage`
 tests that message. `Camunda7UnknownDataSourceNameTest` tests the message for a
 `data-source-name` which names nothing.
+
+A key of Camunda's Spring Boot starter (`camunda.bpm.*`) ends the start, and the message says
+for each key what to write instead. Version 1 let the starter build the engine, so an upgraded
+application may still have such keys, and they would change nothing. `Camunda7VersionOneKeys`
+holds the table of keys. A rule whose text says that version 2 has no key yet gets the new key
+written in when a story adds one. The keys which the module `spring-boot-webapps` really
+reads are left alone: `camunda.bpm.webapp.*` and `camunda.bpm.enabled`. That list was measured
+from the bytecode of `camunda-bpm-spring-boot-starter-webapp-core` 7.24: its auto-configuration
+calls only `CamundaBpmProperties#getWebapp`, and its condition reads
+`camunda.bpm.webapp.enabled`. The starter's `PropertiesListener` also writes
+`camunda.bpm.version`, `camunda.bpm.is-enterprise` and `camunda.bpm.formatted-version` into
+the environment, so these are never the application's.
 
 ### What an extension may add to the engine
 
@@ -406,6 +442,13 @@ the called process out, the answer written at deployment stands, and nobody asks
 Workflows which still run in an older version of a process need exactly that.
 `Camunda7MultiInstanceByExpressionIT` runs one model against the engine which names the same
 called process both ways. `Camunda7MultiInstancesAcrossCallActivitiesTest` tests the shapes.
+
+A model which version 1 deployed carries no note at all, because version 1 deployed the file as
+it was. A workflow version 1 started runs on such a model after the upgrade. So a missing note
+means "no" only where a VanillaBP adapter prepared the model. The deployment source tells this
+apart (`Camunda7DeploymentSource`). For a model of version 1 the walk asks the core, as for an
+expression. The answer is kept per deployment. `Camunda7UpgradeFromVersionOneIT` holds it. Decision
+22 says so in its addendum.
 
 Both contexts of this adapter answer the walk: the one of a service-like task and the one of a
 user task. A user task is notified from a task listener. The engine hands that listener a
@@ -1222,7 +1265,8 @@ The Camunda deployment NAME tells a foreign holder apart from this application's
 deployment. Every VanillaBP generation, version 1 included, deploys a workflow module under the
 module's own id. So a deployment with that name is our own history and says nothing. A definition
 deployed under another name is reported. The deployment source then says how sure the adapter is.
-A source of `camunda7:<adapter-id>` means another adapter id or another workflow module. That may
+This adapter writes `<adapter-id>:<workflow-module-id>` into the source. A source of that form
+means another adapter id or another workflow module. That may
 be this very application, and the warning says so. Any other source was written by something else,
 and the finding is certainly foreign. A second application which deploys a workflow module of the
 same id stays invisible, because no column of the engine's deployment table names an application.
@@ -1525,6 +1569,19 @@ rolling deployment produces such versions. What the deployment itself reported c
 all: the deploy command names the version the engine assigned to every model, tag included.
 `Camunda7ProcessVersionIT#theVersionDecidesWhichMethodRuns` tests the routing.
 `Camunda7StartupQuestionCostTest` tests how many questions a start asks.
+
+### The job executor serves every version of a workflow module
+
+Both platforms build the engine with `jobExecutorDeploymentAware=true`. The job executor then fetches
+only the jobs of deployments registered with its engine. The deploy command registers just the
+deployment it makes, or the duplicate it finds. So after the deploy command of a workflow module,
+`Camunda7JobExecutorRegistration` registers every deployment named after the module, in the module's
+tenant. The older versions are what workflows started before this release run on. The source column
+is not read, because version 1 wrote the application name there. A node with an older release never
+registers a deployment made after it started, which is what keeps it away from the jobs of a newer
+version during a rolling update. `Camunda7DeploymentAwareJobAcquisitionTest` holds this with two
+engines on one database. The reasoning is
+[decision 59](./DECISIONS.md#59-the-job-executor-fetches-the-jobs-of-this-applications-workflow-modules-every-version-of-them).
 
 ### A workflow is served from the model of its own version
 

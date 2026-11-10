@@ -42,6 +42,13 @@
       <groupId>org.camunda.bpm</groupId>
       <artifactId>camunda-engine</artifactId>
     </dependency>
+    <!-- the adapter gives the engine the StrongUuidGenerator, as Camunda's Spring Boot starter
+         did in version 1. camunda-engine declares the library 'provided', so it does not come
+         along with the engine -->
+    <dependency>
+      <groupId>com.fasterxml.uuid</groupId>
+      <artifactId>java-uuid-generator</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>

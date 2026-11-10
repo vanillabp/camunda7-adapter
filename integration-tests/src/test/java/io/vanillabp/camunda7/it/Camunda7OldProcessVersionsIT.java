@@ -4,6 +4,7 @@ import static io.vanillabp.integration.adapter.migration.workflowtask.DeployedPr
 import static io.vanillabp.integration.adapter.migration.workflowtask.DeployedProcessVersionsCheck.SERVED_BY_NO_METHOD;
 import static io.vanillabp.integration.adapter.migration.workflowtask.DeployedProcessVersionsCheck.STILL_RUN_ON_AN_OUTFADED_VERSION;
 import static io.vanillabp.integration.adapter.migration.workflowtask.DeployedProcessVersionsCheck.STILL_RUN_ON_THIS_VERSION;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -88,6 +89,44 @@ public class Camunda7OldProcessVersionsIT {
 
   @Test
   @Order(2)
+  @DisplayName("The next boot registers version 1 with the job executor, so the workflow on it keeps running")
+  public void theNextBootRegistersVersionOneWithTheJobExecutor() {
+
+    final var application = new SpringApplicationBuilder(TestApplication.class).run(DATABASE, resources("v2"));
+    try {
+      final var engine = application
+          .getBean("Camunda7_Engine_c7", io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder.class)
+          .getProcessEngine();
+      assertTrue(
+          engine
+              .getProcessEngineConfiguration()
+              .isJobExecutorDeploymentAware(),
+          "the engine works deployment-aware, as in version 1");
+      final var deploymentsOfTheModule = engine
+          .getRepositoryService()
+          .createDeploymentQuery()
+          .deploymentName("c7-it")
+          .tenantIdIn("c7-it")
+          .list()
+          .stream()
+          .map(org.camunda.bpm.engine.repository.Deployment::getId)
+          .toList();
+      assertEquals(2, deploymentsOfTheModule.size(), "version 1 and version 2 each made a deployment");
+      assertTrue(
+          engine
+              .getManagementService()
+              .getRegisteredDeployments()
+              .containsAll(deploymentsOfTheModule),
+          "the deploy command registered version 2 only. The workflow parked on version 1 needs its "
+              + "deployment registered as well, or its jobs are never fetched again");
+    } finally {
+      application.close();
+    }
+
+  }
+
+  @Test
+  @Order(3)
   @DisplayName("What version 1 still needs is reported, and the workflow running on it makes it an error")
   public void theUnservedTaskOfTheOldVersionIsReported(
       final CapturedOutput output) {
@@ -120,7 +159,7 @@ public class Camunda7OldProcessVersionsIT {
   }
 
   @Test
-  @Order(3)
+  @Order(4)
   @DisplayName("Fading version 1 out stops the demand and names the workflow left behind")
   public void fadingTheOldVersionOutChangesTheFinding(
       final CapturedOutput output) {
@@ -142,7 +181,7 @@ public class Camunda7OldProcessVersionsIT {
   }
 
   @Test
-  @Order(4)
+  @Order(5)
   @DisplayName("With the policy set, the workflow left behind stops the start")
   public void theStartCanBeMadeToFail() {
 
@@ -158,7 +197,7 @@ public class Camunda7OldProcessVersionsIT {
   }
 
   @Test
-  @Order(5)
+  @Order(6)
   @DisplayName("Fading out the version this boot deploys is a configuration error")
   public void fadingOutTheDeployedVersionFailsTheStart() {
 
@@ -171,7 +210,7 @@ public class Camunda7OldProcessVersionsIT {
   }
 
   @Test
-  @Order(6)
+  @Order(7)
   @DisplayName("A suspended version is checked like every other one")
   public void aSuspendedVersionIsStillReported(
       final CapturedOutput output) {
@@ -190,7 +229,7 @@ public class Camunda7OldProcessVersionsIT {
   }
 
   @Test
-  @Order(7)
+  @Order(8)
   @DisplayName("The emergency exit takes the suspended version out, loudly")
   public void theEmergencyExitTakesTheSuspendedVersionOut(
       final CapturedOutput output) {

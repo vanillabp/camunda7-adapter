@@ -349,9 +349,8 @@ public final class Camunda7IdentifiersTheEngineHolds {
         final Deployment deployment) {
 
       final var source = deployment.getSource();
-      final var deployedByAVanillaBpAdapter = (source != null) && source
-          .startsWith(Camunda7DeploymentService.ADAPTER_TYPE
-              + ":");
+      final var deployedByAVanillaBpAdapter = io.vanillabp.camunda7.wiring.Camunda7DeploymentSource
+          .writtenByAVanillaBpAdapter(deployment.getName(), source);
       final var heldBy = "Camunda deployment '%s' (source '%s', deployed at %s)"
           .formatted(
               deployment.getName() != null
