@@ -1,13 +1,10 @@
 package io.vanillabp.camunda7.springboot.processservice;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.context.properties.ConfigurationPropertiesBindHandlerAdvisor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 import io.vanillabp.camunda7.springboot.Camunda7AdapterBeanRegistrar;
-import io.vanillabp.camunda7.springboot.Camunda7EmptySections;
 import io.vanillabp.camunda7.springboot.VanillaBpCamunda7Properties;
 
 /**
@@ -32,20 +29,6 @@ public class Camunda7ProcessServiceConfiguration {
    * adapter are registered per configured adapter id, and only the registrar can do that.
    */
   public Camunda7ProcessServiceConfiguration() {
-
-  }
-
-  /**
-   * Keeps the keys which other property sources set below a section of this adapter
-   * written as <code>{}</code> in a YAML file. Without it, the empty section hides them.
-   *
-   * @return The advisor Spring Boot applies when it binds {@link VanillaBpCamunda7Properties}
-   * @see Camunda7EmptySections
-   */
-  @Bean
-  public static ConfigurationPropertiesBindHandlerAdvisor camunda7EmptySectionsKeepTheirKeys() {
-
-    return Camunda7EmptySections.advisor();
 
   }
 
