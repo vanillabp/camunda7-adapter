@@ -1,0 +1,7 @@
+vanillabp:
+  adapters:
+    camunda7: {}
+  workflow-modules:
+    loans:
+      adapters:
+        camunda7: {}

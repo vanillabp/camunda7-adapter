@@ -10,6 +10,7 @@ import org.camunda.bpm.engine.RepositoryService;
 import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.beans.factory.BeanRegistrar;
 import org.springframework.beans.factory.BeanRegistry;
+import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -21,6 +22,7 @@ import io.vanillabp.camunda7.processservice.Camunda7ProcessService;
 import io.vanillabp.camunda7.springboot.engine.Camunda7EngineHolder;
 import io.vanillabp.integration.adapter.AdapterBeanRegistrarSupport;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
+import io.vanillabp.integration.config.EmptySections;
 
 /**
  * Registers the beans of the Camunda 7 adapter, per adapter id. Several ids of one BPMS
@@ -269,16 +271,19 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
    * Binds the adapter id's engine settings from the canonical per-adapter location
    * <code>vanillabp.adapters.&lt;id&gt;.*</code> (the overlay view, see
    * {@link VanillaBpCamunda7Properties}). A section written as <code>{}</code> keeps the
-   * keys other property sources set below it, see {@link Camunda7EmptySections}.
+   * keys other property sources set below it, because the platform's
+   * {@link EmptySections#bindHandler()} takes part in the binding.
    */
-  private static Camunda7EngineProperties enginePropertiesFor(
+  static Camunda7EngineProperties enginePropertiesFor(
       final Environment environment,
       final String adapterId) {
 
     return Binder
         .get(environment)
-        .bind("vanillabp.adapters.%s".formatted(adapterId),
-            Camunda7EmptySections.section(Camunda7EngineProperties.class))
+        .bind(
+            "vanillabp.adapters.%s".formatted(adapterId),
+            Bindable.of(Camunda7EngineProperties.class),
+            EmptySections.bindHandler())
         .orElseGet(Camunda7EngineProperties::new);
 
   }
