@@ -290,7 +290,9 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
 
   /**
    * The names of every property a configuration file or a property source with a list of
-   * names holds. A source which cannot list its names is skipped.
+   * names holds. A source which cannot list its names is skipped. So is a source which a
+   * webapps module of VanillaBP adds itself, see
+   * {@link Camunda7VersionOneKeys#isAddedByAWebappsModule}.
    */
   private static List<String> propertyNames(
       final Environment environment) {
@@ -302,6 +304,7 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
         .getPropertySources()
         .stream()
         .filter(org.springframework.core.env.EnumerablePropertySource.class::isInstance)
+        .filter(source -> !Camunda7VersionOneKeys.isAddedByAWebappsModule(source.getName()))
         .flatMap(source -> java.util.Arrays
             .stream(((org.springframework.core.env.EnumerablePropertySource<?>) source).getPropertyNames()))
         .toList();

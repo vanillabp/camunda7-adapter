@@ -374,9 +374,14 @@ from the bytecode of `camunda-bpm-spring-boot-starter-webapp-core` 7.24: its aut
 calls only `CamundaBpmProperties#getWebapp`, and its condition reads
 `camunda.bpm.webapp.enabled`. The starter's `PropertiesListener` also writes
 `camunda.bpm.version`, `camunda.bpm.is-enterprise` and `camunda.bpm.formatted-version` into
-the environment, so these are never the application's. With Camunda's starter of the external
-task client (`camunda-bpm-spring-boot-starter-external-task-client`) on the classpath,
-`camunda.bpm.client.*` is left alone as well. The adapter finds the starter by its class
+the environment, so these are never the application's. A webapps module of VanillaBP adds its
+defaults in a property source named `vanillabp-<adapter type>-webapps`, and the check does not
+read such a source. An application which moves to a fork of Camunda 7 has this adapter's webapps
+module next to the adapter of the fork. The fork's copy of the check does not know the module, and
+without this rule it would end the start on the default `camunda.bpm.enabled: false`. The same key
+written by the application still ends the start. `Camunda7VersionOneKeysTest` tests both. With
+Camunda's starter of the external task client (`camunda-bpm-spring-boot-starter-external-task-client`)
+on the classpath, `camunda.bpm.client.*` is left alone as well. The adapter finds the starter by its class
 `ClientProperties`, which binds exactly these keys in 7.24. An application may use that client
 next to the adapter, for the external tasks of another engine.
 `Camunda7ExternalTaskClientVersionOneKeysTest` starts the client next to the adapter.
@@ -1804,7 +1809,8 @@ owns the engines. So the module does two things:
    to `false` here). It always builds a process engine. Then an application would
    run two engines on one datasource, and the job executor of the second would acquire the
    jobs of the first. Setting the property to `true` fails the start with a message which says
-   this.
+   this. The default sits in the property source `vanillabp-camunda7-webapps`, which the check
+   for keys of version 1 does not read. So it never counts as a key the application wrote.
 2. **VanillaBP's engines are registered with the runtime container.** The web applications look
    for engines there, not in the Spring context. When the application stops, the engines are
    removed again.

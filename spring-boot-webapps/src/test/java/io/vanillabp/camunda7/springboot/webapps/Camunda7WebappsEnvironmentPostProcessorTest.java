@@ -31,6 +31,13 @@ public class Camunda7WebappsEnvironmentPostProcessorTest {
     assertEquals(
         "false",
         environment.getProperty(Camunda7WebappsEnvironmentPostProcessor.CAMUNDA_BPM_ENABLED));
+    // the adapter's check for keys of version 1 skips a source named like this. Named in
+    // another way, the default would end the start where the adapter of a fork of Camunda 7
+    // runs next to this module
+    assertTrue(environment
+        .getPropertySources()
+        .contains(Camunda7WebappsEnvironmentPostProcessor.PROPERTY_SOURCE_NAME));
+    assertTrue(Camunda7WebappsEnvironmentPostProcessor.PROPERTY_SOURCE_NAME.matches("vanillabp-[a-z0-9]+-webapps"));
 
   }
 
