@@ -12,6 +12,11 @@
       "description": "Camunda 7.24 is the final feature release and the community edition ended with it, so this adapter pins 7.24.x and needs no release lines. Anything above 7.24 could only come from an enterprise environment release, which is a deliberate step rather than an upkeep PR.",
       "matchPackageNames": ["/^org\\.camunda\\.bpm/"],
       "allowedVersions": "/^7\\.24\\./"
+    },
+    {
+      "description": "java-uuid-generator follows the engine, not Renovate. camunda-engine 7.24 is built against 4.3.0 and declares it 'provided', so the adapter brings exactly that version. A newer major is a version the engine was never tested with.",
+      "matchPackageNames": ["com.fasterxml.uuid:java-uuid-generator"],
+      "enabled": false
     }
   ]
 }

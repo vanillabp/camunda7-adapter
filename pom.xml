@@ -90,7 +90,8 @@
     <spring-boot.version>4.1.2</spring-boot.version>
     <quarkus.version>3.40.1.1</quarkus.version>
     <lombok.version>1.18.48</lombok.version>
-    <!-- the engine's StrongUuidGenerator needs it, and camunda-engine declares it 'provided' -->
+    <!-- the engine's StrongUuidGenerator needs it, and camunda-engine declares it 'provided'.
+         The version is the one camunda-engine is built against, so it moves only with the engine -->
     <java-uuid-generator.version>4.3.0</java-uuid-generator.version>
   </properties>
 
