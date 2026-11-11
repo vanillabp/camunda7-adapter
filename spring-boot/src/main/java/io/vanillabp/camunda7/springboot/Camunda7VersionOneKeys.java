@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Ends the start where the configuration still holds a key of Camunda's Spring Boot starter,
@@ -25,6 +26,15 @@ import java.util.Map;
  * starter of the external task client, <code>camunda-bpm-spring-boot-starter-external-task-client</code>,
  * reads <code>camunda.bpm.client.*</code>. An application may use it next to the adapter, to
  * work on the external tasks of another engine.
+ * <p>
+ * A key which a webapps module of VanillaBP sets as its default is not the application's
+ * either. Such a module may set <code>camunda.bpm.enabled</code> to <code>false</code>, so
+ * that Camunda's starter builds no engine of its own. An application which moves to a fork of
+ * Camunda 7 has the webapps module of the old adapter next to the adapter of the fork. The
+ * fork's copy of this check does not know that module. Without this rule it would end the start
+ * on a key which nobody wrote. So the check does not read the property sources which such a
+ * module adds, see {@link #isAddedByAWebappsModule}. The same key written by the application
+ * still ends the start.
  * <p>
  * Keys are compared the way Spring Boot binds them: case, dashes and underscores do not matter.
  * An environment variable such as <code>CAMUNDA_BPM_HISTORY_LEVEL</code> is found as well.
@@ -50,6 +60,15 @@ final class Camunda7VersionOneKeys {
   static final String EXTERNAL_TASK_CLIENT_CLASS = "org.camunda.bpm.client.spring.boot.starter.ClientProperties";
 
   private static final String PREFIX = "camunda.bpm.";
+
+  /**
+   * The names of the property sources which the webapps modules of VanillaBP add for their
+   * defaults: <code>vanillabp-&lt;adapter type&gt;-webapps</code>. The pattern names no adapter
+   * type. A fork of Camunda 7 has a copy of this class, and that copy has to skip the source of
+   * the webapps module this class was copied from as well. A webapps module which names its
+   * source in another way makes its defaults count as keys of the application.
+   */
+  private static final Pattern ADDED_BY_A_WEBAPPS_MODULE = Pattern.compile("vanillabp-[a-z0-9]+-webapps");
 
   /**
    * What to say where version 2 has no key for a setting yet. When a story adds one, the
@@ -203,6 +222,23 @@ final class Camunda7VersionOneKeys {
       final ClassLoader classLoader) {
 
     return org.springframework.util.ClassUtils.isPresent(EXTERNAL_TASK_CLIENT_CLASS, classLoader);
+
+  }
+
+  /**
+   * Whether a property source is one which a webapps module of VanillaBP adds for its
+   * defaults. The keys in it were not written by the application, so they are no keys of
+   * version 1.
+   *
+   * @param propertySourceName The name of the property source
+   * @return Whether a webapps module of VanillaBP added it
+   */
+  static boolean isAddedByAWebappsModule(
+      final String propertySourceName) {
+
+    return (propertySourceName != null) && ADDED_BY_A_WEBAPPS_MODULE
+        .matcher(propertySourceName)
+        .matches();
 
   }
 

@@ -1,6 +1,7 @@
 package io.vanillabp.camunda7.springboot;
 
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.core.env.MapPropertySource;
 
 import io.vanillabp.camunda7.springboot.processservice.Camunda7ProcessServiceConfiguration;
 import io.vanillabp.integration.processservice.SpringBootMigrationAdapterAutoConfiguration;
@@ -230,6 +232,78 @@ public class Camunda7VersionOneKeysTest {
         message.contains("Where a key names '<id>', write it once for each Camunda 7 adapter id that needs it "
             + "(c7, c7-legacy)."),
         message);
+
+  }
+
+  /**
+   * A webapps module of VanillaBP adds its default <code>camunda.bpm.enabled</code> in a property
+   * source of its own. Here the module is not on the classpath, like the webapps module of the
+   * old adapter is unknown to the adapter of a fork of Camunda 7 in the same application. Only
+   * the name of the source tells the check that nobody wrote the key.
+   */
+  private static MapPropertySource defaultOfAWebappsModule() {
+
+    return new MapPropertySource("vanillabp-camunda7-webapps", Map.of("camunda.bpm.enabled", "false"));
+
+  }
+
+  @Test
+  @DisplayName("A default which a webapps module adds is no key of the application, also without the module")
+  public void aDefaultOfAWebappsModuleDoesNotEndTheStart() {
+
+    this.contextRunner
+        .withInitializer(context -> context
+            .getEnvironment()
+            .getPropertySources()
+            .addLast(defaultOfAWebappsModule()))
+        .withPropertyValues(
+            "spring.config.location=classpath:application.yaml",
+            "spring.datasource.url=jdbc:h2:mem:camunda7-v1-keys-webapps-default;DB_CLOSE_DELAY=-1")
+        .run(context -> Assertions.assertNull(context.getStartupFailure(), () -> "the start must not end: "
+            + context.getStartupFailure()));
+
+  }
+
+  @Test
+  @DisplayName("The same key written by the application still ends the start next to a webapps module's default")
+  public void theSameKeyWrittenByTheApplicationEndsTheStart() {
+
+    this.contextRunner
+        .withInitializer(context -> context
+            .getEnvironment()
+            .getPropertySources()
+            .addLast(defaultOfAWebappsModule()))
+        .withPropertyValues(
+            "spring.config.location=classpath:application.yaml",
+            "spring.datasource.url=jdbc:h2:mem:camunda7-v1-keys-user-enabled;DB_CLOSE_DELAY=-1",
+            "camunda.bpm.enabled=false")
+        .run(context -> {
+
+          Assertions.assertNotNull(context.getStartupFailure(), "the start has to end");
+          var cause = context.getStartupFailure();
+          while (cause.getCause() != null) {
+            cause = cause.getCause();
+          }
+          final var message = cause.getMessage();
+          Assertions.assertTrue(message.startsWith(INTRODUCTION), message);
+          Assertions.assertTrue(message.contains("  - 'camunda.bpm.enabled': VanillaBP builds an engine"), message);
+
+        });
+
+  }
+
+  @Test
+  @DisplayName("Only a source named like the one of a webapps module counts as added by VanillaBP")
+  public void onlyTheSourceOfAWebappsModuleIsSkipped() {
+
+    Assertions.assertTrue(Camunda7VersionOneKeys.isAddedByAWebappsModule("vanillabp-camunda7-webapps"));
+    Assertions.assertTrue(Camunda7VersionOneKeys.isAddedByAWebappsModule("vanillabp-cibseven-webapps"));
+    Assertions.assertTrue(Camunda7VersionOneKeys.isAddedByAWebappsModule("vanillabp-operaton-webapps"));
+    Assertions.assertFalse(Camunda7VersionOneKeys.isAddedByAWebappsModule("vanillabp-webapps"));
+    Assertions.assertFalse(Camunda7VersionOneKeys.isAddedByAWebappsModule("my-vanillabp-camunda7-webapps"));
+    Assertions.assertFalse(Camunda7VersionOneKeys.isAddedByAWebappsModule(
+        "Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/'"));
+    Assertions.assertFalse(Camunda7VersionOneKeys.isAddedByAWebappsModule(null));
 
   }
 

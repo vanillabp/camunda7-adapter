@@ -39,7 +39,12 @@ public class Camunda7WebappsEnvironmentPostProcessor implements EnvironmentPostP
 
   static final String CAMUNDA_BPM_ENABLED = "camunda.bpm.enabled";
 
-  private static final String PROPERTY_SOURCE_NAME = "vanillabp-camunda7-webapps";
+  /**
+   * The adapter's check for keys of version 1 skips a source named
+   * <code>vanillabp-&lt;adapter type&gt;-webapps</code>. So the default is no key the
+   * application wrote, also for the adapter of a fork of Camunda 7 in the same application.
+   */
+  static final String PROPERTY_SOURCE_NAME = "vanillabp-camunda7-webapps";
 
   @Override
   public void postProcessEnvironment(
