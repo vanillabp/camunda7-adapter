@@ -84,11 +84,14 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
     // a key of Camunda's Spring Boot starter which nobody reads any more would change
     // nothing, and nobody would notice. So it ends the start, with what to write instead
     if (!camunda7AdapterIds.isEmpty()) {
-      Camunda7VersionOneKeys.endTheStartOnKeysOfVersionOne(
+      final var classLoader = Camunda7AdapterBeanRegistrar.class.getClassLoader();
+      Camunda7VersionOneKeys.endTheStartOnStarterKeys(
+          Camunda7VersionOneKeys.ENGINE_STARTER_NAME,
           camunda7AdapterIds,
           propertyNames(environment),
-          Camunda7VersionOneKeys.webappsModuleIsPresent(Camunda7AdapterBeanRegistrar.class.getClassLoader()),
-          Camunda7VersionOneKeys.externalTaskClientIsPresent(Camunda7AdapterBeanRegistrar.class.getClassLoader()));
+          Camunda7VersionOneKeys.webappsModuleIsPresent(classLoader),
+          Camunda7VersionOneKeys.externalTaskClientIsPresent(classLoader),
+          Camunda7VersionOneKeys.engineExternalTaskClientIsPresent(classLoader));
     }
 
     camunda7AdapterIds

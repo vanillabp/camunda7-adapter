@@ -19,10 +19,10 @@ import java.util.regex.Pattern;
  * stands ends the start in VanillaBP, so this one does too.
  * <p>
  * A key which something on the classpath really reads is left alone. The module
- * <code>camunda7-adapter-spring-boot-webapps</code> hands <code>camunda.bpm.webapp.*</code> to
- * Camunda's web applications and reads <code>camunda.bpm.enabled</code> itself. The starter it
- * brings writes <code>camunda.bpm.version</code>, <code>camunda.bpm.is-enterprise</code> and
- * <code>camunda.bpm.formatted-version</code> into the environment on its own. Camunda's
+ * <code>camunda7-adapter-spring-boot-webapps</code> hands <code>webapp.*</code> below the prefix
+ * of the engine's starter to the web applications, and reads <code>enabled</code> there itself.
+ * The starter it brings writes <code>version</code>, <code>is-enterprise</code> and
+ * <code>formatted-version</code> below its prefix into the environment on its own. Camunda's
  * starter of the external task client, <code>camunda-bpm-spring-boot-starter-external-task-client</code>,
  * reads <code>camunda.bpm.client.*</code>. An application may use it next to the adapter, to
  * work on the external tasks of another engine.
@@ -35,6 +35,13 @@ import java.util.regex.Pattern;
  * on a key which nobody wrote. So the check does not read the property sources which such a
  * module adds, see {@link #isAddedByAWebappsModule}. The same key written by the application
  * still ends the start.
+ * <p>
+ * A fork of Camunda 7 may have renamed the keys of its own starter. Operaton's starter reads
+ * <code>operaton.bpm.*</code>. Such keys are not read either, because no starter builds the
+ * engine. So they end the start as well, with the same hints, see {@link #ENGINE_STARTER_NAME}.
+ * The keys of version 1, <code>camunda.bpm.*</code>, are still checked next to them. The keys
+ * which the webapps module of this adapter reads are left alone below the prefix of the
+ * engine's starter only, because that is the prefix the engine's web applications read.
  * <p>
  * Keys are compared the way Spring Boot binds them: case, dashes and underscores do not matter.
  * An environment variable such as <code>CAMUNDA_BPM_HISTORY_LEVEL</code> is found as well.
@@ -59,7 +66,80 @@ final class Camunda7VersionOneKeys {
    */
   static final String EXTERNAL_TASK_CLIENT_CLASS = "org.camunda.bpm.client.spring.boot.starter.ClientProperties";
 
-  private static final String PREFIX = "camunda.bpm.";
+  /** The name in the keys of Camunda's starter, which version 1 used: <code>camunda.bpm.*</code>. */
+  private static final String VERSION_ONE_STARTER_NAME = "camunda";
+
+  /**
+   * The name in the keys of the Spring Boot starter of the engine this adapter embeds:
+   * <code>&lt;name&gt;.bpm.*</code>. For Camunda 7 it is the name of version 1. A fork of
+   * Camunda 7 whose starter reads keys of another name has its sync recipe write that name here,
+   * Operaton's recipe <code>operaton</code>. Its keys then end the start next to the keys of
+   * version 1. A fork which kept the name, like CIB seven, changes nothing here.
+   */
+  static final String ENGINE_STARTER_NAME = "camunda";
+
+  /**
+   * A prefix of the keys this class checks.
+   *
+   * @param properties The prefix of a property name, for example <code>camunda.bpm.</code>
+   * @param environment The prefix of an environment variable, for example
+   *          <code>CAMUNDA_BPM_</code>
+   * @param ofTheEngine Whether the starter of the engine this adapter embeds reads the keys
+   * @param ofVersionOne Whether these are the keys of version 1
+   */
+  private record Prefix(
+                        String properties,
+                        String environment,
+                        boolean ofTheEngine,
+                        boolean ofVersionOne) {
+
+    static Prefix of(
+        final String starterName,
+        final boolean ofTheEngine,
+        final boolean ofVersionOne) {
+
+      return new Prefix(
+          "%s.bpm.".formatted(starterName), "%s_BPM_"
+              .formatted(starterName.toUpperCase(Locale.ROOT)), ofTheEngine, ofVersionOne);
+
+    }
+
+    /** Whether the keys are those of an engine starter which renamed the keys of version 1. */
+    boolean ofTheEngineOnly() {
+      return ofTheEngine && !ofVersionOne;
+    }
+
+    /** Whether the keys are those of version 1 while the engine's starter reads other ones. */
+    boolean ofVersionOneOnly() {
+      return ofVersionOne && !ofTheEngine;
+    }
+
+  }
+
+  /**
+   * A key found below one of the prefixes.
+   *
+   * @param prefix The prefix it was found below
+   * @param key The key below the prefix, normalized (see {@link #keyBelow})
+   */
+  private record Found(
+                       Prefix prefix,
+                       String key) {
+  }
+
+  /**
+   * The prefixes to check: the one of version 1, and the one of the engine's starter where it
+   * has another name.
+   */
+  private static List<Prefix> prefixesFor(
+      final String engineStarterName) {
+
+    if (VERSION_ONE_STARTER_NAME.equals(engineStarterName)) {
+      return List.of(Prefix.of(VERSION_ONE_STARTER_NAME, true, true));
+    }
+    return List.of(Prefix.of(VERSION_ONE_STARTER_NAME, false, true), Prefix.of(engineStarterName, true, false));
+
+  }
 
   /**
    * The names of the property sources which the webapps modules of VanillaBP add for their
@@ -82,7 +162,8 @@ final class Camunda7VersionOneKeys {
   /**
    * What became of a group of keys.
    *
-   * @param key The key below <code>camunda.bpm.</code>. It also covers every key below it
+   * @param key The key below <code>camunda.bpm.</code>, or below the prefix of the engine's
+   *          starter. It also covers every key below it
    * @param successor What to write instead. <code>%1$s</code> is the adapter id, or
    *          <code>&lt;id&gt;</code> where there are several
    */
@@ -213,6 +294,26 @@ final class Camunda7VersionOneKeys {
   }
 
   /**
+   * Whether the starter of the external task client of the engine's own starter name is on the
+   * classpath, the one which reads <code>&lt;name&gt;.bpm.client.*</code>. For Camunda 7 it is
+   * the same as {@link #externalTaskClientIsPresent}. A fork which renamed its keys is expected to
+   * keep the class of Camunda's starter in its own package. Operaton 2.2 does:
+   * <code>org.operaton.bpm.client.spring.boot.starter.ClientProperties</code> binds
+   * <code>operaton.bpm.client.*</code>.
+   *
+   * @param classLoader The class loader to ask
+   * @return Whether the starter is there
+   */
+  static boolean engineExternalTaskClientIsPresent(
+      final ClassLoader classLoader) {
+
+    return org.springframework.util.ClassUtils
+        .isPresent("org.%s.bpm.client.spring.boot.starter.ClientProperties".formatted(ENGINE_STARTER_NAME),
+            classLoader);
+
+  }
+
+  /**
    * Whether Camunda's starter of the external task client is on the classpath.
    *
    * @param classLoader The class loader to ask
@@ -259,32 +360,78 @@ final class Camunda7VersionOneKeys {
       final boolean webappsModuleIsPresent,
       final boolean externalTaskClientIsPresent) {
 
+    endTheStartOnStarterKeys(ENGINE_STARTER_NAME, adapterIds, propertyNames, webappsModuleIsPresent,
+        externalTaskClientIsPresent, false);
+
+  }
+
+  /**
+   * Ends the start if the configuration holds a key of a starter which nobody reads: a key of
+   * version 1, or a key of the engine's own starter where that one has another name. All such
+   * keys are named at once, so one restart is enough to fix them.
+   *
+   * @param engineStarterName The name in the keys of the engine's starter, see
+   *          {@link #ENGINE_STARTER_NAME}
+   * @param adapterIds The ids of the configured adapters of type <code>camunda7</code>
+   * @param propertyNames Every property name the environment knows
+   * @param webappsModuleIsPresent Whether the webapps module is on the classpath
+   * @param externalTaskClientIsPresent Whether Camunda's starter of the external task client
+   *          is on the classpath
+   * @param engineExternalTaskClientIsPresent Whether the starter of the external task client
+   *          which reads the keys of the engine's starter name is on the classpath. It matters
+   *          only where that name is not the one of version 1
+   * @throws IllegalStateException Naming every such key and what to write instead
+   */
+  static void endTheStartOnStarterKeys(
+      final String engineStarterName,
+      final Collection<String> adapterIds,
+      final Iterable<String> propertyNames,
+      final boolean webappsModuleIsPresent,
+      final boolean externalTaskClientIsPresent,
+      final boolean engineExternalTaskClientIsPresent) {
+
+    final var prefixes = prefixesFor(engineStarterName);
     final var findings = new LinkedHashMap<String, String>();
+    String keysOfTheEngineOnly = null;
     for (final var name : propertyNames) {
       if ((name == null) || findings.containsKey(name)) {
         continue;
       }
-      final var key = keyBelowThePrefix(name);
-      if ((key == null) || isLeftAlone(key, webappsModuleIsPresent, externalTaskClientIsPresent)) {
+      final var found = keyBelow(prefixes, name);
+      if ((found == null) || isLeftAlone(found, webappsModuleIsPresent, externalTaskClientIsPresent,
+          engineExternalTaskClientIsPresent)) {
         continue;
       }
-      findings.put(name, successorOf(key, adapterIds));
+      if (found
+          .prefix()
+          .ofTheEngineOnly()) {
+        keysOfTheEngineOnly = found
+            .prefix()
+            .properties();
+      }
+      findings.put(name, successorOf(found, prefixes, adapterIds));
     }
     if (findings.isEmpty()) {
       return;
     }
-    throw new IllegalStateException(messageFor(findings, adapterIds));
+    throw new IllegalStateException(messageFor(findings, keysOfTheEngineOnly, adapterIds));
 
   }
 
   private static String messageFor(
       final Map<String, String> findings,
+      final String keysOfTheEngineOnly,
       final Collection<String> adapterIds) {
 
     final var lines = new ArrayList<String>();
     lines.add("The configuration still has keys of Camunda's Spring Boot starter, which VanillaBP 1 used to "
         + "build the engine. VanillaBP 2 builds the Camunda 7 engine itself and does not read them. So they "
         + "would change nothing. Change each of them:");
+    if (keysOfTheEngineOnly != null) {
+      lines.add("The keys below '%s*' belong to the Spring Boot starter of the Camunda 7 engine. VanillaBP 2 "
+          .formatted(keysOfTheEngineOnly)
+          + "does not use that starter either.");
+    }
     findings.forEach((
         name,
         successor) -> lines.add("  - '%s': %s".formatted(name, successor)));
@@ -297,30 +444,60 @@ final class Camunda7VersionOneKeys {
   }
 
   private static boolean isLeftAlone(
-      final String key,
+      final Found found,
       final boolean webappsModuleIsPresent,
-      final boolean externalTaskClientIsPresent) {
+      final boolean externalTaskClientIsPresent,
+      final boolean engineExternalTaskClientIsPresent) {
 
+    final var key = found.key();
+    final var prefix = found.prefix();
+    // a starter writes its version keys below its own prefix, whichever starter it is
     if (WRITTEN_BY_THE_STARTER
         .stream()
         .anyMatch(written -> covers(written, key))) {
       return true;
     }
-    if (externalTaskClientIsPresent && READ_BY_THE_EXTERNAL_TASK_CLIENT
+    final var clientIsPresent = prefix.ofVersionOne()
+        ? externalTaskClientIsPresent
+        : engineExternalTaskClientIsPresent;
+    if (clientIsPresent && READ_BY_THE_EXTERNAL_TASK_CLIENT
         .stream()
         .anyMatch(read -> covers(read, key))) {
       return true;
     }
-    return webappsModuleIsPresent && READ_BY_THE_WEBAPPS_MODULE
+    // the web applications of the engine read the keys of the engine's starter
+    return webappsModuleIsPresent && prefix.ofTheEngine() && READ_BY_THE_WEBAPPS_MODULE
         .stream()
         .anyMatch(read -> covers(read, key));
 
   }
 
   private static String successorOf(
-      final String key,
+      final Found found,
+      final List<Prefix> prefixes,
       final Collection<String> adapterIds) {
 
+    final var key = found.key();
+    // where the engine's starter renamed the keys, two hints depend on the prefix
+    if (found
+        .prefix()
+        .ofVersionOneOnly() && covers("webapp", key)) {
+      final var engineProperties = prefixes
+          .stream()
+          .filter(Prefix::ofTheEngine)
+          .findFirst()
+          .orElseThrow()
+          .properties();
+      return "Camunda 7's web applications read '%swebapp.*' instead. Write the key there, with the module "
+          .formatted(engineProperties)
+          + "camunda7-adapter-spring-boot-webapps on the classpath, or remove it.";
+    }
+    if (found
+        .prefix()
+        .ofTheEngineOnly() && covers("client", key)) {
+      return "Add the Spring Boot starter of the external task client of Camunda 7, which reads these keys, "
+          + "or remove the key.";
+    }
     final var adapterId = adapterIds.size() == 1
         ? adapterIds
             .iterator()
@@ -341,24 +518,27 @@ final class Camunda7VersionOneKeys {
   }
 
   /**
-   * The key below <code>camunda.bpm.</code> in its normalized form, or <code>null</code> for
-   * a property name which is not such a key. The normalized form has no case, no dashes and
-   * no underscores within a part. An environment variable cannot be split into parts without
+   * The key below one of the prefixes in its normalized form, or <code>null</code> for a
+   * property name which is no such key. The normalized form has no case, no dashes and no
+   * underscores within a part. An environment variable cannot be split into parts without
    * guessing. Its normalized form keeps the underscores as separators, and {@link #covers}
    * compares it in the same form.
    */
-  private static String keyBelowThePrefix(
+  private static Found keyBelow(
+      final List<Prefix> prefixes,
       final String name) {
 
-    if (name.startsWith("CAMUNDA_BPM_")) {
-      return "_"
-          + name.substring("CAMUNDA_BPM_".length());
-    }
     final var normalized = normalized(name);
-    if (!normalized.startsWith(PREFIX)) {
-      return null;
+    for (final var prefix : prefixes) {
+      if (name.startsWith(prefix.environment())) {
+        return new Found(prefix, "_"
+            + name.substring(prefix.environment().length()));
+      }
+      if (normalized.startsWith(prefix.properties())) {
+        return new Found(prefix, normalized.substring(prefix.properties().length()));
+      }
     }
-    return normalized.substring(PREFIX.length());
+    return null;
 
   }
 
