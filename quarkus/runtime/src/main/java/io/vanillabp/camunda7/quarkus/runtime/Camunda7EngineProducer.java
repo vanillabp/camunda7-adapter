@@ -178,6 +178,7 @@ public class Camunda7EngineProducer {
     keys.databaseSchemaUpdate().ifPresent(properties::setDatabaseSchemaUpdate);
     keys.historyTimeToLive().ifPresent(properties::setHistoryTimeToLive);
     keys.historyLevel().ifPresent(properties::setHistoryLevel);
+    keys.idGenerator().ifPresent(properties::setIdGenerator);
     keys.tablePrefix().ifPresent(properties::setTablePrefix);
     keys.serializationFormat().ifPresent(properties::setSerializationFormat);
     keys.sleepUntilSomethingIsDue().ifPresent(properties::setSleepUntilSomethingIsDue);

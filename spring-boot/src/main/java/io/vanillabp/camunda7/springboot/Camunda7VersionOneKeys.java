@@ -135,8 +135,8 @@ final class Camunda7VersionOneKeys {
           new Rule(
               "default-number-of-retries", NO_KEY_YET),
           new Rule(
-              "id-generator", "VanillaBP sets it: the engine makes UUIDs as ids, like the starter's default "
-                  + "'strong'. Remove it, or set another generator in a ProcessEnginePlugin bean of your application."),
+              "id-generator", "Write 'vanillabp.adapters.%1$s.id-generator' instead: 'uuid' for the starter's "
+                  + "default 'strong', which is also VanillaBP's default, and 'db' for 'simple'."),
           new Rule(
               "eventing", "The engine publishes no Spring events in version 2, on purpose. Such a listener would work "
                   + "with the engine behind VanillaBP's back. Use @WorkflowTask, @TaskEvent and @WorkflowEnded "

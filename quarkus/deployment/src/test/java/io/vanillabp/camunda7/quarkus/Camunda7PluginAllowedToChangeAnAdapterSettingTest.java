@@ -16,6 +16,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 
 import io.quarkus.test.QuarkusExtensionTest;
 import io.vanillabp.camunda7.quarkus.plugins.IdGeneratorPlugin;
+import io.vanillabp.camunda7.quarkus.plugins.NotDeploymentAwareConfiguredPlugin;
 import io.vanillabp.camunda7.quarkus.plugins.RetriesPlugin;
 import io.vanillabp.camunda7.quarkus.runtime.Camunda7QuarkusEngineRegistry;
 import io.vanillabp.camunda7.quarkus.sample.TestAggregate;
@@ -25,9 +26,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import jakarta.inject.Inject;
 
 /**
- * Two engine plugins configured under {@code engine-plugins}. One replaces the id generator
- * the adapter sets, and the key allows it. The other changes a setting the adapter leaves
- * alone. The application starts with both values, and only the first plugin gets a WARN.
+ * Three engine plugins configured under {@code engine-plugins}. One switches off the
+ * deployment awareness the adapter sets, and the key allows it. One changes a setting the
+ * adapter leaves alone. One replaces the id generator, which has a key of its own and so is
+ * free for a plugin, like the history level. The application starts with all three values,
+ * and only the first plugin gets a WARN.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -41,6 +44,7 @@ public class Camunda7PluginAllowedToChangeAnAdapterSettingTest {
           .addClass(TestAggregatePersistence.class)
           .addClass(TestWorkflowService.class)
           .addClass(IdGeneratorPlugin.class)
+          .addClass(NotDeploymentAwareConfiguredPlugin.class)
           .addClass(RetriesPlugin.class)
           .addAsResource("application.yaml")
           .addAsResource("c7-test/processes/test-process.bpmn", "c7-test/processes/test-process.bpmn")
@@ -48,6 +52,8 @@ public class Camunda7PluginAllowedToChangeAnAdapterSettingTest {
       .overrideRuntimeConfigKey("quarkus.datasource.jdbc.url", "jdbc:h2:mem:c7-plugin-allowed;DB_CLOSE_DELAY=-1")
       .overrideConfigKey("vanillabp.adapters.c7.engine-plugins.ids.plugin-class", IdGeneratorPlugin.class.getName())
       .overrideConfigKey("vanillabp.adapters.c7.engine-plugins.retries.plugin-class", RetriesPlugin.class.getName())
+      .overrideConfigKey("vanillabp.adapters.c7.engine-plugins.not-deployment-aware.plugin-class",
+          NotDeploymentAwareConfiguredPlugin.class.getName())
       .overrideConfigKey("vanillabp.adapters.c7.allow-plugins-to-change-adapter-settings", "true")
       .setLogRecordPredicate(record -> record
           .getLoggerName()
@@ -70,8 +76,8 @@ public class Camunda7PluginAllowedToChangeAnAdapterSettingTest {
     final var warning = warnings.getFirst();
     Assertions
         .assertTrue(warning.contains("Camunda7[c7]: the engine plugin "
-            + IdGeneratorPlugin.class.getName()
-            + " changed the setting 'idGenerator'"), warning);
+            + NotDeploymentAwareConfiguredPlugin.class.getName()
+            + " changed the setting 'jobExecutorDeploymentAware'"), warning);
     Assertions
         .assertTrue(warning.contains("'vanillabp.adapters.c7.allow-plugins-to-change-adapter-settings' allows this"),
             warning);
@@ -93,8 +99,8 @@ public class Camunda7PluginAllowedToChangeAnAdapterSettingTest {
   }
 
   @Test
-  @DisplayName("With the key the engine starts with the values of both plugins")
-  public void theEngineHasTheValuesOfBothPlugins() {
+  @DisplayName("With the key the engine starts with the values of all plugins")
+  public void theEngineHasTheValuesOfAllPlugins() {
 
     final var configuration = (ProcessEngineConfigurationImpl) engineRegistry
         .engineFor("c7")
@@ -102,6 +108,7 @@ public class Camunda7PluginAllowedToChangeAnAdapterSettingTest {
         .getProcessEngineConfiguration();
     Assertions.assertInstanceOf(IdGeneratorPlugin.PrefixedIdGenerator.class, configuration.getIdGenerator());
     Assertions.assertEquals(5, configuration.getDefaultNumberOfRetries());
+    Assertions.assertFalse(configuration.isJobExecutorDeploymentAware());
 
   }
 

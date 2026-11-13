@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,7 +19,6 @@ import org.camunda.bpm.engine.impl.cfg.AbstractProcessEnginePlugin;
 import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
 import org.camunda.bpm.engine.impl.cfg.ProcessEnginePlugin;
 import org.camunda.bpm.engine.impl.cfg.StandaloneInMemProcessEngineConfiguration;
-import org.camunda.bpm.engine.impl.db.DbIdGenerator;
 import org.camunda.bpm.engine.impl.persistence.StrongUuidGenerator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,13 +40,29 @@ public class Camunda7AdapterSettingsGuardTest {
 
   private static final String KEY = "vanillabp.adapters.c7.allow-plugins-to-change-adapter-settings";
 
-  /** Replaces the id generator the adapter sets. */
-  public static class IdGeneratorPlugin extends AbstractProcessEnginePlugin {
+  /** Switches off the deployment awareness the adapter sets. */
+  public static class NotDeploymentAwarePlugin extends AbstractProcessEnginePlugin {
 
     @Override
     public void preInit(
         final ProcessEngineConfigurationImpl configuration) {
-      configuration.setIdGenerator(new DbIdGenerator());
+      configuration.setJobExecutorDeploymentAware(false);
+    }
+
+  }
+
+  /**
+   * Replaces the id generator. It has a key of its own (<code>id-generator</code>), so it is
+   * free for a plugin, like the history level.
+   */
+  public static class IdGeneratorPlugin extends AbstractProcessEnginePlugin {
+
+    private final StrongUuidGenerator idGenerator = new StrongUuidGenerator();
+
+    @Override
+    public void preInit(
+        final ProcessEngineConfigurationImpl configuration) {
+      configuration.setIdGenerator(idGenerator);
     }
 
   }
@@ -149,28 +165,24 @@ public class Camunda7AdapterSettingsGuardTest {
   }
 
   @Test
-  @DisplayName("a plugin which replaces the id generator ends the start, and the message names it")
+  @DisplayName("a plugin which switches off the deployment awareness ends the start, and the message names it")
   public void aChangedSettingEndsTheStart() {
 
     final var failure = assertThrows(IllegalStateException.class,
-        () -> build("guard-id-generator", false, new RetriesPlugin(), new IdGeneratorPlugin()));
+        () -> build("guard-deployment-aware", false, new RetriesPlugin(), new NotDeploymentAwarePlugin()));
 
     final var message = failure.getMessage();
     assertTrue(message.startsWith("Camunda 7 adapter 'c7': an engine plugin of your application changed settings"),
         message);
-    assertTrue(message.contains("'idGenerator': the adapter set "
-        + StrongUuidGenerator.class.getName()), message);
-    assertTrue(message.contains("the plugin "
-        + IdGeneratorPlugin.class.getName()
-        + " changed it to "
-        + DbIdGenerator.class.getName()
-        + " in preInit"), message);
+    assertTrue(message.contains("'jobExecutorDeploymentAware': the adapter set 'true', and the plugin "
+        + NotDeploymentAwarePlugin.class.getName()
+        + " changed it to 'false' in preInit"), message);
     // the plugin before it changed nothing of the adapter's
     assertFalse(message.contains(RetriesPlugin.class.getName()), message);
     assertTrue(message.contains("set '"
         + KEY
         + ": true'"), message);
-    assertNull(ProcessEngines.getProcessEngines().get("guard-id-generator"), "no engine is left behind");
+    assertNull(ProcessEngines.getProcessEngines().get("guard-deployment-aware"), "no engine is left behind");
 
   }
 
@@ -179,19 +191,19 @@ public class Camunda7AdapterSettingsGuardTest {
   public void theKeyTurnsTheEndIntoAWarning(
       final CapturedOutput output) {
 
-    final var engine = build("guard-allowed", true, new IdGeneratorPlugin());
+    final var engine = build("guard-allowed", true, new NotDeploymentAwarePlugin());
     try {
-      assertInstanceOf(DbIdGenerator.class,
-          ((ProcessEngineConfigurationImpl) engine.getProcessEngineConfiguration()).getIdGenerator());
+      assertFalse(((ProcessEngineConfigurationImpl) engine.getProcessEngineConfiguration())
+          .isJobExecutorDeploymentAware());
       final var warning = output
           .getAll()
           .lines()
-          .filter(line -> line.contains("changed the setting 'idGenerator'"))
+          .filter(line -> line.contains("changed the setting 'jobExecutorDeploymentAware'"))
           .findFirst()
           .orElse("");
       assertTrue(warning.contains("WARN"), warning);
       assertTrue(warning.contains("Camunda7[c7]: the engine plugin "
-          + IdGeneratorPlugin.class.getName()), warning);
+          + NotDeploymentAwarePlugin.class.getName()), warning);
       assertTrue(warning.contains("'"
           + KEY
           + "' allows this"), warning);
@@ -202,14 +214,17 @@ public class Camunda7AdapterSettingsGuardTest {
   }
 
   @Test
-  @DisplayName("a plugin which changes a setting the adapter leaves alone, or adds a parse listener, is fine")
+  @DisplayName("a plugin which changes a setting the adapter leaves alone or the id generator, or adds a parse listener, is fine")
   public void otherSettingsStayFree() {
 
-    final var engine = build("guard-other", false, new RetriesPlugin(), new AddingParseListenerPlugin());
+    final var idGeneratorPlugin = new IdGeneratorPlugin();
+    final var engine = build("guard-other", false, new RetriesPlugin(), new AddingParseListenerPlugin(),
+        idGeneratorPlugin);
     try {
       final var configuration = (ProcessEngineConfigurationImpl) engine.getProcessEngineConfiguration();
       assertEquals(5, configuration.getDefaultNumberOfRetries());
       assertEquals(2, configuration.getCustomPreBPMNParseListeners().size());
+      assertSame(idGeneratorPlugin.idGenerator, configuration.getIdGenerator());
     } finally {
       engine.close();
     }
@@ -283,7 +298,7 @@ public class Camunda7AdapterSettingsGuardTest {
                 "classLoader", "processEngineName", "transactionsExternallyManaged", "customPreBPMNParseListeners",
                 "customPostBPMNParseListeners", "expressionManager", "historyEventHandler",
                 "customPostCommandInterceptorsTxRequired", "customPostCommandInterceptorsTxRequiresNew", "jobExecutor",
-                "jobExecutorActivate", "idGenerator", "jobExecutorDeploymentAware", "transactionManager"),
+                "jobExecutorActivate", "jobExecutorDeploymentAware", "transactionManager"),
         Camunda7AdapterSettingsGuard
             .namesOf(List.of(Camunda7AdapterSettingsGuard.Setting.value("transactionManager", c -> null))));
 

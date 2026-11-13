@@ -449,7 +449,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
     // one, so a database of version 1 needs 'full'. See decision 58 in the repository's
     // DECISIONS.md
     io.vanillabp.camunda7.engine.Camunda7HistoryLevel.applyTo(adapterId, configuration, properties);
-    configuration.setIdGenerator(new org.camunda.bpm.engine.impl.persistence.StrongUuidGenerator());
+    io.vanillabp.camunda7.engine.Camunda7IdGenerator.applyTo(adapterId, configuration, properties);
 
     // what an extension contributes to THIS engine: parse listeners before or after
     // VanillaBP's own, and a history event handler installed next to the engine's

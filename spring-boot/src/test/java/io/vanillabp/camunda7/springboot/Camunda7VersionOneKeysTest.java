@@ -116,9 +116,11 @@ public class Camunda7VersionOneKeysTest {
         + "application.";
     Assertions.assertTrue(message.contains("'camunda.bpm.job-execution.core-pool-size': "
         + noKeyYet), message);
-    // the adapter sets these two itself, so they need no key
+    // the adapter sets this one itself, so it needs no key
     Assertions.assertTrue(message.contains("'camunda.bpm.job-execution.deployment-aware': VanillaBP sets it"), message);
-    Assertions.assertTrue(message.contains("'camunda.bpm.id-generator': VanillaBP sets it"), message);
+    Assertions.assertTrue(message.contains("'camunda.bpm.id-generator': Write 'vanillabp.adapters.c7.id-generator' "
+        + "instead: 'uuid' for the starter's default 'strong', which is also VanillaBP's default, and 'db' for "
+        + "'simple'."), message);
     Assertions.assertTrue(
         message.contains("'camunda.bpm.generic-properties.properties.enable-exceptions-after-unhandled-bpmn-error': "
             + noKeyYet),

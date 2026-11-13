@@ -314,6 +314,14 @@ public interface VanillaBpCamunda7Properties {
     Optional<String> historyLevel();
 
     /**
+     * How the engine makes its ids: <code>uuid</code> or <code>db</code>. The default is
+     * <code>uuid</code>, the same as on Spring Boot. See {@code Camunda7IdGenerator}.
+     *
+     * @return The configured id generator, empty for the default
+     */
+    Optional<String> idGenerator();
+
+    /**
      * OPTIONAL name of a declared Quarkus datasource
      * (<code>quarkus.datasource.&lt;name&gt;.*</code>) which this adapter id's embedded
      * engine runs on. Without it the engine shares the application's default datasource.
