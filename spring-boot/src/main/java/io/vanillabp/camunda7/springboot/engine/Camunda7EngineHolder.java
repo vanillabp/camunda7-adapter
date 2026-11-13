@@ -41,7 +41,10 @@ import lombok.extern.slf4j.Slf4j;
  *       two embedded engines must never share one schema. Engine commands on such a
  *       named datasource run on a {@link DataSourceTransactionManager} of the adapter's
  *       own. They do not join the caller's transaction. See the two-phase notes on
- *       {@code Camunda7ProcessService}.</li>
+ *       {@code Camunda7ProcessService}. A <code>data-source-name</code> which names the
+ *       application's default datasource by its bean name is no datasource of its own.
+ *       The engine runs on it as with the value <code>default</code>, because it is the
+ *       same instance.</li>
  *   <li><b>Job executor:</b> the usual Spring way, a {@link SpringJobExecutor} on a
  *       {@link ThreadPoolTaskExecutor} of its own. The thread names contain the adapter
  *       id. The engine's default, the {@code DefaultJobExecutor}, would run raw,
@@ -90,8 +93,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   private final Camunda7EngineProperties properties;
 
   /**
-   * The application's default datasource, asked for only where the engine needs it. It is
-   * <code>null</code> for an id which names a datasource.
+   * The application's default datasource, asked for only where the engine needs it.
    */
   private final java.util.function.Supplier<DataSource> applicationDataSource;
 
@@ -166,9 +168,10 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
    * @param adapterId The adapter id
    * @param properties The adapter id's engine settings
    * @param applicationDataSource The application's default datasource, asked for only
-   *        where it is needed (null for an id which names a datasource)
+   *        where it is needed
    * @param applicationTransactionManager The application's transaction manager, asked
-   *        for only where it is needed (null for an id which names a datasource)
+   *        for only where it is needed. An id which names the application's default
+   *        datasource by its bean name needs it as well
    * @param workflowTaskInvoker The core's entry point for BPMN tasks
    * @param bpmsInitiatedStartInvoker The core's entry point for workflows the engine
    *        starts on its own (may be <code>null</code> if the core provides none)
@@ -284,7 +287,22 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
 
     final DataSource dataSource;
     final PlatformTransactionManager transactionManager;
-    if (properties.usesSeparateDataSource()) {
+    if (properties.usesSeparateDataSource() && isTheApplicationsDefaultDataSource(resolveNamedDataSource())) {
+      // the key names the application's default datasource by its bean name. It is the
+      // same instance as under 'default', so the engine behaves as under 'default'. A
+      // datasource of its own would make the engine leave the caller's transaction and
+      // deduplicate deliveries, both without need
+      dataSource = resolveNamedDataSource();
+      transactionManager = applicationTransactionManager.get();
+      log.info(
+          "Camunda7[{}]: the datasource bean '{}' ('vanillabp.adapters.{}.data-source-name') is the "
+              + "application's default datasource. The engine runs on it as with the value 'default', with "
+              + "the application's transaction manager. Engine and business data commit together.",
+          adapterId,
+          properties.getDataSourceName(),
+          adapterId);
+      ownDataSource = false;
+    } else if (properties.usesSeparateDataSource()) {
       dataSource = resolveNamedDataSource();
       // engine commands on the named datasource run on a transaction manager of the
       // adapter's own. They cannot join the caller's transaction. That is why such
@@ -500,6 +518,23 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   }
 
   /**
+   * Whether the datasource is the one Spring injects by type: a <code>&#64;Primary</code>
+   * bean, or the only bean which is a default candidate. The application's own transactions
+   * run on it, so an engine on it can join them.
+   *
+   * @param dataSource The datasource the engine gets
+   * @return Whether it is the application's default datasource
+   */
+  private boolean isTheApplicationsDefaultDataSource(
+      final DataSource dataSource) {
+
+    return applicationContext
+        .getBeanProvider(DataSource.class)
+        .getIfUnique() == dataSource;
+
+  }
+
+  /**
    * The bean name of the datasource the engine runs on, so that two adapter ids on one
    * datasource compare equal whatever their keys say. The application's default datasource
    * has no name here. It is the one Spring injects by type, and an id without a
@@ -511,9 +546,7 @@ public class Camunda7EngineHolder implements Camunda7WorkflowProcessingLifecycle
   private String nameOfTheDataSource(
       final DataSource dataSource) {
 
-    if (applicationContext
-        .getBeanProvider(DataSource.class)
-        .getIfUnique() == dataSource) {
+    if (isTheApplicationsDefaultDataSource(dataSource)) {
       return null;
     }
     for (final var name : applicationContext.getBeanNamesForType(DataSource.class)) {

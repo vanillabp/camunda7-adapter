@@ -104,9 +104,7 @@ public class Camunda7EngineProducer {
         .stream()
         .map(adapterId -> {
           final var keys = overlay.adapters().get(adapterId);
-          final var dataSourceName = (keys == null)
-              ? null
-              : keys.dataSourceName().orElse(null);
+          final var dataSourceName = dataSourceNameOf(keys);
           resolveDataSource(dataSources, adapterId, dataSourceName);
           return transactionWithoutXa(dataSources, adapterId, dataSourceName);
         })
@@ -120,9 +118,7 @@ public class Camunda7EngineProducer {
     camunda7AdapterIds
         .forEach(adapterId -> {
           final var keys = overlay.adapters().get(adapterId);
-          final var dataSourceName = (keys == null)
-              ? null
-              : keys.dataSourceName().orElse(null);
+          final var dataSourceName = dataSourceNameOf(keys);
           final var dataSource = resolveDataSource(dataSources, adapterId, dataSourceName);
           try {
             engines.put(adapterId, new Camunda7QuarkusEngineHolder(
@@ -275,6 +271,30 @@ public class Camunda7EngineProducer {
               .formatted(adapterId, dataSourceName, adapterId, dataSourceName, declaredDataSourceNames(dataSources)));
     }
     return selected.get();
+
+  }
+
+  /**
+   * The datasource name an adapter id configures, or <code>null</code> where it configures
+   * none. Quarkus' own name of the default datasource, <code>&lt;default&gt;</code>, is read
+   * as the reserved value <code>default</code>. It is the same datasource, so it is no
+   * datasource of its own. Otherwise the engine would deduplicate deliveries without need,
+   * and the check against a second engine on the same tables would miss it.
+   *
+   * @param keys The keys of the adapter id, or <code>null</code> where it has none
+   * @return The datasource name
+   */
+  static String dataSourceNameOf(
+      final VanillaBpCamunda7Properties.Camunda7AdapterKeys keys) {
+
+    final var dataSourceName = (keys == null)
+        ? null
+        : keys
+            .dataSourceName()
+            .orElse(null);
+    return (dataSourceName != null) && DataSourceUtil.isDefault(dataSourceName.trim())
+        ? io.vanillabp.camunda7.engine.Camunda7EngineProperties.DEFAULT_DATA_SOURCE_NAME
+        : dataSourceName;
 
   }
 

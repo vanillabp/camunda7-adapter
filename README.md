@@ -315,7 +315,11 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   application-provided `DataSource` bean. Then the engine runs on that bean's datasource
   with an adapter-internal transaction manager (see the transaction caveat above). The
   adapter never builds a pool. If the bean is missing, the boot fails and lists the
-  available `DataSource` beans. Without `data-source-name`, a bean `camundaBpmDataSource`
+  available `DataSource` beans. A `data-source-name` which names the application's default
+  datasource by its bean name, such as `dataSource`, is no exception. It is the same
+  instance as under `default`, so the engine shares the application's transaction manager
+  (`Camunda7DefaultDataSourceByItsNameTest`; on Quarkus the same holds for `<default>`).
+  Without `data-source-name`, a bean `camundaBpmDataSource`
   and a bean `camundaBpmTransactionManager` take the place of the application's beans, as
   they did in version 1. `Camunda7EngineDatabase#choose` says what differs from version 1
   and why, and `Camunda7VersionOneDataSourceTest` holds each case. Whether the engine joins
@@ -464,7 +468,8 @@ would reach a consumer under as many identities as it has instances.
 
 `joinsTheApplicationTransaction()` gets its own paragraph, because it was answered wrongly
 once. It is true while the engine runs on the application's own data source. It is false once
-the adapter id has its own data source through `vanillabp.adapters.<adapter-id>.data-source-name`. That
+the adapter id has its own data source through `vanillabp.adapters.<adapter-id>.data-source-name`,
+unless that key names the application's default data source by its own name. That
 holds on Quarkus as well, where the engine is built on the container's transaction manager. A
 JTA (Jakarta Transactions) transaction around two independent data sources is still two
 commits. And everywhere else this adapter already treats such an engine as separate.

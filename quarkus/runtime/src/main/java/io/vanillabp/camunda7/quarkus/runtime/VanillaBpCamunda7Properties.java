@@ -320,7 +320,8 @@ public interface VanillaBpCamunda7Properties {
      * That is the embedded-engine guarantee: engine commands join the caller's JTA
      * transaction. With it the engine runs on its own schema. Engines which run side by
      * side for a migration need that. Starting a workflow then uses VanillaBP's two-phase
-     * pattern (see the README's transaction caveat).
+     * pattern (see the README's transaction caveat). The reserved value <code>default</code>
+     * and Quarkus' own name <code>&lt;default&gt;</code> both name the default datasource.
      *
      * @return The configured datasource name, empty for the application's default one
      */
