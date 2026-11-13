@@ -50,6 +50,13 @@ public class Camunda7EngineHolderTest {
           .registerSingleton(
               "holderTestDataSource",
               new SimpleDriverDataSource(new Driver(), "jdbc:h2:mem:holder-test;DB_CLOSE_DELAY=-1"));
+      // a second datasource, so the named one is not the application's default datasource.
+      // The application's only datasource is shared, also when the key names it
+      applicationContext
+          .getBeanFactory()
+          .registerSingleton(
+              "applicationDataSource",
+              new SimpleDriverDataSource(new Driver(), "jdbc:h2:mem:holder-test-app;DB_CLOSE_DELAY=-1"));
       holder.setApplicationContext(applicationContext);
       holder.afterPropertiesSet();
     }

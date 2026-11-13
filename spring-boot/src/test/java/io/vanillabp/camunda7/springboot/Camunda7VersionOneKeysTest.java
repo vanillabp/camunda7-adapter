@@ -44,10 +44,23 @@ public class Camunda7VersionOneKeysTest {
       final boolean webappsModuleIsPresent,
       final String... propertyNames) {
 
+    // the starter name of Camunda 7 is written out, so that a fork which renamed its keys runs
+    // these cases unchanged. The cases of such a fork are below, with 'operaton'
+    return messageFor("camunda", adapterIds, webappsModuleIsPresent, false, propertyNames);
+
+  }
+
+  private static String messageFor(
+      final String engineStarterName,
+      final List<String> adapterIds,
+      final boolean webappsModuleIsPresent,
+      final boolean engineExternalTaskClientIsPresent,
+      final String... propertyNames) {
+
     try {
-      // Camunda7ExternalTaskClientVersionOneKeysTest holds the keys of the external task client
-      Camunda7VersionOneKeys.endTheStartOnKeysOfVersionOne(adapterIds, List.of(propertyNames),
-          webappsModuleIsPresent, false);
+      // Camunda7ExternalTaskClientVersionOneKeysTest holds the keys of Camunda's external task client
+      Camunda7VersionOneKeys.endTheStartOnStarterKeys(engineStarterName, adapterIds, List.of(propertyNames),
+          webappsModuleIsPresent, false, engineExternalTaskClientIsPresent);
       return null;
     } catch (final IllegalStateException e) {
       return e.getMessage();
@@ -116,9 +129,11 @@ public class Camunda7VersionOneKeysTest {
         + "application.";
     Assertions.assertTrue(message.contains("'camunda.bpm.job-execution.core-pool-size': "
         + noKeyYet), message);
-    // the adapter sets these two itself, so they need no key
+    // the adapter sets this one itself, so it needs no key
     Assertions.assertTrue(message.contains("'camunda.bpm.job-execution.deployment-aware': VanillaBP sets it"), message);
-    Assertions.assertTrue(message.contains("'camunda.bpm.id-generator': VanillaBP sets it"), message);
+    Assertions.assertTrue(message.contains("'camunda.bpm.id-generator': Write 'vanillabp.adapters.c7.id-generator' "
+        + "instead: 'uuid' for the starter's default 'strong', which is also VanillaBP's default, and 'db' for "
+        + "'simple'."), message);
     Assertions.assertTrue(
         message.contains("'camunda.bpm.generic-properties.properties.enable-exceptions-after-unhandled-bpmn-error': "
             + noKeyYet),
@@ -232,6 +247,70 @@ public class Camunda7VersionOneKeysTest {
         message.contains("Where a key names '<id>', write it once for each Camunda 7 adapter id that needs it "
             + "(c7, c7-legacy)."),
         message);
+
+  }
+
+  @Test
+  @DisplayName("An engine whose starter reads the keys of version 1 checks these keys only")
+  public void anEngineWithTheKeysOfVersionOneHasOnePrefix() {
+
+    final var message = messageFor(List.of("c7"), false, "camunda.bpm.history-level", "operaton.bpm.history-level");
+    Assertions.assertNotNull(message);
+    Assertions.assertFalse(message.contains("operaton"), message);
+    Assertions.assertFalse(message.contains("belong to the Spring Boot starter of the"), message);
+
+  }
+
+  @Test
+  @DisplayName("A fork whose starter renamed its keys: those keys end the start as well, with the same hints")
+  public void theRenamedKeysOfAForkEndTheStart() {
+
+    final var message = messageFor("operaton", List.of("c7"), false, false, "camunda.bpm.history-level",
+        "operaton.bpm.history-level", "operaton.bpm.database.schema-update", "OPERATON_BPM_JOB_EXECUTION_MAX_WAIT",
+        "operaton.bpm.client.base-url", "operaton.bpm.webapp.application-path", "operaton.bpm.something-nobody-knows",
+        "operaton.bpm.version");
+
+    Assertions.assertNotNull(message);
+    Assertions.assertTrue(message.startsWith(INTRODUCTION), message);
+    Assertions.assertTrue(message.contains("The keys below 'operaton.bpm.*' belong to the Spring Boot starter of the "
+        + "Camunda 7 engine. VanillaBP 2 does not use that starter either."), message);
+    Assertions.assertTrue(
+        message.contains("  - 'camunda.bpm.history-level': Write 'vanillabp.adapters.c7.history-level' instead."),
+        message);
+    Assertions.assertTrue(
+        message.contains("  - 'operaton.bpm.history-level': Write 'vanillabp.adapters.c7.history-level' instead."),
+        message);
+    Assertions.assertTrue(message.contains("  - 'operaton.bpm.database.schema-update': Write "
+        + "'vanillabp.adapters.c7.database-schema-update' instead."), message);
+    Assertions.assertTrue(message.contains("  - 'OPERATON_BPM_JOB_EXECUTION_MAX_WAIT': Version 2 has no key"),
+        message);
+    Assertions.assertTrue(message.contains("  - 'operaton.bpm.client.base-url': Add the Spring Boot starter of the "
+        + "external task client of Camunda 7"), message);
+    Assertions.assertTrue(message.contains("  - 'operaton.bpm.webapp.application-path': Add the module "
+        + "camunda7-adapter-spring-boot-webapps"), message);
+    Assertions.assertTrue(message.contains("  - 'operaton.bpm.something-nobody-knows': Nothing in VanillaBP 2 reads "
+        + "this key."), message);
+    // the starter writes its version keys below its own prefix
+    Assertions.assertFalse(message.contains("operaton.bpm.version"), message);
+
+  }
+
+  @Test
+  @DisplayName("A fork whose starter renamed its keys: its web applications read the renamed keys only")
+  public void theWebappsOfAForkReadTheRenamedKeysOnly() {
+
+    Assertions.assertNull(messageFor("operaton", List.of("c7"), true, true, "operaton.bpm.webapp.application-path",
+        "OPERATON_BPM_WEBAPP_INDEX_REDIRECT_ENABLED", "operaton.bpm.enabled", "operaton.bpm.client.base-url",
+        "camunda.bpm.version"));
+
+    final var message = messageFor("operaton", List.of("c7"), true, true, "camunda.bpm.webapp.application-path",
+        "camunda.bpm.enabled");
+    Assertions.assertNotNull(message);
+    Assertions.assertTrue(message.contains("  - 'camunda.bpm.webapp.application-path': Camunda 7's web "
+        + "applications read 'operaton.bpm.webapp.*' instead. Write the key there, with the module "
+        + "camunda7-adapter-spring-boot-webapps on the classpath, or remove it."), message);
+    Assertions.assertTrue(message.contains("  - 'camunda.bpm.enabled': VanillaBP builds an engine"), message);
+    Assertions.assertFalse(message.contains("belong to the Spring Boot starter of the"), message);
 
   }
 

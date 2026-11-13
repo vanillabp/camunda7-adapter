@@ -8,7 +8,8 @@ import org.camunda.bpm.engine.impl.cfg.ProcessEngineConfigurationImpl;
 
 /**
  * An engine plugin of the application, configured under {@code engine-plugins}, which
- * replaces the id generator the adapter sets.
+ * replaces the id generator the adapter sets. The id generator has a key of its own, so a
+ * plugin may replace it without the key which allows plugins to change adapter settings.
  */
 public class IdGeneratorPlugin extends AbstractProcessEnginePlugin {
 

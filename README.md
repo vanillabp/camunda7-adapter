@@ -103,6 +103,9 @@ vanillabp:
       # level an engine plugin adds. The engine stores it in the database, and a
       # later start with another level fails. Default: full, as in version 1
       history-level: full
+      # how the engine makes its ids: uuid or db (numbers taken in blocks from
+      # the database). Default: uuid, as in version 1
+      id-generator: uuid
       # OPTIONAL: the name of an APPLICATION-PROVIDED datasource this id's engine
       # runs on (required for every additional camunda7 id - see the transaction
       # caveat below!). Setting up datasources is deliberately the application's
@@ -128,7 +131,7 @@ vanillabp:
       # Default: false - see 'Decision tables next to the Operaton adapter' below.
       dmn-feel-legacy-behavior: true
       # OPTIONAL: an engine plugin of the application may change a setting the
-      # adapter sets itself, like the id generator. Each change gets a WARN.
+      # adapter sets itself, like the class loader. Each change gets a WARN.
       # Default: false, which ends the start - see 'Embedded-engine wiring' below.
       allow-plugins-to-change-adapter-settings: true
 ```
@@ -315,7 +318,11 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   application-provided `DataSource` bean. Then the engine runs on that bean's datasource
   with an adapter-internal transaction manager (see the transaction caveat above). The
   adapter never builds a pool. If the bean is missing, the boot fails and lists the
-  available `DataSource` beans. Without `data-source-name`, a bean `camundaBpmDataSource`
+  available `DataSource` beans. A `data-source-name` which names the application's default
+  datasource by its bean name, such as `dataSource`, is no exception. It is the same
+  instance as under `default`, so the engine shares the application's transaction manager
+  (`Camunda7DefaultDataSourceByItsNameTest`; on Quarkus the same holds for `<default>`).
+  Without `data-source-name`, a bean `camundaBpmDataSource`
   and a bean `camundaBpmTransactionManager` take the place of the application's beans, as
   they did in version 1. `Camunda7EngineDatabase#choose` says what differs from version 1
   and why, and `Camunda7VersionOneDataSourceTest` holds each case. Whether the engine joins
@@ -332,7 +339,10 @@ the application's Spring Boot 4.1 / Spring Framework 7 is used. On purpose, the
   Camunda 7.24 rejects deployments of processes without one. A process may still
   override it with `camunda:historyTimeToLive`,
 - writes history at the level `full` (`history-level`) and makes its ids with the
-  `StrongUuidGenerator`, as Camunda's Spring Boot starter did in version 1. The engine on its
+  `StrongUuidGenerator` (`id-generator: uuid`), as Camunda's Spring Boot starter did in version 1.
+  `id-generator: db` leaves the generator unset, so the engine builds its own `DbIdGenerator`
+  with its command executor (`Camunda7IdGenerator`, `Camunda7IdGeneratorTest`). A plugin cannot
+  do that in `preInit`, because the command executor does not exist yet. The engine on its
   own would use `audit` and numbers from the database. The engine stores the level in the
   database on its first start and refuses a later start with another level. So the level of
   version 1 is what lets a database of version 1 start without a change
@@ -464,7 +474,8 @@ would reach a consumer under as many identities as it has instances.
 
 `joinsTheApplicationTransaction()` gets its own paragraph, because it was answered wrongly
 once. It is true while the engine runs on the application's own data source. It is false once
-the adapter id has its own data source through `vanillabp.adapters.<adapter-id>.data-source-name`. That
+the adapter id has its own data source through `vanillabp.adapters.<adapter-id>.data-source-name`,
+unless that key names the application's default data source by its own name. That
 holds on Quarkus as well, where the engine is built on the container's transaction manager. A
 JTA (Jakarta Transactions) transaction around two independent data sources is still two
 commits. And everywhere else this adapter already treats such an engine as separate.

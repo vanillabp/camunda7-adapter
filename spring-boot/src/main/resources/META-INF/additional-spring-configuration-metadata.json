@@ -19,6 +19,12 @@
       "defaultValue": "full"
     },
     {
+      "name": "vanillabp.adapters.camunda7.id-generator",
+      "type": "java.lang.String",
+      "description": "How the engine makes its ids: 'uuid' makes UUIDs, as VanillaBP 1 did, and 'db' makes numbers which the engine takes in blocks from the database (Camunda's DbIdGenerator).",
+      "defaultValue": "uuid"
+    },
+    {
       "name": "vanillabp.adapters.camunda7.data-source-name",
       "type": "java.lang.String",
       "description": "The name of the datasource bean the engine of this adapter id runs on."

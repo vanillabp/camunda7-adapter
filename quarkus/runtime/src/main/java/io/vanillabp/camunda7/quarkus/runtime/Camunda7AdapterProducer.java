@@ -284,15 +284,11 @@ public class Camunda7AdapterProducer {
         .adapters()
         .get(adapterId);
     return new io.vanillabp.camunda7.engine.Camunda7InstanceIdentity(
-        keys == null
+        Camunda7EngineProducer.dataSourceNameOf(keys), keys == null
             ? null
             : keys
-                .dataSourceName()
-                .orElse(null), keys == null
-                    ? null
-                    : keys
-                        .tablePrefix()
-                        .orElse(null));
+                .tablePrefix()
+                .orElse(null));
 
   }
 

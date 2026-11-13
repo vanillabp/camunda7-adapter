@@ -2156,6 +2156,8 @@ and `Camunda7HistoryLevelTest` (Quarkus) hold the default and the key on Quarkus
 - wiki page `Configuration`
 - the Operaton and CIB seven adapters get the same entry through the sync
 
+**Addendum:** see decision 63.
+
 ### 59. The job executor fetches the jobs of this application's workflow modules, every version of them
 
 Proposed by story 2106. Decided by the maintainer on 2026-11-09: the engine works deployment-aware, with no
@@ -2270,6 +2272,8 @@ the configuration, not as beans.
 - wiki page *Configuration*, section "Choosing the datasource"
 - wiki page *Configuration*, section "Several engines side by side"
 
+**Addendum:** see decision 62 and decision 64.
+
 ### 61. An engine plugin which changes a setting the adapter sets ends the start, unless a key allows it
 
 Proposed by story 2119. Decided by the maintainer on 2026-11-10: the start ends while the key is not set.
@@ -2334,4 +2338,184 @@ key, a free setting, an added and a removed list entry, a change in `postInit` a
 - `UPGRADE.md`, section "Camunda's Spring Boot starter no longer builds the engine"
 - wiki page *Configuration*, the key table and the section "A plugin may not change what the adapter sets"
 - the Operaton and CIB seven adapters get the same entry through the sync
+
+**Addendum:** see decision 63.
+
+### 62. A `data-source-name` which names the application's default datasource is no datasource of its own
+
+Proposed by story 2123. The story asked: treat such a name like `default`, or only warn? Its
+default answer was "treat it like `default`, with an INFO line at the start". This is that default.
+The maintainer has not decided it yet and can still overrule it.
+
+This is an addendum to decision 60 (and to its addendum of story 2116).
+
+**Why.** Before, any value of `data-source-name` other than `default` made the engine run on "a
+datasource of its own": a transaction manager of the adapter's own, no joining of the caller's
+transaction, and deduplicated deliveries. That was also true for `data-source-name: dataSource`,
+which is the bean name of Spring Boot's default datasource. The engine then ran on the very same
+datasource as the business data, but committed apart from them. Nothing needed that, and it cost a
+store access per task. Since story 2116 the check for two engines on one database already treats
+the default datasource as one datasource, however it is reached. The engine's behaviour now
+follows the same rule.
+
+**What holds.**
+
+- On Spring Boot, a `data-source-name` whose bean is the application's default datasource (the one
+  Spring injects by type: a `@Primary` bean, or the only one which is a default candidate) is
+  treated like `default`. The engine uses the application's transaction manager, joins the caller's
+  transaction, and does not deduplicate deliveries. An INFO line at the start says so.
+- A bean `camundaBpmTransactionManager` is not looked at in this case. The key names a datasource
+  on purpose, and version 1 had no such key.
+- An application whose only datasource is the named bean shares it, as decision 60 already says
+  for an only datasource called `camundaBpmDataSource`.
+- Every other named datasource stays a datasource of its own, as before.
+- On Quarkus, the value `<default>`, which is Quarkus' own name of the default datasource, is read
+  as `default`. This holds for the engine and for the check for two engines on one database.
+
+**Tests.** `Camunda7DefaultDataSourceByItsNameTest` (Spring Boot) compares `default` and
+`dataSource` (datasource, transaction manager, own-datasource flag of the engine and of the task
+registry, deduplication), the primary one of several datasources, and a datasource which is not
+the default one. `Camunda7DefaultDataSourceByItsNameTest` (Quarkus deployment) holds `<default>`.
+`Camunda7EngineHolderTest#jobExecutorLifecycleIsReferenceCounted` got a second datasource, so its
+named datasource is still one of its own.
+
+**Where it is referred to:**
+
+- `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/engine/Camunda7EngineHolder.java`:
+  class javadoc (datasource bullet), `afterPropertiesSet`, `isTheApplicationsDefaultDataSource`
+- `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/Camunda7AdapterBeanRegistrar.java`:
+  the engine holder is always given the application's datasource and transaction manager suppliers
+- `quarkus/runtime/src/main/java/io/vanillabp/camunda7/quarkus/runtime/Camunda7EngineProducer.java`:
+  `dataSourceNameOf`; `Camunda7AdapterProducer#instanceIdentityOf`;
+  `VanillaBpCamunda7Properties.Camunda7AdapterKeys#dataSourceName`
+- `README.md`, section "Embedded-engine wiring" and the paragraph on `joinsTheApplicationTransaction()`
+- wiki page *Configuration*, section "Choosing the datasource"
+- decision 60, which points here
+- the Operaton and CIB seven adapters get the same entry through the sync
+
+### 63. The id generator has a key, `id-generator`, and is no longer watched as an adapter setting
+
+Proposed by story 2124. The story asked: correct the advice (a plugin sets the generator's command
+executor in `postInit`), or add a key `vanillabp.adapters.<id>.id-generator` with `uuid` (default)
+and `db`? Its default answer was the key, because the advice would ask for engine API in
+application code. This is that default. The maintainer has not decided it yet and can still
+overrule it.
+
+This is an addendum to decision 58 and to decision 61.
+
+**Why.** Decision 58, `UPGRADE.md` and the wiki said: an application which wants the
+`DbIdGenerator` sets it with an engine plugin (since decision 61 together with
+`allow-plugins-to-change-adapter-settings`). That does not work. A `DbIdGenerator` which a plugin
+sets in `preInit` has no command executor, and the first deployment fails with a
+`NullPointerException`. The engine wires the generator itself only where no generator is set when
+it is built. Decision 50 already says why application code should not touch the engine for such a
+setting.
+
+**What holds.**
+
+- The key `vanillabp.adapters.<adapter-id>.id-generator` takes `uuid` (the default) or `db`. Case
+  and blanks around the value do not matter. Anything else, the empty value included, ends the start
+  with the two allowed values. Only the adapter level exists, because the setting belongs to the
+  engine, as the history level does.
+- `uuid` sets the `StrongUuidGenerator`, as before (decision 58).
+- `db` leaves the setting empty, so the engine builds its `DbIdGenerator` with its command executor.
+  An INFO line at the start says so.
+- Quarkus gets the same key.
+- The id generator is no longer one of the settings the plugin watch of decision 61 looks at. It
+  has a key now, so it belongs to the application, like the history level. A plugin may still
+  replace it, without the key `allow-plugins-to-change-adapter-settings`.
+- `client-configuration-inventory.yml` lists `idGenerator` and `camunda.bpm.id-generator` as
+  `supported` with the new key. A left-over `camunda.bpm.id-generator` still ends the start, and
+  the message now names the new key (`uuid` for the starter's `strong`, `db` for `simple`).
+
+**What changes in the log.** Decision 58: "An application which wants the `DbIdGenerator` sets it
+with an engine plugin" and its addendum of story 2119 are replaced by the key. Decision 61: the list
+of watched settings loses `idGenerator`, and the paragraph "What changes for decision 58" is
+superseded. Both entries point here.
+
+**Tests.** `Camunda7IdGeneratorTest` (core, real engine on H2): the default makes UUIDs for a
+deployment, a process instance and a task; `db` makes numbers for all three; an unknown value is
+explained. `Camunda7IdGeneratorKeyTest` (Spring Boot) and `Camunda7IdGeneratorTest` (Quarkus
+deployment) hold the key on a booted application. `Camunda7AdapterSettingsGuardTest` now uses
+`jobExecutorDeploymentAware` as its watched example and holds that a plugin may replace the id
+generator. `Camunda7PluginAllowedToChangeAnAdapterSettingTest` (Quarkus) the same on Quarkus.
+`Camunda7VersionOneKeysTest` holds the new hint for `camunda.bpm.id-generator`.
+
+**Where it is referred to:**
+
+- `core/src/main/java/io/vanillabp/camunda7/engine/Camunda7IdGenerator.java` (type javadoc, cites
+  decision 58)
+- `core/src/main/java/io/vanillabp/camunda7/engine/Camunda7AdapterSettingsGuard.java` (type javadoc
+  and the list of watched settings)
+- `core/src/main/java/io/vanillabp/camunda7/engine/Camunda7EngineProperties.java` (`id-generator`)
+- `Camunda7EngineHolder` (Spring Boot) and `Camunda7QuarkusEngineHolder` (Quarkus), next to
+  `Camunda7HistoryLevel.applyTo`
+- `quarkus/runtime/.../VanillaBpCamunda7Properties.java` (`idGenerator()`)
+- `spring-boot/src/main/resources/META-INF/additional-spring-configuration-metadata.json`
+- `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/Camunda7VersionOneKeys.java`
+  (rule `id-generator`)
+- `client-configuration-inventory.yml` (entries `idGenerator`, `camunda.bpm.id-generator`)
+- `README.md`, the key list and section "Embedded-engine wiring"
+- `UPGRADE.md`, section "The engine keeps the history level and the ids of version 1"
+- wiki page *Configuration* (key table, the section on history level and ids, the section on plugins)
+- the Operaton and CIB seven adapters get the same entry through the sync
+
+### 64. A key of a fork's renamed starter ends the start like a key of version 1
+
+Proposed by story 2137. The story asked: should the Operaton and CIB seven adapters also check
+their own starter keys (`operaton.bpm.*`, or CIB seven's prefix), with the same hints? Its default
+answer was "yes, with a test; the keys of the web applications excepted". This is that default. The
+maintainer has not decided it yet and can still overrule it.
+
+The story proposed a fork-own rule. It is a generic rule of this adapter instead, with one name set
+by a fork's sync recipe, because the check itself is the same for every engine of the Camunda 7
+family.
+
+**Why.** No version 2 adapter of the Camunda 7 family uses a Spring Boot starter to build its
+engine. So a key of the engine's own starter changes nothing, and nothing says so. That breaks the
+rule that a key nobody reads ends the start. For Camunda 7 and CIB seven the starter's keys are the
+keys of version 1, `camunda.bpm.*`, which are checked since story 2113 (CIB seven kept Camunda's
+prefix, its starter reads `camunda.bpm.*`). Operaton renamed them to `operaton.bpm.*`, and those
+were not checked.
+
+**What holds.**
+
+- `Camunda7VersionOneKeys.ENGINE_STARTER_NAME` names the engine in the keys of its starter,
+  `<name>.bpm.*`. It is `camunda` here. A fork whose starter reads keys of another name has its sync
+  recipe write that name: Operaton's recipe `rewrite/vanillabp-operaton.yml` writes `operaton`. CIB
+  seven needs nothing.
+- Where the name differs from `camunda`, both prefixes are checked, with the same rules and hints,
+  in the property form and as environment variables (`OPERATON_BPM_*`). The message has one more
+  line which says that the keys below the engine's prefix belong to the engine's starter.
+- The keys which the webapps module of the adapter reads (`webapp`, `enabled`) are left alone below
+  the engine's prefix only, because the engine's web applications read that prefix. Below
+  `camunda.bpm.` they end the start in such a fork, and the hint for `webapp` names the engine's key.
+  This is what the Operaton fork had done on its own so far; after the sync its own change is no
+  longer needed.
+- The keys a starter writes itself (`version`, `is-enterprise`, `formatted-version`) are left alone
+  below both prefixes.
+- `client.*` below the engine's prefix is left alone where the external task client starter of the
+  engine is on the classpath. Its class is taken to be Camunda's class in the engine's package,
+  `org.<name>.bpm.client.spring.boot.starter.ClientProperties`. Checked by hand for Operaton 2.2.0 (`operaton-bpm-spring-boot-starter-external-task-client`); finding 2150 asks for a fork test. Below `camunda.bpm.` Camunda's
+  client starter decides, as before.
+- Quarkus is not touched: version 1 had no Quarkus adapter, and the forks' Quarkus extensions are not
+  used either.
+
+**Tests.** `Camunda7VersionOneKeysTest#theRenamedKeysOfAForkEndTheStart` and
+`#theWebappsOfAForkReadTheRenamedKeysOnly` run the check with the name `operaton`.
+`#anEngineWithTheKeysOfVersionOneHasOnePrefix` holds that the name `camunda` checks one prefix only.
+The other cases of the class now name the starter `camunda` explicitly, so they hold in a fork
+unchanged. In the Operaton adapter, `OperatonStarterKeysTest` (fork-own) fails without the recipe
+rule.
+
+**Where it is referred to:**
+
+- `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/Camunda7VersionOneKeys.java` (type
+  javadoc, `ENGINE_STARTER_NAME`, `Prefix`, `endTheStartOnStarterKeys`, `isLeftAlone`,
+  `successorOf`, `engineExternalTaskClientIsPresent`)
+- `spring-boot/src/main/java/io/vanillabp/camunda7/springboot/Camunda7AdapterBeanRegistrar.java`
+  (the call of the check)
+- operaton-adapter: `rewrite/vanillabp-operaton.yml` (rule for `ENGINE_STARTER_NAME`), `README.md`,
+  `OperatonStarterKeysTest`
+- decision 60, which points here
 

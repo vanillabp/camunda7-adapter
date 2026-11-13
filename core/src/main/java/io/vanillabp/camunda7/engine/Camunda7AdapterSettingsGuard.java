@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
  * Watches the engine plugins of the application while the engine is built. A plugin runs
  * after the adapter set up the engine configuration. So it could change a setting which the
  * adapter sets itself without anybody noticing, for example switch off
- * {@code jobExecutorDeploymentAware} or replace the id generator. This class notices it.
+ * {@code jobExecutorDeploymentAware} or replace the class loader. This class notices it.
  * <p>
  * It puts a small plugin of its own before, between and after the plugins of the
  * application. Each of them compares the settings with the ones the one before it saw. So a
@@ -33,7 +33,9 @@ import org.slf4j.LoggerFactory;
  * <code>true</code>. Then each changed setting gets a WARN and the start goes on. Any setting
  * which the adapter does not set itself stays free for a plugin. The list of settings is the
  * one which <code>client-configuration-inventory.yml</code> marks as {@code set-by-adapter}
- * on the engine surface. See decision 61 in the repository's DECISIONS.md for why.
+ * on the engine surface. A setting with a key of its own, such as the history level or the
+ * id generator, is the application's and stays free for a plugin as well. See decision 61 in
+ * the repository's DECISIONS.md for why.
  */
 public final class Camunda7AdapterSettingsGuard {
 
@@ -114,7 +116,6 @@ public final class Camunda7AdapterSettingsGuard {
                   ProcessEngineConfigurationImpl::getCustomPostCommandInterceptorsTxRequiresNew),
           Setting.value("jobExecutor", ProcessEngineConfigurationImpl::getJobExecutor),
           Setting.value("jobExecutorActivate", ProcessEngineConfigurationImpl::isJobExecutorActivate),
-          Setting.value("idGenerator", ProcessEngineConfigurationImpl::getIdGenerator),
           Setting.value("jobExecutorDeploymentAware", ProcessEngineConfigurationImpl::isJobExecutorDeploymentAware));
 
   private Camunda7AdapterSettingsGuard() {

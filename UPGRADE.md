@@ -56,7 +56,7 @@ For the same reason, beans of the engine's own types are no longer picked up. A
 The ids are still UUIDs, because the adapter sets the generator which the starter used by default
 (see the next section).
 
-A `ProcessEnginePlugin` bean which changes a setting the adapter sets itself, like the id generator
+A `ProcessEnginePlugin` bean which changes a setting the adapter sets itself, like the class loader
 or `jobExecutorDeploymentAware`, ends the boot now, unless you set
 `vanillabp.adapters.<id>.allow-plugins-to-change-adapter-settings: true`.
 
@@ -85,9 +85,11 @@ vanillabp:
 `auto` takes the level which the database stores. If the level does not fit the database, the
 start ends with a message which names the key and both levels.
 
-The ids have no key. If you had set `camunda.bpm.id-generator` to another value in version 1, new
-ids are UUIDs now. The engine does not mind ids of two forms in one table, so the old ones stay
-valid. Remove the key, because a `camunda.bpm.*` key ends the boot now (see the next section).
+If you set `camunda.bpm.id-generator: simple` in version 1, write
+`vanillabp.adapters.<id>.id-generator: db` instead. The engine then makes numbers from the
+database again. Without it new ids are UUIDs. The engine does not mind ids of two forms in one
+table, so the old ones stay valid either way. Remove the old key, because a `camunda.bpm.*` key
+ends the boot now (see the next section).
 
 ### A `camundaBpmDataSource` works as before, and a `camunda.bpm.*` key ends the boot
 

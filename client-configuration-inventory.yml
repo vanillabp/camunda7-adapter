@@ -74,6 +74,8 @@ settings:
         key: vanillabp.adapters.<id>.history-time-to-live
       - names: [history, historyLevel]
         key: vanillabp.adapters.<id>.history-level
+      - names: [idGenerator]
+        key: vanillabp.adapters.<id>.id-generator
       - names: [dataSource]
         key: vanillabp.adapters.<id>.data-source-name
       - names: [databaseTablePrefix]
@@ -122,13 +124,6 @@ settings:
           The adapter brings its own job executor and starts it when workflow processing starts, not
           when the engine is built. The command interceptors wake that job executor after a commit,
           see 'sleep-until-something-is-due'.
-      - names: [idGenerator]
-        reason: >-
-          The adapter uses the StrongUuidGenerator, so ids are UUIDs as in version 1, where Camunda's
-          Spring Boot starter built the engine. The ids of a database which version 1 set up keep one
-          form, and several engines on one database do not compete for blocks of ids. An application which
-          wants another generator sets it with a ProcessEnginePlugin and
-          'vanillabp.adapters.<id>.allow-plugins-to-change-adapter-settings: true'.
       - names: [jobExecutorDeploymentAware]
         reason: >-
           Always true, as recommended for version 1. The job executor fetches only the jobs of the
@@ -511,6 +506,8 @@ settings:
         key: vanillabp.adapters.<id>.serialization-format
       - names: [camunda.bpm.history-level]
         key: vanillabp.adapters.<id>.history-level
+      - names: [camunda.bpm.id-generator]
+        key: vanillabp.adapters.<id>.id-generator ('uuid' for the starter's default 'strong', 'db' for 'simple')
       - names: [camunda.bpm.metrics.db-reporter-activate]
         key: vanillabp.adapters.<id>.db-metrics-reporting
       - names: [camunda.bpm.admin-user.id]
@@ -590,10 +587,6 @@ settings:
           - camunda.bpm.auto-deployment-enabled
           - camunda.bpm.deployment-resource-pattern
         reason: VanillaBP deploys the models of each workflow module itself.
-      - names: [camunda.bpm.id-generator]
-        reason: >-
-          The adapter uses the StrongUuidGenerator, which is the starter's default 'strong'. So ids
-          are UUIDs as in version 1.
     not-supported:
       - names:
           - camunda.bpm.generic-properties.ignore-unknown-fields
