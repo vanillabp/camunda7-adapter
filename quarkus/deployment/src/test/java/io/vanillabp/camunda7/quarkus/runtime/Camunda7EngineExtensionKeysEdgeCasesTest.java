@@ -8,12 +8,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * The cases of {@link Camunda7EngineExtensionKeys} which a boot of Quarkus does not show
  * cheaply: environment variables, several adapter ids, the name of a fork, and keys which only
  * look similar.
  */
+@ExtendWith(SuppressOutputExtension.class)
 public class Camunda7EngineExtensionKeysEdgeCasesTest {
 
   @Test
