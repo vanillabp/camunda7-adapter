@@ -1,0 +1,31 @@
+quarkus:
+  datasource:
+    db-kind: h2
+    jdbc:
+      url: jdbc:h2:mem:c7-quarkus-engine-extension-keys;DB_CLOSE_DELAY=-1
+  hibernate-orm:
+    schema-management:
+      strategy: drop-and-create
+  camunda:
+    datasource: engine
+    generic-config:
+      history: full
+    job-executor:
+      thread-pool:
+        max-pool-size: 4
+vanillabp:
+  adapters:
+    c7:
+      type: camunda7
+  prioritized-adapters:
+    - c7
+  workflow-modules:
+    c7-test:
+      adapters:
+        c7:
+          resources-location: classpath:c7-test/processes
+      workflows:
+        TestProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'

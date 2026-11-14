@@ -396,6 +396,16 @@ on the classpath, `camunda.bpm.client.*` is left alone as well. The adapter find
 next to the adapter, for the external tasks of another engine.
 `Camunda7ExternalTaskClientVersionOneKeysTest` starts the client next to the adapter.
 
+On Quarkus, a key of Camunda's own Quarkus extension (`quarkus.camunda.*`) ends the start, with
+the same kind of message. The adapter does not use that extension, so such a key changes nothing.
+An application which moves from the extension to VanillaBP keeps such keys easily. Quarkus itself
+only logs a warning about a `quarkus.*` key which no extension reads, and the start goes on.
+`Camunda7EngineExtensionKeys` holds the table of keys. Its constant `ENGINE_EXTENSION_NAME` holds
+the name in the keys. The sync recipe of a fork writes the fork's name there: Operaton's extension
+reads `quarkus.operaton.*`, CIB seven's reads `quarkus.cibseven.*`. The keys of the Spring Boot
+starter, `camunda.bpm.*`, are not checked on Quarkus, because version 1 had no adapter for
+Quarkus. `Camunda7EngineExtensionKeysTest` boots Quarkus with such keys.
+
 Where the adapter knows why the engine did not start, it throws a `Camunda7StartupExplanation`:
 what is wrong, and what to change. Today these are a history level which is unknown or differs
 from the database, a FEEL engine library which does not fit Camunda 7, an engine plugin which
