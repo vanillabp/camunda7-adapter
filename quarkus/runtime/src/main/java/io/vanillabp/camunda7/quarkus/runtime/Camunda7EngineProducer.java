@@ -98,6 +98,13 @@ public class Camunda7EngineProducer {
         .sorted()
         .toList();
 
+    // a key of the engine's own Quarkus extension would change nothing, and Quarkus only
+    // warns about it. So it ends the start, with what to write instead
+    if (!camunda7AdapterIds.isEmpty()) {
+      Camunda7EngineExtensionKeys
+          .endTheStartOnKeysOfTheEngineExtension(camunda7AdapterIds, ConfigProvider.getConfig().getPropertyNames());
+    }
+
     // checked for all ids before the first engine is built. So one boot names every id
     // which needs XA, and no engine is left open when the boot stops
     final var transactionsWithoutXa = camunda7AdapterIds
