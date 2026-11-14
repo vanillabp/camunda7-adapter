@@ -21,9 +21,14 @@ import io.vanillabp.spi.service.WorkflowEnd;
  * application's change to the workflow aggregate commits together with the end of the process
  * instance, and it rolls back with it. An engine on a datasource of its own cannot share that
  * transaction. Then VanillaBP opens a transaction of its own for the notification, and the
- * notification is delivered at least once. What the engine reports decides the KIND. An execution which
- * carries a delete reason was cancelled: by the API, by a terminate end event or by an
- * interrupting event. Every other execution reached an end event.
+ * notification is delivered at least once.
+ * <p>
+ * What the engine reports decides the KIND. A workflow is cancelled where the instance ends
+ * without standing at an element of its own model. That is the case when somebody deletes
+ * the instance, with a reason or without one, and when a modification takes its last token
+ * away. The engine's history calls such an instance terminated, and it decides that by the
+ * same question. A terminate end event, an interrupting event subprocess and an error which
+ * nobody catches end the instance at an element of the model, so they are a completion.
  * <p>
  * Why a listener is added to the deployed model, and only where a handler exists, is decision 5 in
  * the repository's DECISIONS.md.
@@ -80,12 +85,9 @@ public class Camunda7WorkflowEndedListener implements ExecutionListener {
     }
     final var bpmnProcessId = taskRegistry.plainBpmnProcessId(workflowModuleId, processDefinitionKey);
 
-    final var deleteReason = execution instanceof PvmExecutionImpl pvmExecution
-        ? pvmExecution.getDeleteReason()
-        : null;
-    final var kind = deleteReason == null
-        ? WorkflowEnd.Kind.COMPLETED
-        : WorkflowEnd.Kind.CANCELED;
+    final var kind = endsWithoutAnElementOfTheModel(execution)
+        ? WorkflowEnd.Kind.CANCELED
+        : WorkflowEnd.Kind.COMPLETED;
     // the activity the process instance ends at. It is the end event for a regular end,
     // and nothing where the instance was cancelled
     final var endEventId = kind == WorkflowEnd.Kind.COMPLETED
@@ -142,6 +144,26 @@ public class Camunda7WorkflowEndedListener implements ExecutionListener {
               }
 
             });
+
+  }
+
+  /**
+   * Whether the instance ends without standing at an element of its own model. Where the engine
+   * tears an instance down, it walks out of every scope and leaves the process instance without
+   * an activity. The history of the engine asks the same question to tell a terminated instance
+   * from a completed one. A delete reason is not enough: the engine only has one where the caller
+   * gave one, and the REST API and the web app give none.
+   *
+   * @param execution The process instance which ends
+   * @return <code>true</code> where the instance was torn down instead of reaching an element
+   */
+  private static boolean endsWithoutAnElementOfTheModel(
+      final DelegateExecution execution) {
+
+    if (!(execution instanceof PvmExecutionImpl pvmExecution)) {
+      return false;
+    }
+    return (pvmExecution.getDeleteReason() != null) || (pvmExecution.getActivity() == null);
 
   }
 

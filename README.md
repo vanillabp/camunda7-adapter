@@ -1592,17 +1592,27 @@ reason why there is no cost test next to that one.
 
 Where a workflow service declares a `@WorkflowEnded` method, the adapter attaches an END
 execution listener to the PROCESS scope, again inside the engine's transaction. Camunda 7
-tells the two kinds apart. An execution with a delete reason was canceled or deleted
-(`CANCELED`). Everything else ran to its end (`COMPLETED`, with the id of the element it
-ended at). Processes without such a method get no listener.
+tells the two kinds apart. An instance which ends without standing at an element of its own
+model was torn down (`CANCELED`). That is a deletion, with a reason or without one, and a
+modification which takes the last token away. Everything else ran to its end (`COMPLETED`,
+with the id of the element it ended at). Processes without such a method get no listener.
+
+The delete reason alone is not enough. The engine only has one where the caller gave one. The
+REST API `DELETE /process-instance/{id}` has no parameter for it, and the web app deletes through
+that call. So the listener asks what the engine's history asks to tell a terminated instance
+from a completed one: whether the process instance still has an activity. A deletion or a
+modification leaves it without one. The history then says `EXTERNALLY_TERMINATED` (the REST
+API) or `INTERNALLY_TERMINATED` (the Java API, also with a reason, and a modification), and the
+application hears `CANCELED` for both.
 
 A modeller would call two paths a cancelation, but here they are not. A terminate end event and
-an interrupting event subprocess both end the instance WITHOUT a delete reason. So the
-application hears `COMPLETED`. The id reported with it is the element the instance ended
+an interrupting event subprocess both end the instance at an element of the model, and without a
+delete reason. So the application hears `COMPLETED`. The id reported with it is the element the instance ended
 at. In the first case that is the terminate end event, in the second the event subprocess. So
 an id which arrives there is not always an end event. Camunda 8 answers the same
 for both paths. That is why the SPI promises no mapping of modelled paths at all.
-`Camunda7WorkflowEndKindIT` tests both against the embedded engine.
+`Camunda7WorkflowEndKindIT` tests both against the embedded engine, and the three ways to
+tear an instance down next to them.
 
 Both listeners follow the datasource mode, like the task delivery does. An engine on a
 datasource of its own runs its transaction where the application's persistence cannot join.

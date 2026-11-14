@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_EndKindDelete"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="EndKindDeleteProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_Start">
+      <bpmn:outgoing>Flow_ToWait</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToWait" sourceRef="Event_Start" targetRef="Event_Wait" />
+    <!-- an hour. The test removes the instance from outside long before the timer is due -->
+    <bpmn:intermediateCatchEvent id="Event_Wait">
+      <bpmn:incoming>Flow_ToWait</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEnd</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_Wait">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT1H</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="Flow_ToEnd" sourceRef="Event_Wait" targetRef="Event_End" />
+    <bpmn:endEvent id="Event_End">
+      <bpmn:incoming>Flow_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>
