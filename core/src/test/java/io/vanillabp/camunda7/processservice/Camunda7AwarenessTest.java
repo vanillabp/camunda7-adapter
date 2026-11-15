@@ -105,6 +105,30 @@ public class Camunda7AwarenessTest {
   }
 
   @Test
+  @DisplayName("A lost optimistic lock is a collision the core repeats at once, nothing else is")
+  public void onlyALostOptimisticLockIsACollision() {
+
+    final var testee = withUnreachableEngine();
+
+    assertTrue(
+        testee
+            .isPhaseTwoFailureACollision(
+                new org.camunda.bpm.engine.OptimisticLockingException("another transaction was faster")));
+    // the transaction of the dispatch may wrap it on its way out
+    assertTrue(
+        testee
+            .isPhaseTwoFailureACollision(
+                new IllegalStateException(
+                    "rolled back", new org.camunda.bpm.engine.OptimisticLockingException("lost"))));
+
+    // a database which is away is no race. The backoff of the outbox is the right answer
+    assertFalse(testee.isPhaseTwoFailureACollision(new ProcessEngineException("the database hiccupped")));
+    assertFalse(testee.isPhaseTwoFailureACollision(new BadUserRequestException("no such task")));
+    assertFalse(testee.isPhaseTwoFailureACollision(null));
+
+  }
+
+  @Test
   @DisplayName("A request the engine rejects as wrong is not repeated, everything else is")
   public void onlyARejectedRequestStopsBeingRetried() {
 
