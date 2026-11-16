@@ -1353,6 +1353,41 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
+   * Camunda 7 locks optimistically. Two commands on the same workflow at the same moment,
+   * say a message correlation and the completion of a user task, both read the same version
+   * of a row. The one which writes second finds that version gone and fails with
+   * {@link org.camunda.bpm.engine.OptimisticLockingException}. The engine rolls the whole
+   * command back, so nothing of it stays behind, and a repetition a moment later wins. That
+   * is what the core needs to know to repeat it at once and not after the backoff of the
+   * outbox.
+   * <p>
+   * A suspended workflow and a refused start are not races, whatever caused them, so the
+   * answer is no for them.
+   *
+   * @param failure What the phase-two operation threw
+   * @return Whether the failure is a race lost against another change of the same workflow
+   */
+  @Override
+  public boolean isPhaseTwoFailureACollision(
+      final Throwable failure) {
+
+    var candidate = failure;
+    while (candidate != null) {
+      if (candidate instanceof Camunda7RefusedStart) {
+        return false;
+      }
+      if (candidate instanceof org.camunda.bpm.engine.OptimisticLockingException) {
+        return true;
+      }
+      candidate = candidate.getCause() == candidate
+          ? null
+          : candidate.getCause();
+    }
+    return false;
+
+  }
+
+  /**
    * Camunda 7 wraps what its expression language threw into a
    * {@link org.camunda.bpm.engine.ProcessEngineException} and keeps it as the cause. So
    * the type tells an unreadable expression from an engine which has a bad moment. The
