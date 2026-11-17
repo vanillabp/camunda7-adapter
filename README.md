@@ -919,8 +919,8 @@ vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.adap
 
 There is no TASK level. That level is keyed by the task DEFINITION. But this key decides whether
 a listener becomes a task at all. So when the key is read, there is no task definition yet to key a
-level by. A value set at task level gets one guiding warning, which names the three levels that
-work, and the boot goes on. The Camunda 8 adapter reads the same key at the same three levels.
+level by. A value set at task level ends the boot, with a message naming the key and the three
+levels which work. The Camunda 8 adapter reads the same key at the same three levels.
 
 `Camunda7Listeners#listenersOf` reads the BPMN of a process. `collectModelledListeners` keeps
 exactly one group of what it finds: a listener written as `camunda:expression` or

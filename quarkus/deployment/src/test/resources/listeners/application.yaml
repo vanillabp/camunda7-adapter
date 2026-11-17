@@ -28,8 +28,3 @@ vanillabp:
           adapters:
             c7:
               allow-listeners: true
-          tasks:
-            archiveTheOrder:
-              adapters:
-                c7:
-                  allow-listeners: true

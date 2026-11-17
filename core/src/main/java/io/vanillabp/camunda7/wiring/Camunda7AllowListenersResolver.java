@@ -20,8 +20,8 @@ package io.vanillabp.camunda7.wiring;
  *
  * That level is keyed by a task DEFINITION. But this key decides whether a modelled listener
  * becomes a task at all. So when the key is read, there is no task definition yet to key a level
- * by. If somebody sets a value at task level anyway, one warning tells them the three levels
- * which work.
+ * by. If somebody sets a value at task level anyway, the start ends, and the message names the
+ * three levels which work.
  *
  * <h2>Why more specific may switch it OFF</h2>
  *

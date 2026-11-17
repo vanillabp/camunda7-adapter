@@ -269,7 +269,8 @@ public class VanillaBpCamunda7Properties {
      * Whether the execution listeners somebody modelled are served by
      * <code>@WorkflowTask</code> methods, for this scope. It is a {@code Boolean}, not a
      * primitive, because "unset" has to differ from {@code false}. That lets a workflow
-     * module switch OFF what the adapter switched on.
+     * module switch OFF what the adapter switched on. Nothing reads it at task level, so a
+     * value set there ends the start.
      */
     private Boolean allowListeners;
 
@@ -463,7 +464,7 @@ public class VanillaBpCamunda7Properties {
 
   /**
    * Every <code>allow-listeners</code> this configuration puts at TASK level, fully spelled
-   * out. That level does not resolve this key.
+   * out. Nothing reads this key at that level, so each of them ends the start.
    *
    * @param adapterId The adapter id
    * @return The keys found, in configuration order
