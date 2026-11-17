@@ -1158,7 +1158,7 @@ Everything else is repeatable. When in doubt, the platform asks an adapter to re
 One repeatable failure is a case of its own: the `OptimisticLockingException`. Two commands on the
 same workflow at the same moment, say a message correlation and the completion of a user task,
 both read the same version of a row. The one which writes second fails, and the engine rolls it
-back completely. A moment later it goes through. `isPhaseTwoFailureACollision` answers `true` for
+back completely. A moment later it goes through. `kindOfPhaseTwoFailure` answers `COLLISION` for
 it, anywhere in the cause chain. The core then repeats the dispatch at once, up to four times with
 pauses of about 100 to 800 milliseconds, and uses no attempt of the outbox entry for it. Only when
 all of them lose does the entry get the normal backoff, which starts at

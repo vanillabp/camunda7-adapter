@@ -10,6 +10,7 @@ import org.camunda.bpm.engine.runtime.ProcessInstance;
 import io.vanillabp.integration.adapter.spi.MigratableProcessService;
 import io.vanillabp.integration.adapter.spi.PhaseOneRequest;
 import io.vanillabp.integration.adapter.spi.PhaseOperationHandler;
+import io.vanillabp.integration.adapter.spi.PhaseTwoFailureKind;
 import io.vanillabp.integration.adapter.spi.PhaseTwoRequest;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.spi.AggregatePersistenceAware;
@@ -1362,28 +1363,30 @@ public class Camunda7ProcessService<A> implements MigratableProcessService<A> {
    * outbox.
    * <p>
    * A suspended workflow and a refused start are not races, whatever caused them, so the
-   * answer is no for them.
+   * answer is {@link PhaseTwoFailureKind#OTHER} for them. An embedded engine has no
+   * backpressure, so this adapter never answers {@link PhaseTwoFailureKind#BUSY}.
    *
    * @param failure What the phase-two operation threw
-   * @return Whether the failure is a race lost against another change of the same workflow
+   * @return {@link PhaseTwoFailureKind#COLLISION} for a race lost against another change of
+   *         the same workflow, otherwise {@link PhaseTwoFailureKind#OTHER}
    */
   @Override
-  public boolean isPhaseTwoFailureACollision(
+  public PhaseTwoFailureKind kindOfPhaseTwoFailure(
       final Throwable failure) {
 
     var candidate = failure;
     while (candidate != null) {
       if (candidate instanceof Camunda7RefusedStart) {
-        return false;
+        return PhaseTwoFailureKind.OTHER;
       }
       if (candidate instanceof org.camunda.bpm.engine.OptimisticLockingException) {
-        return true;
+        return PhaseTwoFailureKind.COLLISION;
       }
       candidate = candidate.getCause() == candidate
           ? null
           : candidate.getCause();
     }
-    return false;
+    return PhaseTwoFailureKind.OTHER;
 
   }
 
