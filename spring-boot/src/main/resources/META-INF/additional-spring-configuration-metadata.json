@@ -58,7 +58,7 @@
     {
       "name": "vanillabp.adapters.camunda7.allow-listeners",
       "type": "java.lang.Boolean",
-      "description": "Whether @WorkflowTask methods serve the execution listeners somebody modelled. Without it a model with such a listener does not start. It is also read per workflow module and per workflow, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.allow-listeners'. There is no task level.",
+      "description": "Whether @WorkflowTask methods serve the execution listeners somebody modelled. Without it a model with such a listener does not start. It is also read per workflow module and per workflow, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.allow-listeners'. There is no task level, and a value set there ends the start.",
       "defaultValue": false
     },
     {

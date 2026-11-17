@@ -1,7 +1,5 @@
 package io.vanillabp.camunda7.quarkus;
 
-import java.util.List;
-
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -19,8 +17,8 @@ import io.vanillabp.camunda7.quarkus.sample.TestWorkflowService;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Where the Quarkus overlay reads <code>allow-listeners</code>, and what it says about a value
- * written at a level it does not read.
+ * Where the Quarkus overlay reads <code>allow-listeners</code>. A value at task level ends the
+ * start, see {@link Camunda7SwitchAtTaskLevelEndsTheStartTest}.
  * <p>
  * The Spring Boot module reads the same three levels with the same rule: the most specific
  * value wins. The Camunda 8 adapter does the same for the very same key. The module this
@@ -90,23 +88,6 @@ public class Camunda7AllowListenersOverlayTest {
     final var nothingConfigured = overlay.allowListenersFor("unknown-adapter", "c7-test", "TestProcess");
     Assertions.assertFalse(nothingConfigured.allowed(), "the default serves no modelled listener");
     Assertions.assertNull(nothingConfigured.propertyKey());
-
-  }
-
-  @Test
-  public void aValueAtTaskLevelIsFoundAndChangesNoAnswer() {
-
-    final var overlay = overlay();
-
-    Assertions.assertEquals(
-        List
-            .of(
-                "vanillabp.workflow-modules.c7-test.workflows.TestProcess.tasks.archiveTheOrder.adapters.c7.allow-listeners"),
-        overlay.allowListenersKeysAtTaskLevel("c7"),
-        "the boot names the key it cannot honour instead of ignoring it silently");
-    Assertions.assertTrue(
-        overlay.allowListenersFor("c7", "c7-test", "TestProcess").allowed(),
-        "and the answer still comes from the workflow level");
 
   }
 

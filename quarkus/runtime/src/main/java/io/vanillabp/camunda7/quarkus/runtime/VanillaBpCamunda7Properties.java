@@ -111,7 +111,7 @@ public interface VanillaBpCamunda7Properties {
 
   /**
    * Every <code>allow-listeners</code> this configuration puts at TASK level, fully spelled
-   * out. That level does not resolve this key.
+   * out. Nothing reads this key at that level, so each of them ends the start.
    *
    * @param adapterId The adapter id
    * @return The keys found
@@ -252,7 +252,7 @@ public interface VanillaBpCamunda7Properties {
      * Whether the execution listeners somebody modelled are served by
      * <code>@WorkflowTask</code> methods, for this scope. It is empty, not <code>false</code>,
      * where nothing is configured. That lets a workflow module switch OFF what the adapter
-     * switched on.
+     * switched on. Nothing reads it at task level, so a value set there ends the start.
      *
      * @return The configured answer, empty where this scope says nothing
      */

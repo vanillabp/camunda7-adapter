@@ -39,9 +39,6 @@ public class Camunda7AdapterProducer {
 
   }
 
-  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
-      .getLogger(Camunda7AdapterProducer.class);
-
   /**
    * What the platform hands the adapter, built the same way for both services of an
    * adapter id.
@@ -212,12 +209,10 @@ public class Camunda7AdapterProducer {
               (
                   workflowModuleId,
                   bpmnProcessId) -> overlay.allowListenersFor(adapterId, workflowModuleId, bpmnProcessId));
-          // a key at a level which does not resolve it changes nothing. Silence would be
-          // worse than a line which says where the key is read
-          io.vanillabp.camunda7.wiring.Camunda7Listeners.reportKeysSetAtTaskLevel(
+          // a key at a level which does not read it would change nothing in silence
+          io.vanillabp.camunda7.wiring.Camunda7Listeners.refuseKeysSetAtTaskLevel(
               adapterId,
-              overlay.allowListenersKeysAtTaskLevel(adapterId),
-              log::warn);
+              overlay.allowListenersKeysAtTaskLevel(adapterId));
           return deploymentService;
         })
         .toList();
