@@ -213,6 +213,9 @@ public class Camunda7AdapterProducer {
           io.vanillabp.camunda7.wiring.Camunda7Listeners.refuseKeysSetAtTaskLevel(
               adapterId,
               overlay.allowListenersKeysAtTaskLevel(adapterId));
+          io.vanillabp.camunda7.sync.Camunda7SerializationFormats.refuseKeysSetAtTaskLevel(
+              adapterId,
+              overlay.serializationFormatKeysAtTaskLevel(adapterId));
           return deploymentService;
         })
         .toList();

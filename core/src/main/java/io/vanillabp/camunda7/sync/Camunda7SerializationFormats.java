@@ -1,5 +1,7 @@
 package io.vanillabp.camunda7.sync;
 
+import java.util.List;
+
 /**
  * The serialization format in which Camunda 7 stores a shared value it has no variable type
  * for. Such a value is a nested value, or a number the engine cannot store as itself. The
@@ -36,10 +38,19 @@ package io.vanillabp.camunda7.sync;
  * configuration. {@link #firstConfigured(String...)} does the resolution across the three
  * levels.
  * <p>
+ * There is no TASK level. All tasks of a workflow read and write the same variables, so one
+ * workflow needs one format. A value set at task level ends the start, see
+ * {@link #refuseKeysSetAtTaskLevel(String, List)}.
+ * <p>
  * Decision 9 in the repository's DECISIONS.md says why such a value is written in the
  * engine's own format and not as a JSON string.
  */
 public interface Camunda7SerializationFormats {
+
+  /**
+   * The key below <code>adapters.&lt;id&gt;</code>, as written in a configuration file.
+   */
+  String SERIALIZATION_FORMAT_KEY = "serialization-format";
 
   /**
    * The format for the values of the given workflow which the engine has no type for.
@@ -71,6 +82,47 @@ public interface Camunda7SerializationFormats {
       }
     }
     return null;
+
+  }
+
+  /**
+   * Ends the start if the application set this key at TASK level. Nothing reads it there, so
+   * the value would change nothing, and the variables of that task would be written in a format
+   * the application did not ask for.
+   *
+   * @param adapterId The adapter ID
+   * @param keysAtTaskLevel The keys found, fully spelled out. An empty list is fine
+   * @throws IllegalStateException If there is such a key. The message names each of them and
+   *           the levels where the key works
+   */
+  static void refuseKeysSetAtTaskLevel(
+      final String adapterId,
+      final List<String> keysAtTaskLevel) {
+
+    if (keysAtTaskLevel.isEmpty()) {
+      return;
+    }
+    throw new IllegalStateException(
+        """
+            Camunda 7 adapter '%s' has '%s' set at TASK level, where nothing reads it:
+              %s
+            Move the value to one of these levels, or remove it. The most specific configured \
+            one wins:
+            vanillabp.adapters.%s.%s
+            vanillabp.workflow-modules.<m>.adapters.%s.%s
+            vanillabp.workflow-modules.<m>.workflows.<w>.adapters.%s.%s
+            There is no task level for this key. All tasks of a workflow read and write the same \
+            variables, so one workflow needs one format."""
+            .formatted(
+                adapterId,
+                SERIALIZATION_FORMAT_KEY,
+                String.join("\n  ", keysAtTaskLevel),
+                adapterId,
+                SERIALIZATION_FORMAT_KEY,
+                adapterId,
+                SERIALIZATION_FORMAT_KEY,
+                adapterId,
+                SERIALIZATION_FORMAT_KEY));
 
   }
 

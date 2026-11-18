@@ -217,6 +217,9 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
                 io.vanillabp.camunda7.wiring.Camunda7Listeners.refuseKeysSetAtTaskLevel(
                     adapterId,
                     deploymentOverlay.allowListenersKeysAtTaskLevel(adapterId));
+                io.vanillabp.camunda7.sync.Camunda7SerializationFormats.refuseKeysSetAtTaskLevel(
+                    adapterId,
+                    deploymentOverlay.serializationFormatKeysAtTaskLevel(adapterId));
                 return deploymentService;
               }));
 

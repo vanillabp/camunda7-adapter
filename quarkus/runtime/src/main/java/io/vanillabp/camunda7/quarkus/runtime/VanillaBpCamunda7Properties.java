@@ -45,8 +45,8 @@ public interface VanillaBpCamunda7Properties {
    * The workflow-module sections of the shared tree - only the Camunda 7 keys which are
    * resolvable per scope are modeled here: the serialization format, the tenant the module
    * is deployed into, and <code>allow-listeners</code>. Below a workflow, the
-   * <code>tasks</code> section is read as well, to name an <code>allow-listeners</code> put at
-   * task level.
+   * <code>tasks</code> section is read as well, to name a <code>serialization-format</code> or
+   * an <code>allow-listeners</code> put at task level.
    *
    * @return The configured workflow-module sections, keyed by workflow module id
    */
@@ -119,6 +119,45 @@ public interface VanillaBpCamunda7Properties {
   default java.util.List<String> allowListenersKeysAtTaskLevel(
       final String adapterId) {
 
+    return keysAtTaskLevel(
+        adapterId,
+        io.vanillabp.camunda7.wiring.Camunda7Listeners.ALLOW_LISTENERS_KEY,
+        keys -> keys.allowListeners().isPresent());
+
+  }
+
+  /**
+   * Every <code>serialization-format</code> this configuration puts at TASK level, fully
+   * spelled out. Nothing reads this key at that level, so each of them ends the start.
+   *
+   * @param adapterId The adapter id
+   * @return The keys found
+   */
+  default java.util.List<String> serializationFormatKeysAtTaskLevel(
+      final String adapterId) {
+
+    return keysAtTaskLevel(
+        adapterId,
+        io.vanillabp.camunda7.sync.Camunda7SerializationFormats.SERIALIZATION_FORMAT_KEY,
+        keys -> keys.serializationFormat().isPresent());
+
+  }
+
+  /**
+   * Every key of one name this configuration puts at TASK level, fully spelled out. It is a
+   * default method and not a private one, because SmallRye maps every method of the interface
+   * which is not a default method.
+   *
+   * @param adapterId The adapter id
+   * @param key The key below <code>adapters.&lt;id&gt;</code>
+   * @param setsTheKey Whether a task's adapter section sets the key
+   * @return The keys found
+   */
+  default java.util.List<String> keysAtTaskLevel(
+      final String adapterId,
+      final String key,
+      final java.util.function.Predicate<Camunda7ScopedKeys> setsTheKey) {
+
     return workflowModules()
         .entrySet()
         .stream()
@@ -137,12 +176,10 @@ public interface VanillaBpCamunda7Properties {
                       .getValue()
                       .adapters()
                       .get(adapterId);
-                  return (keys != null) && keys.allowListeners().isPresent();
+                  return (keys != null) && setsTheKey.test(keys);
                 })
                 .map(task -> "vanillabp.workflow-modules.%s.workflows.%s.tasks.%s.adapters.%s.%s"
-                    .formatted(
-                        module.getKey(), workflow.getKey(), task.getKey(), adapterId,
-                        io.vanillabp.camunda7.wiring.Camunda7Listeners.ALLOW_LISTENERS_KEY))))
+                    .formatted(module.getKey(), workflow.getKey(), task.getKey(), adapterId, key))))
         .toList();
 
   }
@@ -198,8 +235,8 @@ public interface VanillaBpCamunda7Properties {
   }
 
   /**
-   * The Camunda 7 keys of one task. This is the most specific level, and
-   * <code>allow-listeners</code> is not resolved at it.
+   * The Camunda 7 keys of one task. This is the most specific level, and neither
+   * <code>serialization-format</code> nor <code>allow-listeners</code> is resolved at it.
    */
   interface Camunda7TaskKeys {
 
@@ -242,7 +279,8 @@ public interface VanillaBpCamunda7Properties {
   interface Camunda7ScopedKeys {
 
     /**
-     * The serialization format of nested shared values for this scope.
+     * The serialization format of nested shared values for this scope. Nothing reads it at
+     * task level, so a value set there ends the start.
      *
      * @return The configured format, empty where this scope says nothing
      */
