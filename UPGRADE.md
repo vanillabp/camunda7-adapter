@@ -183,6 +183,7 @@ dependency which provides it. VanillaBP passes the value set for the adapter to 
 workflow may set its own value
 (`vanillabp.workflow-modules.<module>.adapters.<id>.serialization-format`,
 `vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.serialization-format`).
+There is no task level, and a value set there ends the start.
 
 If you configure nothing, the engine's own default applies. Without a dataformat that is Java
 serialization. Cockpit then shows a base64 blob instead of the data, so nobody who operates the

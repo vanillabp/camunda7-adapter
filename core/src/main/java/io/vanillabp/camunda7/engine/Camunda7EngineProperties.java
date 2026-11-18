@@ -112,6 +112,7 @@ public class Camunda7EngineProperties {
    * per written variable, so a workflow module or a single workflow may override it
    * ({@code vanillabp.workflow-modules.<module>.adapters.<id>.serialization-format},
    * {@code vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.serialization-format}).
+   * There is no TASK level. A value set there ends the start.
    * <p>
    * The matching dataformat has to be on the classpath. That dependency and its own
    * settings belong to the application. VanillaBP only names the format.

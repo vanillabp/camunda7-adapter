@@ -15,13 +15,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.integration.workflowmodule.WorkflowModuleAutoConfiguration;
 
 /**
- * <code>allow-listeners</code> is not read at task level. A value set there ends the start, and
- * the message names the key and the levels where it works.
+ * <code>allow-listeners</code> and <code>serialization-format</code> are not read at task level. A
+ * value set there ends the start, and the message names the key and the levels where it works.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7SwitchAtTaskLevelEndsTheStartTest {
 
   private static final String TASK_LEVEL_KEY = "vanillabp.workflow-modules.c7-smoke-test.workflows.SomeProcess.tasks.someTask.adapters.c7.allow-listeners";
+
+  private static final String FORMAT_AT_TASK_LEVEL = "vanillabp.workflow-modules.c7-smoke-test.workflows.SomeProcess.tasks.someTask.adapters.c7.serialization-format";
 
   private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
       .withInitializer(new ConfigDataApplicationContextInitializer())
@@ -62,6 +64,42 @@ public class Camunda7SwitchAtTaskLevelEndsTheStartTest {
           Assertions.assertTrue(message.contains(TASK_LEVEL_KEY), message);
           Assertions.assertTrue(
               message.contains("vanillabp.workflow-modules.<m>.workflows.<w>.adapters.c7.allow-listeners"),
+              message);
+          Assertions.assertTrue(message.contains("Move the value to one of these levels, or remove it."), message);
+
+        });
+
+  }
+
+  @Test
+  @DisplayName("serialization-format at task level ends the start, and the message says where the key works")
+  public void serializationFormatAtTaskLevelEndsTheStart() {
+
+    this.contextRunner
+        .withPropertyValues(
+            "spring.config.location=classpath:application.yaml",
+            "spring.datasource.url=jdbc:h2:mem:c7-format-at-task-level;DB_CLOSE_DELAY=-1",
+            FORMAT_AT_TASK_LEVEL
+                + "=application/json")
+        .run(context -> {
+
+          Assertions.assertNotNull(context.getStartupFailure(), "the start has to end");
+          final var causes = new StringBuilder();
+          for (Throwable cause = context.getStartupFailure(); cause != null; cause = cause.getCause()) {
+            causes
+                .append(cause.getMessage())
+                .append('\n');
+          }
+          final var message = causes.toString();
+          Assertions.assertTrue(
+              message
+                  .contains(
+                      "Camunda 7 adapter 'c7' has 'serialization-format' set at TASK level, where nothing reads it"),
+              () -> "expected the guiding startup failure but got:\n"
+                  + message);
+          Assertions.assertTrue(message.contains(FORMAT_AT_TASK_LEVEL), message);
+          Assertions.assertTrue(
+              message.contains("vanillabp.workflow-modules.<m>.workflows.<w>.adapters.c7.serialization-format"),
               message);
           Assertions.assertTrue(message.contains("Move the value to one of these levels, or remove it."), message);
 

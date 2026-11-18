@@ -1410,7 +1410,9 @@ A value for which the engine has a variable type becomes a scalar variable: a sh
 a long, a double, a boolean, a string, a date and bytes, plus a `Character`, which is
 written as a string. Everything else keeps its class in an object variable, in the format
 the application configures (`vanillabp.adapters.<adapter-id>.serialization-format`, which you can
-override per workflow module and per workflow). One case is a nested value. That keeps
+override per workflow module and per workflow). There is no task level: all tasks of a workflow read
+and write the same variables, so one workflow needs one format. A value set at task level ends the
+boot, and the message names the three levels which work. One case is a nested value. That keeps
 `${order.customer.name}` working, because the engine deserializes before EL navigates. The other
 case is a number this engine has no type for: a `BigDecimal`, a `BigInteger` or a `Float`. Those are
 not widened to a double, so a model reads the value the application holds, as in version 1

@@ -37,7 +37,7 @@
     {
       "name": "vanillabp.adapters.camunda7.serialization-format",
       "type": "java.lang.String",
-      "description": "The serialization format of a shared value the engine has no variable type for, for example 'application/json' or 'application/xstream'. The matching dataformat has to be on the class path. It is also read per workflow module and per workflow, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.serialization-format'."
+      "description": "The serialization format of a shared value the engine has no variable type for, for example 'application/json' or 'application/xstream'. The matching dataformat has to be on the class path. It is also read per workflow module and per workflow, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.serialization-format'. There is no task level, and a value set there ends the start."
     },
     {
       "name": "vanillabp.adapters.camunda7.engine-plugins",
