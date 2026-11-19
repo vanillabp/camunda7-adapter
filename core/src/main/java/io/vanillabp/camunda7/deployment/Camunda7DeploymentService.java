@@ -2519,14 +2519,21 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     bpmsInitiatedStartInvoker.validateBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, startEvents);
     reportStartMessages(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
 
-    if (!startEvents.isEmpty()) {
+    // a plain start event is reported to the core like every other one, but nothing fires it
+    // except a start which somebody asks for. Naming it here would tell the reader of an
+    // ordinary process that the engine starts it on its own
+    final var startsOfTheEngine = startEvents
+        .stream()
+        .filter(startEvent -> startEvent.kind() != io.vanillabp.spi.service.BpmsStartTrigger.Kind.NONE)
+        .toList();
+    if (!startsOfTheEngine.isEmpty()) {
       log
           .info(
               "Camunda7[{}]: BPMN process '{}' (workflow module '{}') is started by the BPMS itself: {}",
               adapterId,
               bpmnProcessId,
               workflowModuleId,
-              startEvents);
+              startsOfTheEngine);
     }
 
   }
