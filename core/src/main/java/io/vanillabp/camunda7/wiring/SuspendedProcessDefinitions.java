@@ -18,6 +18,10 @@ import org.slf4j.LoggerFactory;
  * that decision cannot cover: an application which has to run NOW, and must not hang on
  * versions nobody is able to clean up at this minute.
  * <p>
+ * The Spring Boot overlay binds the key all the same, but only so that the platform's check
+ * for unread keys counts it as read. A value written anywhere else, for example in
+ * application.yaml, ends the start (see {@link #refuseTheSwitchSetAsConfiguration}).
+ * <p>
  * Keep the reads where they are. Quarkus likes to initialize classes while it builds. So a
  * value remembered in a field would be the answer the BUILD saw, not the one the operator
  * sets. Then the switch would silently do nothing in a native image. That is the worst
@@ -75,6 +79,41 @@ public final class SuspendedProcessDefinitions {
       return new Switch("environment variable '%s'".formatted(IGNORE_ENVIRONMENT_VARIABLE), fromEnvironment);
     }
     return null;
+
+  }
+
+  /**
+   * Ends the start if the switch is written anywhere but in a system property or an
+   * environment variable, for example in application.yaml. A platform which binds the key,
+   * so that its check for unread keys counts it as read, calls this. Without it such a value
+   * would be taken over by the binding and still change nothing.
+   * <p>
+   * The value is not taken as a switch from there. A line in application.yaml gets
+   * committed and then stays set on every start. The switch is meant for one start, see the
+   * class comment.
+   *
+   * @param whereItIsWritten Every place outside the system properties and the environment
+   *     variables where the key is written, as the platform names it. Empty if there is none
+   * @throws IllegalStateException If the key is written in such a place
+   */
+  public static void refuseTheSwitchSetAsConfiguration(
+      final List<String> whereItIsWritten) {
+
+    if (whereItIsWritten.isEmpty()) {
+      return;
+    }
+    throw new IllegalStateException(
+        """
+            '%s' is written in a place where it does nothing: %s. It is an emergency exit for \
+            one start, not a configuration key, so this adapter reads it only as a system property \
+            (-D%s=true) or as the environment variable '%s'. Remove it from there. If this start \
+            really has to leave suspended process definitions unchecked, set it in one of these \
+            two ways instead."""
+            .formatted(
+                IGNORE_PROPERTY,
+                String.join(", ", whereItIsWritten),
+                IGNORE_PROPERTY,
+                IGNORE_ENVIRONMENT_VARIABLE));
 
   }
 

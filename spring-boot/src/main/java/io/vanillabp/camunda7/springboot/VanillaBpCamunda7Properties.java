@@ -89,6 +89,37 @@ public class VanillaBpCamunda7Properties {
   }
 
   /**
+   * The emergency exit which takes suspended process definitions out of the startup check
+   * for old process versions. Set it for one start only, as the system property
+   * 'vanillabp.ignore-suspended-process-definitions' or as the environment variable
+   * 'VANILLABP_IGNORE_SUSPENDED_PROCESS_DEFINITIONS'. It is not a key of application.yaml: a
+   * value from any other place ends the start. Only the value 'true' switches anything off.
+   */
+  private String ignoreSuspendedProcessDefinitions;
+
+  /**
+   * The emergency exit for suspended process definitions, as Spring Boot found it. It is
+   * bound so that the platform's check for unread keys counts the key as read. What the
+   * switch does is decided by {@link io.vanillabp.camunda7.wiring.SuspendedProcessDefinitions},
+   * which reads the system property and the environment variable itself.
+   *
+   * @return The value found, <code>null</code> where nothing sets it
+   */
+  public String getIgnoreSuspendedProcessDefinitions() {
+    return ignoreSuspendedProcessDefinitions;
+  }
+
+  /**
+   * The emergency exit for suspended process definitions, as Spring Boot found it.
+   *
+   * @param ignoreSuspendedProcessDefinitions The value Spring Boot bound
+   */
+  public void setIgnoreSuspendedProcessDefinitions(
+      final String ignoreSuspendedProcessDefinitions) {
+    this.ignoreSuspendedProcessDefinitions = ignoreSuspendedProcessDefinitions;
+  }
+
+  /**
    * The Camunda 7 keys of one <code>vanillabp.workflow-modules.&lt;module&gt;</code>
    * section which may override what the adapter section says.
    */
