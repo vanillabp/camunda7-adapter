@@ -227,9 +227,10 @@ public class EmptyAdapterSectionTest {
         .run(context -> {
 
           Assertions.assertNull(context.getStartupFailure(), "context should start");
-          // the platform's advisor keeps the keys of empty sections, the adapter needs none of its own
+          // the platform's advisors keep the keys of empty sections and look for keys nothing
+          // reads; the adapter needs none of its own
           Assertions.assertEquals(
-              Set.of("vanillaBpEmptySectionsKeepTheirKeys"),
+              Set.of("vanillaBpEmptySectionsKeepTheirKeys", "vanillaBpUnreadKeysCheck"),
               context
                   .getBeansOfType(ConfigurationPropertiesBindHandlerAdvisor.class)
                   .keySet());

@@ -1834,7 +1834,9 @@ version this minute. Start it with the system property
 check. Where both are set, the property wins, and only the value `true` counts. Then two warnings
 appear in the log of every start. One says that the exit was taken and what it costs. The other
 names the versions it hid. Neither is remembered anywhere, because they are meant to be in the way
-until the switch is gone. The reasoning, including why this is not a configuration property, is
+until the switch is gone. Written anywhere else, for example in `application.yaml`, the key ends
+the start. On Spring Boot the message says how to set it instead. The reasoning, including why
+this is not a configuration property, is
 [decision 12](./DECISIONS.md#12-a-suspended-process-definition-counts-and-the-only-way-past-it-is-a-system-property-or-its-environment-variable).
 `Camunda7SuspendedProcessVersionsTest` tests the switch and both warnings.
 `Camunda7OldProcessVersionsIT#aSuspendedVersionIsStillReported` and
