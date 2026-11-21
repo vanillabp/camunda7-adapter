@@ -291,12 +291,6 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
   }
 
   /**
-   * The names of every property a configuration file or a property source with a list of
-   * names holds. A source which cannot list its names is skipped. So is a source which a
-   * webapps module of VanillaBP adds itself, see
-   * {@link Camunda7VersionOneKeys#isAddedByAWebappsModule}.
-   */
-  /**
    * Every place outside the system properties and the environment variables where the
    * emergency exit for suspended process definitions is written, for example a line of
    * application.yaml.
@@ -335,6 +329,12 @@ public class Camunda7AdapterBeanRegistrar implements BeanRegistrar {
 
   }
 
+  /**
+   * The names of every property a configuration file or a property source with a list of
+   * names holds. A source which cannot list its names is skipped. So is a source which a
+   * webapps module of VanillaBP adds itself, see
+   * {@link Camunda7VersionOneKeys#isAddedByAWebappsModule}.
+   */
   private static List<String> propertyNames(
       final Environment environment) {
 
