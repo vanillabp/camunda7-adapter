@@ -64,18 +64,19 @@ jobs:
           java-version: 25.0.5+8
           distribution: temurin
           cache: maven
-      # The cache above can hold a platform jar from a day this build never asks for again.
+      # the cache above can hold old snapshots of our own, so they go and Maven fetches the newest
+      - uses: ./.github/actions/forget-cached-snapshots
       # The step which names the snapshot reads what is newer than this marker, so it names
-      # what Maven fetched tonight and not what the runner happened to keep.
+      # only what Maven fetched tonight.
       - name: Mark the moment the build starts
         run: touch "${RUNNER_TEMP}/platform-snapshot-marker"
       # The same command a pull request of this repository runs, so a red night and a red
-      # pull request mean the same thing. '--update-snapshots' is the point of the whole
-      # workflow: without it Maven keeps yesterday's platform jar out of the cache above and
-      # the night proves nothing. It is 'install' and not 'verify' because the Quarkus tests
-      # load the modules of this build from the local repository.
+      # pull request mean the same thing. The step 'forget-cached-snapshots' above is the
+      # point of the whole workflow: without it Maven keeps yesterday's platform jar out of
+      # the cache and the night proves nothing. It is 'install' and not 'verify' because the
+      # Quarkus tests load the modules of this build from the local repository.
       - name: Build and test against the published platform snapshot
-        run: mvn -s .github/maven/settings.xml ${VBP_SNAPSHOTS_PROFILE} --batch-mode --no-transfer-progress --update-snapshots install
+        run: mvn -s .github/maven/settings.xml ${VBP_SNAPSHOTS_PROFILE} --batch-mode --no-transfer-progress install
         env:
           CI: false
       # A red night has to say what it was built against, otherwise the reader cannot tell a

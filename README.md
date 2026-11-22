@@ -2088,7 +2088,7 @@ What a pull request needs beyond a green build is in [`CONTRIBUTING.md`](./CONTR
 
 A build also runs once a night, without anybody pushing. The workflow *Nightly against the platform
 snapshot* (`.github/workflows/nightly-platform-snapshot.yaml`) builds what a pull request builds,
-with `--update-snapshots`, against whatever the platform published since yesterday. A red night
+with the newest snapshots, against whatever the platform published since yesterday. A red night
 opens an issue labelled `nightly-platform-snapshot`. Without it, a platform snapshot can break this
 repository, and nobody sees it until the next pull request. On the 26th of September 2026 the
 platform published at 12:19, and the last build here had run at 10:15. The break showed up a day and
