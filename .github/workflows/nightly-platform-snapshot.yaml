@@ -63,19 +63,33 @@ jobs:
         with:
           java-version: 25.0.5+8
           distribution: temurin
-          cache: maven
-      # The cache above can hold a platform jar from a day this build never asks for again.
+      # The Maven repository of the newest run on main. 'cache: maven' of setup-java keys on
+      # the POMs alone, and GitHub never writes a key again once it exists. So whatever the
+      # first save lacked, every later run fetched from Maven Central again, and Central
+      # answered with 429. This key carries the run id, so the save at the end of this job
+      # always writes a new entry, and the restore keys find the newest one, also after a
+      # change to a POM.
+      - id: maven-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ hashFiles('**/pom.xml') }}-${{ github.run_id }}
+          restore-keys: |
+            maven-${{ hashFiles('**/pom.xml') }}-
+            maven-
+      # the cache above can hold old snapshots of our own, so they go and Maven fetches the newest
+      - uses: ./.github/actions/forget-cached-snapshots
       # The step which names the snapshot reads what is newer than this marker, so it names
-      # what Maven fetched tonight and not what the runner happened to keep.
+      # only what Maven fetched tonight.
       - name: Mark the moment the build starts
         run: touch "${RUNNER_TEMP}/platform-snapshot-marker"
       # The same command a pull request of this repository runs, so a red night and a red
-      # pull request mean the same thing. '--update-snapshots' is the point of the whole
-      # workflow: without it Maven keeps yesterday's platform jar out of the cache above and
-      # the night proves nothing. It is 'install' and not 'verify' because the Quarkus tests
-      # load the modules of this build from the local repository.
+      # pull request mean the same thing. The step 'forget-cached-snapshots' above is the
+      # point of the whole workflow: without it Maven keeps yesterday's platform jar out of
+      # the cache and the night proves nothing. It is 'install' and not 'verify' because the
+      # Quarkus tests load the modules of this build from the local repository.
       - name: Build and test against the published platform snapshot
-        run: mvn -s .github/maven/settings.xml ${VBP_SNAPSHOTS_PROFILE} --batch-mode --no-transfer-progress --update-snapshots install
+        run: mvn -s .github/maven/settings.xml ${VBP_SNAPSHOTS_PROFILE} --batch-mode --no-transfer-progress install
         env:
           CI: false
       # A red night has to say what it was built against, otherwise the reader cannot tell a
@@ -171,3 +185,18 @@ jobs:
             **/target/*application*.log
           retention-days: 30
           if-no-files-found: ignore
+      # This is the only job of the workflow which writes the Maven cache, so a run writes
+      # it once. It writes on main only: a cache written for a pull request can never be
+      # read by main, it would only push older entries out of the storage of this
+      # repository. Our own snapshots and the marks of failed downloads stay out, so the
+      # cache holds third-party artifacts and our releases.
+      - name: Keep our own snapshots out of the Maven cache
+        if: github.ref == 'refs/heads/main'
+        uses: ./.github/actions/forget-cached-snapshots
+      # The key comes from the restore step: the build can write POMs under target, and
+      # hashFiles would then give a different key here.
+      - uses: actions/cache/save@v6
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: ~/.m2/repository
+          key: ${{ steps.maven-cache.outputs.cache-primary-key }}
