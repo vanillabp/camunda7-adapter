@@ -21,8 +21,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * Every start event of a process goes to the core, the plain one included. But the line in
  * the log names only the start events which the engine fires itself. A plain start event
- * fires only when somebody asks for a start, so a process which has nothing else gets no
- * such line at all.
+ * fires only when somebody asks for a start, and a message start event only when somebody
+ * sends the message. So a process which has nothing else gets no such line at all.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda7StartsOfTheEngineReportTest {
@@ -61,6 +61,22 @@ public class Camunda7StartsOfTheEngineReportTest {
           <bpmn:sequenceFlow id="Flow_NightlyToEnd" sourceRef="Event_Nightly" targetRef="Event_Done" />
       """;
 
+  /**
+   * The same process, which an application can also start by a message. The message is
+   * declared at the level of the definitions, so it is passed in separately.
+   */
+  private static final String A_PLAIN_START_AND_A_MESSAGE = A_PLAIN_START + """
+          <bpmn:startEvent id="Event_Applied">
+            <bpmn:outgoing>Flow_AppliedToEnd</bpmn:outgoing>
+            <bpmn:messageEventDefinition id="Definition_Applied" messageRef="Message_Applied" />
+          </bpmn:startEvent>
+          <bpmn:sequenceFlow id="Flow_AppliedToEnd" sourceRef="Event_Applied" targetRef="Event_Done" />
+      """;
+
+  private static final String THE_MESSAGE = """
+          <bpmn:message id="Message_Applied" name="LoanApplied" />
+      """;
+
   @Test
   @DisplayName("A process with a plain start event only is not called started by the BPMS")
   public void aPlainStartIsNoStartOfTheEngine() {
@@ -95,16 +111,61 @@ public class Camunda7StartsOfTheEngineReportTest {
 
   }
 
+  @Test
+  @DisplayName("A process with a message start event is not called started by the BPMS")
+  public void aMessageStartIsNoStartOfTheEngine() {
+
+    final var said = infosAboutStartsOfTheEngine(A_PLAIN_START_AND_A_MESSAGE, THE_MESSAGE);
+
+    assertEquals(
+        List.of(),
+        said,
+        () -> "the application starts this process, by a call or by a message: "
+            + said);
+
+  }
+
+  @Test
+  @DisplayName("Next to a message start event, only the timer is named")
+  public void aMessageStartIsLeftOutNextToATimer() {
+
+    final var said = infosAboutStartsOfTheEngine(
+        A_PLAIN_START_AND_A_TIMER + A_PLAIN_START_AND_A_MESSAGE.substring(A_PLAIN_START.length()),
+        THE_MESSAGE);
+
+    assertEquals(
+        List.of("Camunda7[c7]: BPMN process '"
+            + PROCESS
+            + "' (workflow module '"
+            + MODULE
+            + "') "
+            + STARTED_BY_THE_BPMS
+            + ": [BpmsInitiatedStartSpec[elementId=Event_Nightly, kind=TIMER, signalName=null]]"),
+        said,
+        () -> "the timer is the only start the engine fires on its own: "
+            + said);
+
+  }
+
+  private static List<String> infosAboutStartsOfTheEngine(
+      final String processContent) {
+
+    return infosAboutStartsOfTheEngine(processContent, "");
+
+  }
+
   /**
    * Wires a process with the given elements and collects what the adapter logs about the
    * starts of the engine. The appender sits on the adapter's own logger, so the list is this
    * test's own.
    *
    * @param processContent The elements of the process to wire
+   * @param definitions The elements next to the process, like the messages it refers to
    * @return The log lines about starts of the engine, in the order they were written
    */
   private static List<String> infosAboutStartsOfTheEngine(
-      final String processContent) {
+      final String processContent,
+      final String definitions) {
 
     final var xml = """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -112,9 +173,10 @@ public class Camunda7StartsOfTheEngineReportTest {
           <bpmn:process id="%s" isExecutable="true">
         %s
           </bpmn:process>
+        %s
         </bpmn:definitions>
         """
-        .formatted(PROCESS, processContent);
+        .formatted(PROCESS, processContent, definitions);
     final var service = new Camunda7DeploymentService(
         "c7", null, mock(Camunda7WorkflowProcessingLifecycle.class), TestCollaborators
             .builder()

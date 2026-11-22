@@ -61,8 +61,9 @@ or `jobExecutorDeploymentAware`, ends the boot now, unless you set
 `vanillabp.adapters.<id>.allow-plugins-to-change-adapter-settings: true`.
 
 The engine is called `vanillabp-camunda7-<adapter-id>` now, not `default`. A Cockpit bookmark or a
-REST call with `default` in its path has to use the new name. A REST call without an engine in its
-path finds no engine.
+REST call with `default` in its path has to use the new name. An old bookmark of Cockpit, Tasklist
+or Admin gets status 500 from Camunda's web applications and no hint. Open `/camunda` instead, it
+leads to the engine with the new name. A REST call without an engine in its path finds no engine.
 
 The health contributors `processEngine` and `jobExecutor` are gone. If a health group in your
 configuration lists one of them, Spring Boot refuses to start. Remove it from the group.
