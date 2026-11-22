@@ -1595,7 +1595,10 @@ event says nothing about who started this instance. The state of the workflow sa
 processes have a start event which the engine fires by itself: a timer, a signal, a condition.
 Such a process ends the boot if it has no `@WorkflowStartedByBpms` method. A process with only
 plain or message start events needs none, until somebody starts it without going through
-VanillaBP. That start is refused, and its message names the method to write. The reasoning is
+VanillaBP. That start is refused, and its message names the method to write. At the start the
+adapter writes one INFO line per process, "is started by the BPMS itself", which names these three
+kinds and nothing else (`DECISIONS.pending/2189.md`). `Camunda7StartsOfTheEngineReportTest` tests
+it. The reasoning is
 [decision 28](./DECISIONS.md#28-the-business-key-is-the-name-vanillabp-gave-the-workflow-and-only-that),
 which supersedes
 [decision 24](./DECISIONS.md#24-a-start-is-the-applications-own-where-the-id-already-has-an-aggregate---superseded-by-decision-28).
@@ -1867,6 +1870,17 @@ owns the engines. So the module does two things:
 `theEngineIsTheOneVanillaBpBuilt`, `webappsAreServed`).
 `Camunda7WebappsRegistrationTest#enginesAreRegisteredAndReleased` tests the removal.
 `Camunda7WebappsTwoAdapterIdsTest` tests the migration setup.
+
+The engine name is part of every URL of the web applications:
+`/camunda/app/cockpit/vanillabp-camunda7-<adapter-id>/`. Version 1 let Camunda's starter build
+the engine, which named it `default`, so an old bookmark has `/default/` in its path. Such a URL
+answers with status 500. Camunda serves the page for any engine name and fails on the missing
+engine with a `NullPointerException` in its own code (`ProcessEnginesFilter`, when it records the
+web application for telemetry). The name stays as it is, because each adapter id needs an engine of
+its own (see [Configuration](#configuration)). A URL without an engine name, like `/camunda`
+or `/camunda/app/cockpit/`, is redirected to the right engine.
+`Camunda7WebappsBootTest#aUrlWithoutAnEngineNameFindsTheEngine` tests the redirect, and
+`#aUrlWithAnotherEngineNameIsNotServed` holds what Camunda answers to `/default/`.
 
 The web applications are a servlet application built on Spring. There is no Quarkus
 equivalent and none is planned, so this module is Spring Boot only.

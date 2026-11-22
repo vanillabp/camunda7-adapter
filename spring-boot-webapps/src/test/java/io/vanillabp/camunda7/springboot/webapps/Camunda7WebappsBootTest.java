@@ -120,6 +120,52 @@ public class Camunda7WebappsBootTest {
   }
 
   @Test
+  @DisplayName("A URL without an engine name is sent to the engine VanillaBP built")
+  public void aUrlWithoutAnEngineNameFindsTheEngine() {
+
+    final var entry = rest
+        .get()
+        .uri("/camunda/app/cockpit/")
+        .retrieve()
+        .toBodilessEntity();
+
+    assertTrue(entry.getStatusCode().is3xxRedirection(), () -> ""
+        + entry.getStatusCode());
+    final var location = entry
+        .getHeaders()
+        .getFirst(HttpHeaders.LOCATION);
+    assertNotNull(location, "the web application should redirect somewhere");
+    assertTrue(
+        location.endsWith("/camunda/app/cockpit/"
+            + ENGINE
+            + "/"),
+        location);
+
+  }
+
+  @Test
+  @DisplayName("A URL with the engine name of version 1, 'default', is not served")
+  public void aUrlWithAnotherEngineNameIsNotServed() {
+
+    // the README says what such a URL gets, so that a bookmark of version 1 can be
+    // explained. The answer is Camunda's: it serves the page for any engine name and fails
+    // on the engine which is not there. If a version of Camunda answers otherwise, this
+    // test fails and the README has to say the new answer
+    final var app = rest
+        .get()
+        .uri("/camunda/app/cockpit/default/")
+        .retrieve()
+        .onStatus(status -> true, (
+            request,
+            response) -> {
+        })
+        .toBodilessEntity();
+
+    assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, app.getStatusCode());
+
+  }
+
+  @Test
   @DisplayName("They serve the engine VanillaBP built, and only that one")
   public void theEngineIsTheOneVanillaBpBuilt() {
 

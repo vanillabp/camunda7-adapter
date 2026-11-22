@@ -398,6 +398,18 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
   private static final Pattern EL_PATTERN = Pattern.compile("^[#$]\\{([^}]+)}$");
 
   /**
+   * The kinds of start event which the engine fires by itself: a timer, a signal and a
+   * condition. A process with one of them needs a <code>&#64;WorkflowStartedByBpms</code>
+   * method, and only these are named in the line which says that a process is started by the
+   * BPMS itself.
+   */
+  private static final java.util.Set<io.vanillabp.spi.service.BpmsStartTrigger.Kind> FIRED_BY_THE_ENGINE = java.util.EnumSet
+      .of(
+          io.vanillabp.spi.service.BpmsStartTrigger.Kind.TIMER,
+          io.vanillabp.spi.service.BpmsStartTrigger.Kind.SIGNAL,
+          io.vanillabp.spi.service.BpmsStartTrigger.Kind.CONDITIONAL);
+
+  /**
    * Resolves what makes an adapter id a DISTINCT engine (datasource and table prefix). The
    * platform supplies it, and {@link #validateDistinctAdapterInstances(List)} uses it. May
    * be <code>null</code> (tests). Then the check is skipped.
@@ -2519,12 +2531,14 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     bpmsInitiatedStartInvoker.validateBpmsInitiatedStarts(workflowModuleId, bpmnProcessId, startEvents);
     reportStartMessages(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
 
-    // a plain start event is reported to the core like every other one, but nothing fires it
-    // except a start which somebody asks for. Naming it here would tell the reader of an
-    // ordinary process that the engine starts it on its own
+    // a plain start event and a message start event are reported to the core like every other
+    // one, but the engine fires neither by itself. The application starts the workflow through
+    // its process service and brings the aggregate along. Naming them here would tell the
+    // reader that the engine starts the process on its own, see DECISIONS.pending/2189.md in
+    // the repository
     final var startsOfTheEngine = startEvents
         .stream()
-        .filter(startEvent -> startEvent.kind() != io.vanillabp.spi.service.BpmsStartTrigger.Kind.NONE)
+        .filter(startEvent -> FIRED_BY_THE_ENGINE.contains(startEvent.kind()))
         .toList();
     if (!startsOfTheEngine.isEmpty()) {
       log
