@@ -1597,7 +1597,7 @@ Such a process ends the boot if it has no `@WorkflowStartedByBpms` method. A pro
 plain or message start events needs none, until somebody starts it without going through
 VanillaBP. That start is refused, and its message names the method to write. At the start the
 adapter writes one INFO line per process, "is started by the BPMS itself", which names these three
-kinds and nothing else (`DECISIONS.pending/2189.md`). `Camunda7StartsOfTheEngineReportTest` tests
+kinds and nothing else ([decision 70](./DECISIONS.md#70-the-line-about-starts-of-the-bpms-names-the-start-events-the-engine-fires-by-itself-and-a-message-start-event-is-none-of-them)). `Camunda7StartsOfTheEngineReportTest` tests
 it. The reasoning is
 [decision 28](./DECISIONS.md#28-the-business-key-is-the-name-vanillabp-gave-the-workflow-and-only-that),
 which supersedes

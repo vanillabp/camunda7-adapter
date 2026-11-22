@@ -2534,8 +2534,8 @@ public class Camunda7DeploymentService implements AdapterDeploymentService<BpmnM
     // a plain start event and a message start event are reported to the core like every other
     // one, but the engine fires neither by itself. The application starts the workflow through
     // its process service and brings the aggregate along. Naming them here would tell the
-    // reader that the engine starts the process on its own, see DECISIONS.pending/2189.md in
-    // the repository
+    // reader that the engine starts the process on its own, see decision 70 in the
+    // repository's DECISIONS.md
     final var startsOfTheEngine = startEvents
         .stream()
         .filter(startEvent -> FIRED_BY_THE_ENGINE.contains(startEvent.kind()))

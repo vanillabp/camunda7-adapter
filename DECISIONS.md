@@ -177,6 +177,9 @@ application. `engine-plugins` configures a plugin by class name. Its properties 
 `PropertyHelper`, so the values convert exactly as they would in a `bpm-platform.xml`. Without a
 format the adapter warns once that Java serialization applies.
 
+**Addendum:** decision 68 adds that there is no task level for `serialization-format`. A value set
+there ends the start.
+
 ### 10. A start asks the engine for numbers, and asks as many of them on the last day as on the first
 
 While an application boots, this adapter answers questions from tables which grow for as long as
@@ -251,6 +254,9 @@ suspend a definition (today only this one), and somebody who looks for a way out
 should find one switch, not three. An application which runs two Camunda 7 adapter ids cannot use
 the exit for only one of them. That is the price, and we pay it on purpose.
 `SuspendedProcessDefinitions` is the single place where all of this lives.
+
+**Addendum:** decision 69 adds how the platforms see the key. On Spring Boot the overlay binds it,
+and the key written as configuration ends the start.
 
 ### 13. The workflows of a renamed process are served from the models the engine still holds
 
@@ -1721,6 +1727,9 @@ uses when several jars describe the same name was not tried in an IDE. The Quark
 none of this: they are Quarkus extensions, and their build writes a description of every key into
 `META-INF/quarkus-config-doc/`.
 
+**Addendum:** decision 69 changes the sentence about `vanillabp.ignore-suspended-process-definitions`.
+The key has an entry now, because the overlay binds it.
+
 ### 49. Every map of the Quarkus configuration names its key, with the names all adapters share
 
 Built by story 995 on 2026-10-28.
@@ -2646,4 +2655,154 @@ wording.
 - The tests `Camunda7ListenersTest` (core), `Camunda7SwitchAtTaskLevelEndsTheStartTest`
   (spring-boot and quarkus/deployment) and `Camunda7AllowListenersOverlayTest`
   (quarkus/deployment).
+
+### 68. A serialization format set at task level ends the start
+
+Decided by the maintainer on 2026-11-17: `serialization-format` is not a value of a single task. It
+goes down to the workflow and no further. A key nobody reads ends the start, always.
+
+This adds one sentence to decision 9.
+
+- Decision 9 says "So `serialization-format` is resolved per workflow, workflow module and adapter."
+  Add after it: "There is no task level. A value set there ends the start (decision 68)."
+
+The rest of the decision stays as it is.
+
+#### What was wrong
+
+The task level shares its keys with the workflow level. So both platforms bound
+`serialization-format` at task level too, but nothing read it there. A value set at task level
+changed nothing, and the start did not say so. The variables of that task were written in the
+format of the workflow, the workflow module or the adapter, not in the one the line asked for.
+Decision 67 had fixed the same gap for `allow-listeners`, and only for that key.
+
+#### The decision
+
+A value of `serialization-format` at task level ends the start, on both platforms. The message is
+built like the one of decision 67: it names each such key as it was written, the three levels where
+the key works, and why there is no task level for it. It tells the reader to move the value to one
+of the three levels, or to remove it.
+
+Why there is no task level: all tasks of a workflow read and write the same variables. A value one
+task writes in one format is read by the next task, by an expression in the model and by Cockpit.
+So one workflow needs one format.
+
+As in decision 67, the adapter ends the start while it builds the deployment service, and Quarkus
+needs no build step, because Quarkus does not end the start on this key by itself.
+
+After this, every key of this adapter which the task level binds is either read there or ends the
+start: `serialization-format` and `allow-listeners` are the only ones, and both end the start.
+
+#### Where it is referred to
+
+- Decision 9 in `DECISIONS.md` (see above).
+- `Camunda7SerializationFormats` in `core`: its class comment, `SERIALIZATION_FORMAT_KEY` and
+  `refuseKeysSetAtTaskLevel`.
+- `Camunda7EngineProperties` in `core`, the field comment of `serializationFormat`.
+- `Camunda7AdapterBeanRegistrar` in `spring-boot`, where it builds the deployment service.
+- `Camunda7AdapterProducer` in `quarkus/runtime`, where it builds the deployment services.
+- `VanillaBpCamunda7Properties` in `spring-boot` and in `quarkus/runtime`:
+  `serializationFormatKeysAtTaskLevel`, `keysAtTaskLevel`, the comments of the task section and of
+  `serializationFormat`.
+- `spring-boot/src/main/resources/META-INF/additional-spring-configuration-metadata.json`, the
+  description of `serialization-format`.
+- `README.md`, the section about the variables a shared value becomes ("There is no task level").
+- `UPGRADE.md`, the section "A shared value Camunda 7 has no variable type for needs a
+  serialization format".
+- The wiki page `Configuration`, the paragraph after the table of adapter keys.
+- The tests `Camunda7SerializationFormatsTest` (core), `Camunda7SwitchAtTaskLevelEndsTheStartTest`
+  (spring-boot) and `Camunda7SerializationFormatAtTaskLevelEndsTheStartTest` (quarkus/deployment).
+
+### 69. The emergency exit for suspended definitions is bound, and written as configuration it ends the start
+
+Built for platform story 2185 on 2026-11-21.
+
+This changes one sentence of decision 48 and adds one paragraph to decision 12.
+
+- Decision 48 says "`vanillabp.ignore-suspended-process-definitions` has no entry. It is a system
+  property or an environment variable, not a key of `application.yaml`." Replace it with: "The
+  configuration processor writes an entry for `vanillabp.ignore-suspended-process-definitions`,
+  because the overlay binds it (decision 69). Its description says that it is a system property or
+  an environment variable, and not a key of `application.yaml`."
+- Decision 12: add the paragraph "How the platforms see the key" below after the paragraph which
+  starts with "It is a system property and not a configuration key."
+
+The rest of both decisions stays as it is.
+
+#### What was wrong
+
+Since platform story 2185, Spring Boot ends the start for a key below `vanillabp` which no
+`@ConfigurationProperties` class binds. A system property and an environment variable are property
+sources as well. The adapter read the switch with `System.getProperty` and `System.getenv`, so
+nothing bound it. An operator who set the switch in an emergency got a start which ended with
+"Nothing reads this key below 'vanillabp'". That is the one situation the switch exists for.
+
+#### How the platforms see the key
+
+On Spring Boot the adapter's overlay `VanillaBpCamunda7Properties` binds
+`ignore-suspended-process-definitions` at the root of the tree, as a string. That is all the field
+does. `SuspendedProcessDefinitions` still reads the system property and the environment variable
+itself and decides what the switch does. The field is a string, so a value which is not `true`
+still gets the warning of decision 12 and not a conversion error.
+
+Bound, a value in `application.yaml` would be taken over and still change nothing. So the adapter
+ends the start when the key is written in any property source except the system properties and the
+environment variables. The message names where it is written and the two ways to set it. A command
+line argument `--vanillabp.ignore-suspended-process-definitions=true` is such a source too. It ends
+the start for the same reason, and the message says to use `-D` instead.
+
+Quarkus needs nothing. SmallRye does not report a system property or an environment variable which
+no mapping knows, and a test shows that a start with the system property goes on and logs the
+warning. A value in `application.yaml` or `application.properties` is an unknown key there, and
+Quarkus ends the start with its own message.
+
+The key stays at the root and has no adapter part, as decision 12 says.
+
+#### Where it is referred to
+
+- Decisions 12 and 48 in `DECISIONS.md` (see above).
+- `SuspendedProcessDefinitions` in `core`: `refuseTheSwitchSetAsConfiguration`.
+- `VanillaBpCamunda7Properties` in `spring-boot`: the field `ignoreSuspendedProcessDefinitions`.
+- `Camunda7AdapterBeanRegistrar` in `spring-boot`: `whereTheSwitchIsSetAsConfiguration`.
+- `README.md`, the section "A suspended version counts, and how to get past it once".
+- The tests `EmergencyExitForSuspendedDefinitionsTest` (spring-boot),
+  `Camunda7EmergencyExitAsSystemPropertyTest` (quarkus/deployment) and
+  `Camunda7OldProcessVersionsIT#theEmergencyExitTakesTheSuspendedVersionOut` (integration-tests).
+
+### 70. The line about starts of the BPMS names the start events the engine fires by itself, and a message start event is none of them
+
+Decided by the maintainer on 2026-11-22, as the default answer of story 2189.
+
+#### What was wrong
+
+While it wires a process, the adapter writes one INFO line, "BPMN process '...' is started by the
+BPMS itself", followed by its start events. Since story 2187 the plain start event is left out of
+that line. A message start event was still named. So a process which the application starts by a
+message said in the log that the engine starts it on its own. The comment of the method said
+timer, signal and condition, and the code did not match it.
+
+#### The decision
+
+The line names only the start events the engine fires by itself: a timer, a signal and a
+condition. A process without any of them gets no such line.
+
+A message start event is left out for the same reason as the plain one. The engine does not fire
+it by itself. The application calls `startWorkflowByMessage` of its process service and brings
+the aggregate along. That is also why a process with only plain or message start events needs no
+`@WorkflowStartedByBpms` method. So the line now names the same start events which make the core
+ask for that method, and the reader of the log sees the same rule twice.
+
+The core still gets every start event, with its kind. Only the log line changes.
+
+A message which somebody correlates past VanillaBP, through the REST API for example, does start
+the process without the application. That start is refused, as decision 28 says, and its message
+names the method to write. The INFO line at the start is not the place to warn about it.
+
+#### Where it is referred to
+
+- `Camunda7DeploymentService` in `core`: `FIRED_BY_THE_ENGINE` and the comment in
+  `wireBpmsInitiatedStarts`.
+- `README.md`, the section about who starts a workflow ("Some processes have a start event which
+  the engine fires by itself").
+- The test `Camunda7StartsOfTheEngineReportTest` (core).
 
