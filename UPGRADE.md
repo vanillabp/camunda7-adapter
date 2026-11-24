@@ -333,8 +333,9 @@ vanillabp:
 ```
 
 It is still off by default, so an application which does nothing keeps the engine's own timing. An
-application which had set the version 1 key does have to act. Without the new key, its engine polls
-every 5 to 60 seconds again.
+application which had set the version 1 key does have to act. While the old key is still in the
+configuration, the start ends, and the message names the new key. Without the new key, its engine
+polls every 5 to 60 seconds again.
 
 What the feature does has changed in three ways. Read all three before you switch it on.
 
