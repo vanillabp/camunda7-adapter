@@ -206,6 +206,8 @@ final class Camunda7VersionOneKeys {
                   + "of the deployments of your workflow modules, every version of them. "
                   + REMOVE_IT),
           new Rule(
+              "job-execution.wakeup", "Write 'vanillabp.adapters.%1$s.sleep-until-something-is-due' instead."),
+          new Rule(
               "job-execution", NO_KEY_YET),
           new Rule(
               "job-executor-acquire-by-priority", NO_KEY_YET),

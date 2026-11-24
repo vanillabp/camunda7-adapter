@@ -69,6 +69,30 @@ public class Camunda7VersionOneKeysTest {
   }
 
   @Test
+  @DisplayName("The wakeup key of version 1 names its successor, not a ProcessEnginePlugin bean")
+  public void theWakeupKeyOfVersionOneNamesItsSuccessor() {
+
+    final var message = messageFor(
+        List.of("c7"),
+        false,
+        "camunda.bpm.job-execution.wakeup",
+        "camunda.bpm.job-execution.max-wait");
+
+    Assertions.assertNotNull(message);
+    final var noKeyYet = "Version 2 has no key for this yet. Set the value in a ProcessEnginePlugin bean of your "
+        + "application.";
+    Assertions.assertTrue(message.contains("'camunda.bpm.job-execution.wakeup': Write "
+        + "'vanillabp.adapters.c7.sleep-until-something-is-due' instead."), message);
+    // 'job-execution.wakeup' is more specific than the group 'job-execution' around it, so it wins
+    Assertions.assertFalse(message.contains("'camunda.bpm.job-execution.wakeup': "
+        + noKeyYet), message);
+    // the rest of the group still has no key of version 2
+    Assertions.assertTrue(message.contains("'camunda.bpm.job-execution.max-wait': "
+        + noKeyYet), message);
+
+  }
+
+  @Test
   @DisplayName("A key of the starter ends the start of an application and names the key of version 2")
   public void aKeyOfTheStarterEndsTheStart() {
 
