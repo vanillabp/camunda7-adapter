@@ -18,7 +18,7 @@
 
   <groupId>io.vanillabp</groupId>
   <artifactId>camunda7-adapter-parent</artifactId>
-  <version>2.0.0</version>
+  <version>2.0.1-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>VanillaBP Camunda 7 adapter</name>
   <description>VanillaBP Version 2 adapter for Camunda 7 (embedded engine).</description>
